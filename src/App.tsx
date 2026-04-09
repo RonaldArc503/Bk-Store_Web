@@ -10,7 +10,7 @@ import { useAuth } from './hooks/useAuth'
 
 function AppLayout() {
   const location = useLocation()
-  const hideNavbar = location.pathname === '/' || location.pathname.startsWith('/dashboard') || location.pathname === '/login'
+  const hideNavbar = location.pathname === '/' || location.pathname.startsWith('/dashboard') || location.pathname === '/login' || location.pathname === '/register'
 
   return hideNavbar ? null : <Navbar />
 }
@@ -19,42 +19,42 @@ function AppContent() {
   const { isAuthenticated } = useAuth()
 
   return (
-    <Router>
-      <div className="min-h-screen bg-white">
-        <AppLayout />
-        <Suspense fallback={<Loader />}>
-          <Routes>
-            {routes.map((route) => (
-              <Route
-                key={route.path}
-                path={route.path}
-                element={
-                  route.private ? (
-                    <ProtectedRoute
-                      route={route}
-                      isAuthenticated={isAuthenticated}
-                      element={<route.component />}
-                    />
-                  ) : (
-                    <route.component />
-                  )
-                }
-              />
-            ))}
-          </Routes>
-        </Suspense>
-      </div>
-    </Router>
+    <div className="min-h-screen bg-white">
+      <AppLayout />
+      <Suspense fallback={<Loader />}>
+        <Routes>
+          {routes.map((route) => (
+            <Route
+              key={route.path}
+              path={route.path}
+              element={
+                route.private ? (
+                  <ProtectedRoute
+                    route={route}
+                    isAuthenticated={isAuthenticated}
+                    element={<route.component />}
+                  />
+                ) : (
+                  <route.component />
+                )
+              }
+            />
+          ))}
+        </Routes>
+      </Suspense>
+    </div>
   )
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <AppContent />
-      </CartProvider>
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <CartProvider>
+          <AppContent />
+        </CartProvider>
+      </AuthProvider>
+    </Router>
   )
 }
 

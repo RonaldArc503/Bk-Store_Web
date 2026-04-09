@@ -1,60 +1,53 @@
 /**
  * Auth Service
- * Maneja autenticación y autorización
+ * Maneja autenticación con Firebase
  */
 
-import { ApiService } from '../services/ApiService'
-import type { User } from '../types'
-
-export interface LoginRequest {
-  email: string
-  password: string
-}
+import type { User as FirebaseUser } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+} from "firebase/auth";
+import { auth, googleProvider } from "../app/firebase";
 
 export interface AuthResponse {
-  token: string
-  user: User
+  user: FirebaseUser;
+  token: string;
 }
 
-export class AuthService {
-  /**
-   * Login
-   */
-  static async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await ApiService.post<AuthResponse>('/auth/login', credentials)
-    localStorage.setItem('token', response.token)
-    return response
-  }
+/**
+ * Login con email y contraseña
+ */
+export const loginEmail = async (email: string, password: string): Promise<AuthResponse> => {
+  const res = await signInWithEmailAndPassword(auth, email, password);
+  const token = await res.user.getIdToken();
+  return { user: res.user, token };
+};
 
-  /**
-   * Logout
-   */
-  static logout(): void {
-    localStorage.removeItem('token')
-  }
+/**
+ * Registro con email y contraseña
+ */
+export const registerEmail = async (email: string, password: string): Promise<AuthResponse> => {
+  const res = await createUserWithEmailAndPassword(auth, email, password);
+  const token = await res.user.getIdToken();
+  return { user: res.user, token };
+};
 
-  /**
-   * Registrarse
-   */
-  static async register(data: {
-    name: string
-    email: string
-    password: string
-  }): Promise<AuthResponse> {
-    return ApiService.post<AuthResponse>('/auth/register', data)
-  }
+/**
+ * Login con Google
+ */
+export const loginGoogle = async (): Promise<AuthResponse> => {
+  const res = await signInWithPopup(auth, googleProvider);
+  const token = await res.user.getIdToken();
+  return { user: res.user, token };
+};
 
-  /**
-   * Obtener token guardado
-   */
-  static getToken(): string | null {
-    return localStorage.getItem('token')
-  }
-
-  /**
-   * Verificar si está autenticado
-   */
-  static isAuthenticated(): boolean {
-    return !!this.getToken()
-  }
-}
+/**
+ * Logout
+ */
+export const logout = async (): Promise<void> => {
+  await signOut(auth);
+  localStorage.removeItem("token");
+};

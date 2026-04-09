@@ -1,60 +1,49 @@
 import { useState } from 'react'
-import { ShoppingCart } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { ShoppingCart, Loader } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import type { User } from '../../types'
-
-const mockUsers: Record<string, { password: string; profile: User }> = {
-  admin: {
-    password: 'admin123',
-    profile: {
-      id: '1',
-      name: 'Administrador',
-      email: 'admin@bikinistore.local',
-      role: 'admin',
-    },
-  },
-  inventario: {
-    password: 'inventario123',
-    profile: {
-      id: '2',
-      name: 'Usuario Inventario',
-      email: 'inventario@bikinistore.local',
-      role: 'user',
-    },
-  },
-  caja: {
-    password: 'caja123',
-    profile: {
-      id: '3',
-      name: 'Usuario Caja',
-      email: 'caja@bikinistore.local',
-      role: 'user',
-    },
-  },
-}
+import { loginEmail, loginGoogle } from '../auth.service'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
 
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const normalizedUsername = username.trim().toLowerCase()
-    const candidate = mockUsers[normalizedUsername]
-
-    if (!candidate || candidate.password !== password.trim()) {
-      setError('Credenciales invalidas. Usa uno de los usuarios de prueba.')
-      return
-    }
-
     setError('')
-    login(candidate.profile)
-    navigate('/dashboard')
+    setLoading(true)
+
+    try {
+      const data = await loginEmail(email, password)
+      login(data as { user: { uid: string; email: string | null; displayName: string | null }; token: string })
+      navigate('/dashboard')
+    } catch (err: unknown) {
+      const error = err as { message?: string }
+      setError(error.message || 'Error al iniciar sesión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    setError('')
+    setLoading(true)
+
+    try {
+      const data = await loginGoogle()
+      login(data as { user: { uid: string; email: string | null; displayName: string | null }; token: string })
+      navigate('/dashboard')
+    } catch (err: unknown) {
+      const error = err as { message?: string }
+      setError(error.message || 'Error al iniciar sesión con Google')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -75,14 +64,15 @@ export default function LoginPage() {
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-1.5">
-              Usuario
+              Correo Electrónico
             </label>
             <input
-              type="text"
-              placeholder="Ingrese su usuario"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+              type="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              disabled={loading}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent disabled:opacity-50"
             />
           </div>
 
@@ -95,7 +85,8 @@ export default function LoginPage() {
               placeholder="Ingrese su contraseña"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+              disabled={loading}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent disabled:opacity-50"
             />
           </div>
 
@@ -107,31 +98,43 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full bg-lime-500 hover:bg-lime-600 text-white font-medium py-2.5 rounded-lg transition-colors duration-200"
+            disabled={loading}
+            className="w-full bg-lime-500 hover:bg-lime-600 text-white font-medium py-2.5 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
           >
+            {loading && <Loader className="w-4 h-4 animate-spin" />}
             Iniciar Sesión
           </button>
         </form>
 
-        {/* Test Users Section */}
-        <div className="mt-8 bg-gray-50 rounded-lg p-4">
-          <p className="text-xs text-gray-500 text-center mb-3">
-            Usuarios de prueba:
-          </p>
-          <div className="space-y-1.5 text-sm">
-            <div className="flex">
-              <span className="font-semibold text-gray-900 w-20">Admin:</span>
-              <span className="text-gray-600">admin / admin123</span>
-            </div>
-            <div className="flex">
-              <span className="font-semibold text-gray-900 w-20">Inventario:</span>
-              <span className="text-gray-600">inventario / inventario123</span>
-            </div>
-            <div className="flex">
-              <span className="font-semibold text-gray-900 w-20">Caja:</span>
-              <span className="text-gray-600">caja / caja123</span>
-            </div>
+        {/* Google Login */}
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200"></div>
           </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">O</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 font-medium py-2.5 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {loading && <Loader className="w-4 h-4 animate-spin" />}
+          <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+          Iniciar con Google
+        </button>
+
+        {/* Register Link */}
+        <div className="mt-6 text-center">
+          <p className="text-gray-600 text-sm">
+            ¿No tienes cuenta?{' '}
+            <Link to="/register" className="text-lime-500 hover:text-lime-600 font-medium">
+              Regístrate aquí
+            </Link>
+          </p>
         </div>
       </div>
     </div>

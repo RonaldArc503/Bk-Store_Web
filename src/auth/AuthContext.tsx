@@ -1,17 +1,22 @@
 /**
  * Auth Context
- * Contexto global para autenticación
+ * Contexto global para autenticación y sesión
  */
 
 import React, { createContext, useState, useCallback, type ReactNode } from 'react'
-import type { User } from '../types'
+
+interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+}
 
 interface AuthContextType {
   user: User | null
+  token: string | null
   isAuthenticated: boolean
-  login: (user: User) => void
+  login: (data: { user: User; token: string }) => void
   logout: () => void
-  setUser: (user: User | null) => void
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -20,31 +25,41 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
-function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUserState] = useState<User | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+// Initialize token from localStorage
+const initializeToken = (): { token: string | null; isAuthenticated: boolean } => {
+  const savedToken = localStorage.getItem('token')
+  return {
+    token: savedToken || null,
+    isAuthenticated: !!savedToken,
+  }
+}
 
-  const login = useCallback((newUser: User) => {
-    setUserState(newUser)
+function AuthProvider({ children }: AuthProviderProps) {
+  const { token: initialToken, isAuthenticated: initialAuth } = initializeToken()
+  const [user, setUserState] = useState<User | null>(null)
+  const [token, setTokenState] = useState<string | null>(initialToken)
+  const [isAuthenticated, setIsAuthenticated] = useState(initialAuth)
+
+  const login = useCallback(({ user, token }: { user: User; token: string }) => {
+    setUserState(user)
+    setTokenState(token)
     setIsAuthenticated(true)
+    localStorage.setItem('token', token)
   }, [])
 
   const logout = useCallback(() => {
     setUserState(null)
+    setTokenState(null)
     setIsAuthenticated(false)
-  }, [])
-
-  const setUser = useCallback((newUser: User | null) => {
-    setUserState(newUser)
-    setIsAuthenticated(!!newUser)
+    localStorage.removeItem('token')
   }, [])
 
   const value: AuthContextType = {
     user,
+    token,
     isAuthenticated,
     login,
     logout,
-    setUser
   }
 
   return (
