@@ -1,26 +1,17 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Suspense } from 'react'
 import { AuthProvider } from './auth/AuthContext'
 import { CartProvider } from './context/CartContext'
-import { Navbar } from './components/Navbar'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Loader } from './components/Loader'
 import { routes } from './app/routes'
 import { useAuth } from './hooks/useAuth'
-
-function AppLayout() {
-  const location = useLocation()
-  const hideNavbar = location.pathname === '/' || location.pathname.startsWith('/dashboard') || location.pathname === '/login' || location.pathname === '/register'
-
-  return hideNavbar ? null : <Navbar />
-}
 
 function AppContent() {
   const { isAuthenticated } = useAuth()
 
   return (
     <div className="min-h-screen bg-white">
-      <AppLayout />
       <Suspense fallback={<Loader />}>
         <Routes>
           {routes.map((route) => (

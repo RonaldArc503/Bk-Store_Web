@@ -1,10 +1,11 @@
 /**
  * Firebase Configuration
- * Configuración de Firebase para autenticación
+ * Configuración de Firebase para autenticación y base de datos
  */
 
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,4 +19,5 @@ const firebaseConfig = {
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const database = getDatabase(app);
 export const googleProvider = new GoogleAuthProvider();
