@@ -1,14 +1,20 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { AuthProvider } from './auth/AuthContext'
 import { CartProvider } from './context/CartContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Loader } from './components/Loader'
 import { routes } from './app/routes'
 import { useAuth } from './hooks/useAuth'
+import { initializeDemoData } from './utils/initDemo'
 
 function AppContent() {
   const { isAuthenticated } = useAuth()
+
+  // Inicializar datos de demo en el primer renderizado
+  useEffect(() => {
+    initializeDemoData()
+  }, [])
 
   return (
     <div className="min-h-screen bg-white">

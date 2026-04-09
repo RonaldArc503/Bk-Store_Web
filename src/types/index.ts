@@ -23,6 +23,39 @@ export interface User {
   createdAt?: Date
 }
 
+/**
+ * Sistema de Usuarios del Sistema
+ */
+export type UserRole = 'Administrador' | 'Bodeguero' | 'Caja' | 'Vendedor'
+export type UserStatus = 'Activo' | 'Inactivo'
+
+export interface SystemUser {
+  id: string
+  usuario: string
+  nombreCompleto: string
+  rol: UserRole
+  estado: UserStatus
+  email?: string
+  fechaCreacion: string
+  fechaActualizacion: string
+}
+
+export interface CreateUserInput {
+  usuario: string
+  nombreCompleto: string
+  contraseña: string
+  rol: UserRole
+  email?: string
+}
+
+export interface UpdateUserInput {
+  id: string
+  nombreCompleto?: string
+  rol?: UserRole
+  estado?: UserStatus
+  email?: string
+}
+
 export interface CartItem {
   productId: string
   quantity: number
