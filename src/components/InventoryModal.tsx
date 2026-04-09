@@ -130,10 +130,20 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
       if (editingProduct) {
         product = await InventoryService.updateProduct({
           id: editingProduct.id,
-          ...formData,
+          nombre: formData.nombre,
+          codigo: formData.codigo,
+          tipo: formData.tipo,
+          material: formData.material,
+          genero: formData.genero,
+          stock: formData.stock,
+          costo: formData.costo,
+          precioUnitario: formData.precioUnitario,
+          precioMediaDocena: formData.precioMediaDocena,
+          precioDocena: formData.precioDocena,
         })
       } else {
-        product = await InventoryService.createProduct(formData)
+        const result = await InventoryService.createProductWithInventory(formData)
+        product = result.producto as any
       }
 
       onSuccess(product)
