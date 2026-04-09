@@ -11,16 +11,20 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
   const { logout } = useAuth()
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'ventas', label: 'Ventas', icon: ShoppingBag },
-    { id: 'productos', label: 'Productos', icon: Package },
-    { id: 'inventario', label: 'Inventario', icon: ShoppingCart },
-    { id: 'configuracion', label: 'Configuracion', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: BarChart3 },
+    { id: 'ventas', label: 'Ventas', path: '/ventas', icon: ShoppingBag },
+    { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart },
+    { id: 'productos', label: 'Productos', path: '/products', icon: Package },
+    { id: 'configuracion', label: 'Configuracion', path: '/configuracion', icon: Settings },
   ]
 
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleNavigate = (path: string) => {
+    navigate(path)
   }
 
   return (
@@ -47,6 +51,7 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
               <li key={item.id}>
                 <button
                   type="button"
+                  onClick={() => handleNavigate(item.path)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-lime-50 text-lime-600'

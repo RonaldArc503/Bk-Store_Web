@@ -13,6 +13,7 @@ const Checkout = React.lazy(() => import('../pages/Checkout'))
 const Login = React.lazy(() => import('../auth/pages/Login'))
 const Register = React.lazy(() => import('../auth/pages/Register'))
 const Dashboard = React.lazy(() => import('../pages/Dashboard'))
+const Inventory = React.lazy(() => import('../pages/Inventory'))
 const NotFound = React.lazy(() => import('../pages/NotFound'))
 
 export interface Route {
@@ -30,6 +31,13 @@ export const routes: Route[] = [
     name: 'Dashboard',
     private: true,
     icon: '📊'
+  },
+  {
+    path: '/inventory',
+    component: Inventory,
+    name: 'Inventario',
+    private: true,
+    icon: '📦'
   },
   {
     path: '/products',
