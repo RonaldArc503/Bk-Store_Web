@@ -6,14 +6,17 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { Loader } from './components/Loader'
 import { routes } from './app/routes'
 import { useAuth } from './hooks/useAuth'
-import { initializeDemoData } from './utils/initDemo'
+import { initializeDemoData, ensureDemoAuthAccounts } from './utils/initDemo'
 
 function AppContent() {
   const { isAuthenticated } = useAuth()
 
-  // Inicializar datos de demo en el primer renderizado
+  // Demo en RTDB + cuentas en Firebase Auth (el login usa Auth)
   useEffect(() => {
-    initializeDemoData()
+    void (async () => {
+      await initializeDemoData()
+      await ensureDemoAuthAccounts()
+    })()
   }, [])
 
   return (

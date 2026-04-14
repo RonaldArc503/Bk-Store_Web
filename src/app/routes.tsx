@@ -15,6 +15,7 @@ const Register = React.lazy(() => import('../auth/pages/Register'))
 const Dashboard = React.lazy(() => import('../pages/Dashboard'))
 const Inventory = React.lazy(() => import('../pages/Inventory'))
 const UserManagement = React.lazy(() => import('../pages/UserManagement'))
+const Pos = React.lazy(() => import('../pages/Pos'))
 const NotFound = React.lazy(() => import('../pages/NotFound'))
 
 export interface Route {
@@ -39,6 +40,13 @@ export const routes: Route[] = [
     name: 'Inventario',
     private: true,
     icon: '📦'
+  },
+  {
+    path: '/pos',
+    component: Pos,
+    name: 'Punto de venta',
+    private: true,
+    icon: '🛒'
   },
   {
     path: '/users',

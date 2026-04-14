@@ -1,4 +1,4 @@
-import { ShoppingCart, Package, ShoppingBag, BarChart3, Settings, LogOut, Users } from 'lucide-react'
+import { ShoppingCart, Package, ScanLine, BarChart3, Settings, LogOut, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
@@ -12,7 +12,7 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: BarChart3 },
-    { id: 'ventas', label: 'Ventas', path: '/ventas', icon: ShoppingBag },
+    { id: 'pos', label: 'Punto de venta', path: '/pos', icon: ScanLine },
     { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart },
     { id: 'usuarios', label: 'Gestión de Usuarios', path: '/users', icon: Users },
     { id: 'productos', label: 'Productos', path: '/products', icon: Package },
