@@ -1,7 +1,8 @@
-import { ref, push, set, get, runTransaction, update } from 'firebase/database'
+import { ref, push, set, get, runTransaction, update, remove } from 'firebase/database'
 import { database } from '../app/firebase'
 
 const CAJAS_PATH = 'cajas'
+const USER_ACTIVE_PATH = 'userActiveCaja'
 
 export const CajaService = {
   async openCaja(aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string }) {
@@ -35,7 +36,14 @@ export const CajaService = {
 
       await set(newRef, caja)
 
-      try { localStorage.setItem('activeCajaId', id) } catch (e) { console.warn('localStorage not available') }
+      // If apertura includes a createdBy (user id), persist active caja mapping in Firebase
+      if (aperturaInfo.createdBy) {
+        try {
+          await set(ref(database, `${USER_ACTIVE_PATH}/${aperturaInfo.createdBy}`), id)
+        } catch (err) {
+          console.warn('Could not persist active caja mapping in Firebase', err)
+        }
+      }
 
       return caja
     } catch (error) {
@@ -44,14 +52,41 @@ export const CajaService = {
     }
   },
 
-  async getActiveCaja() {
+  /**
+   * Obtener la caja activa para un usuario. Si `userId` es provisto intenta
+   * resolver la caja activa a partir del mapeo `userActiveCaja/<userId>`. Si no
+   * existe, intenta buscar una caja con status 'open' creada por el usuario.
+   * Si no se proporciona `userId`, devuelve la primera caja abierta encontrada.
+   */
+  async getActiveCaja(userId?: string) {
     try {
-      const id = typeof localStorage !== 'undefined' ? localStorage.getItem('activeCajaId') : null
-      if (!id) return null
+      // If we have a userId, try to read mapping first
+      if (userId) {
+        try {
+          const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+          const mappedId = mapSnap.exists() ? mapSnap.val() : null
+          if (mappedId) {
+            const snap = await get(ref(database, `${CAJAS_PATH}/${mappedId}`))
+            if (snap.exists()) return snap.val()
+          }
+        } catch (err) {
+          console.warn('Error reading user active caja mapping', err)
+        }
+      }
 
-      const snap = await get(ref(database, `${CAJAS_PATH}/${id}`))
-      if (!snap.exists()) return null
-      return snap.val()
+      // Fallback: scan for any open caja (optionally created by userId)
+      const snapAll = await get(ref(database, CAJAS_PATH))
+      if (!snapAll.exists()) return null
+      const data = snapAll.val()
+      const cajas = Object.values(data) as any[]
+
+      if (userId) {
+        const found = cajas.find((c) => c.status === 'open' && c.apertura?.createdBy === userId)
+        if (found) return found
+      }
+
+      // Generic fallback: return first open caja
+      return cajas.find((c) => c.status === 'open') || null
     } catch (error) {
       console.error('Error getting active caja:', error)
       return null
@@ -105,7 +140,21 @@ export const CajaService = {
     try {
       const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
       await update(cajaRef, { status: 'closed', cierreData: cierreData || null, closedAt: new Date().toISOString() })
-      try { localStorage.removeItem('activeCajaId') } catch (e) { console.warn('localStorage not available') }
+
+      // Attempt to clear user-active mapping if present
+      try {
+        const snap = await get(cajaRef)
+        if (snap.exists()) {
+          const caja = snap.val()
+          const createdBy = caja.apertura?.createdBy
+          if (createdBy) {
+            await remove(ref(database, `${USER_ACTIVE_PATH}/${createdBy}`))
+          }
+        }
+      } catch (err) {
+        console.warn('Error clearing user active caja mapping', err)
+      }
+
       return true
     } catch (error) {
       console.error('Error closing caja:', error)

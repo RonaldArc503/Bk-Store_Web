@@ -17,8 +17,8 @@ import {
   ChevronLeft,
   Store
 } from 'lucide-react'
-import { database } from '../app/firebase'
-import { ref, push, set } from 'firebase/database'
+ 
+import { OrderService } from '../services/OrderService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
@@ -143,16 +143,13 @@ export default function POS() {
     }
 
     try {
-      const ordersRef = ref(database, 'orders')
-      const newOrderRef = push(ordersRef)
-      await set(newOrderRef, order)
-
-      const orderId = newOrderRef.key || `ORD-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`
+      const created = await OrderService.createOrder(order)
+      const orderId = created?.id || `ORD-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`
       setLastOrderInfo({ ...order, orderId, date: new Date().toLocaleString('es-SV') })
 
       // Update caja totals and add movimiento record to the active caja (if present)
       try {
-        const activeCaja = await CajaService.getActiveCaja()
+        const activeCaja = await CajaService.getActiveCaja(user?.uid)
         if (activeCaja && activeCaja.id) {
           await CajaService.addSaleToCaja(activeCaja.id, {
             orderId,

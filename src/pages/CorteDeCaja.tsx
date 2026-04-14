@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Sidebar } from '../components/Sidebar'
 import { ChevronLeft, Lock, Unlock, Banknote, CreditCard, QrCode, MinusCircle, Plus, X } from 'lucide-react'
-import { database } from '../app/firebase'
-import { ref, push, set } from 'firebase/database'
+import { CorteService } from '../services/CorteService'
 import { useAuth } from '../hooks/useAuth'
 import { CajaService } from '../services/CajaService'
 
@@ -40,12 +39,8 @@ export default function CorteDeCaja() {
     let mounted = true
     ;(async () => {
       try {
-        // First, try to load caja open state from localStorage
-        const savedCajaOpen = typeof localStorage !== 'undefined' ? localStorage.getItem('cajaOpenState') : null
-        const shouldBeOpen = savedCajaOpen === 'true'
-
-        // Then verify actual caja exists and is not closed in Firebase
-        const active = await CajaService.getActiveCaja()
+        // Verify actual caja exists and is not closed in Firebase for this user
+        const active = await CajaService.getActiveCaja(user?.uid)
         if (!mounted) return
 
         if (active && active.status !== 'closed') {
@@ -59,25 +54,15 @@ export default function CorteDeCaja() {
           setVentasQr(String(active.totals?.qr ?? ''))
           setRemesas(active.remesas || [])
           setIsAperturaSaved(Boolean(active.apertura))
-          // Persist the open state
-          try { localStorage.setItem('cajaOpenState', 'true') } catch (e) { /* ignore */ }
-        } else if (shouldBeOpen && active === null) {
-          // localStorage says open, but no caja in Firebase — keep the UI open for user input
-          setIsCajaOpen(true)
-          setIsAperturaSaved(false)
         } else {
-          // No active caja or it's closed
+          // No active caja: closed by default
           setIsCajaOpen(false)
           setIsAperturaSaved(false)
-          try { localStorage.setItem('cajaOpenState', 'false') } catch (e) { /* ignore */ }
         }
       } catch (err) {
         console.error('Error loading caja state', err)
-        // Fallback: keep open state from localStorage if there's an error
-        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('cajaOpenState') : null
-        if (saved === 'true') {
-          setIsCajaOpen(true)
-        }
+        // On error, default to closed
+        setIsCajaOpen(false)
       }
     })()
 
@@ -101,12 +86,11 @@ export default function CorteDeCaja() {
         aperturaInfo.createdBy = user.uid
       }
 
-      const active = await CajaService.getActiveCaja()
-      if (active && active.id) {
-        // Already an active caja — mark as saved locally
+      const active = await CajaService.getActiveCaja(user?.uid)
+        if (active && active.id) {
+        // Already an active caja — mark as saved
         setIsAperturaSaved(true)
         setIsCajaOpen(true)
-        try { localStorage.setItem('cajaOpenState', 'true') } catch (e) { /* ignore */ }
         alert('Apertura ya registrada en la caja activa')
         return
       }
@@ -114,7 +98,6 @@ export default function CorteDeCaja() {
       await CajaService.openCaja(aperturaInfo)
       setIsAperturaSaved(true)
       setIsCajaOpen(true)
-      try { localStorage.setItem('cajaOpenState', 'true') } catch (e) { /* ignore */ }
       alert('Apertura guardada correctamente')
     } catch (err) {
       console.error('Error saving apertura', err)
@@ -124,7 +107,7 @@ export default function CorteDeCaja() {
 
   const handleOpenView = async () => {
     try {
-      const active = await CajaService.getActiveCaja()
+      const active = await CajaService.getActiveCaja(user?.uid)
       if (active) {
         // Load active caja (keep apertura locked)
         setIsCajaOpen(active.status !== 'closed')
@@ -197,23 +180,19 @@ export default function CorteDeCaja() {
       createdBy: user?.uid || null,
       createdAt: new Date().toISOString(),
     }
-
     try {
-      const cortesRef = ref(database, 'cortes')
-      const newRef = push(cortesRef)
-      await set(newRef, corte)
+      const created = await CorteService.saveCorte(corte)
       // If there's an active caja, close it and attach corte info
       try {
-        const active = await CajaService.getActiveCaja()
+        const active = await CajaService.getActiveCaja(user?.uid)
         if (active && active.id) {
-          await CajaService.closeCaja(active.id, { corteId: newRef.key, corte })
+          await CajaService.closeCaja(active.id, { corteId: created.id, corte })
         }
       } catch (err) {
         console.error('Error closing active caja after corte:', err)
       }
 
       setIsCajaOpen(false)
-      try { localStorage.setItem('cajaOpenState', 'false') } catch (e) { /* ignore */ }
       alert('Cierre de caja guardado correctamente')
     } catch (err) {
       console.error('Error saving corte', err)
