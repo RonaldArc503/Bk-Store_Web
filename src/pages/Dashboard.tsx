@@ -46,13 +46,13 @@ const recentSales = [
 
 export default function Dashboard() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="dashboard" />
 
       <main className="flex-1 overflow-auto md:p-8 p-4 pt-20 md:pt-0">
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 text-sm md:text-base">Resumen de tu tienda</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">Resumen de tu tienda</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
@@ -61,7 +61,7 @@ export default function Dashboard() {
             const TrendIcon = stat.trend === 'up' ? TrendingUp : TrendingDown
 
             return (
-              <div key={index} className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+              <div key={index} className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <div className={`w-10 h-10 md:w-12 md:h-12 ${stat.color} rounded-lg flex items-center justify-center`}>
                     <Icon className="w-5 h-5 md:w-6 md:h-6 text-white" />
@@ -76,54 +76,54 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <h3 className="text-gray-500 text-xs md:text-sm font-medium">{stat.title}</h3>
-                <p className="text-lg md:text-2xl font-bold text-gray-900">{stat.value}</p>
+                <h3 className="text-gray-500 dark:text-gray-400 text-xs md:text-sm font-medium">{stat.title}</h3>
+                <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
               </div>
             )
           })}
         </div>
 
         {/* Table - Desktop */}
-        <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900">Ventas Recientes</h2>
+        <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-800">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Ventas Recientes</h2>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-800/80">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     ID
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Producto
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Cantidad
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Total
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Estado
                   </th>
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {recentSales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{sale.id}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{sale.product}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{sale.quantity}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{sale.total}</td>
+                  <tr key={sale.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 font-medium">{sale.id}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{sale.product}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{sale.quantity}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 font-medium">{sale.total}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
                           sale.status === 'Completado'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
                         }`}
                       >
                         {sale.status}
@@ -138,21 +138,21 @@ export default function Dashboard() {
 
         {/* Cards - Mobile */}
         <div className="md:hidden space-y-4 pb-8">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-            <h2 className="font-semibold text-gray-900 mb-4">Ventas Recientes</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-100 dark:border-gray-800 p-4">
+            <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Ventas Recientes</h2>
           </div>
           {recentSales.map((sale) => (
-            <div key={sale.id} className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 space-y-3">
+            <div key={sale.id} className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-100 dark:border-gray-800 p-4 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-mono text-gray-500">{sale.id}</p>
-                  <p className="font-medium text-gray-900">{sale.product}</p>
+                  <p className="text-sm font-mono text-gray-500 dark:text-gray-400">{sale.id}</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{sale.product}</p>
                 </div>
                 <span
                   className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
                     sale.status === 'Completado'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-yellow-100 text-yellow-700'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
                   }`}
                 >
                   {sale.status}
@@ -160,12 +160,12 @@ export default function Dashboard() {
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-500">Cantidad</p>
-                  <p className="font-medium text-gray-900">{sale.quantity}</p>
+                  <p className="text-gray-500 dark:text-gray-400">Cantidad</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{sale.quantity}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Total</p>
-                  <p className="font-medium text-gray-900">{sale.total}</p>
+                  <p className="text-gray-500 dark:text-gray-400">Total</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{sale.total}</p>
                 </div>
               </div>
             </div>

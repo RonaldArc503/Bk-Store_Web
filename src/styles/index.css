@@ -10,8 +10,7 @@
   }
 
   body {
-    background-color: white;
-    color: #111827;
+    @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
   }
 
   html {

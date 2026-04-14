@@ -109,20 +109,20 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="inventario" />
 
       <main className="flex-1 overflow-auto md:p-8 p-4 pt-20 md:pt-0">
         {/* Header */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Inventario</h1>
-          <p className="text-gray-500 mt-1 text-sm md:text-base">Gestión de productos y stock</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Inventario</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm md:text-base">Gestión de productos y stock</p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 mb-6 md:mb-8">
           {/* Total Productos */}
-          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-lime-100 rounded-lg flex items-center justify-center">
                 <Package className="w-5 h-5 md:w-6 md:h-6 text-lime-600" />
@@ -134,7 +134,7 @@ export default function InventoryPage() {
           </div>
 
           {/* Stock Total */}
-          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Package className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
@@ -146,7 +146,7 @@ export default function InventoryPage() {
           </div>
 
           {/* Alertas Stock */}
-          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 sm:col-span-2 lg:col-span-1">
+          <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 sm:col-span-2 lg:col-span-1">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-orange-600" />
@@ -159,7 +159,7 @@ export default function InventoryPage() {
         </div>
 
         {/* Search and Add Button */}
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
+        <div className="bg-white dark:bg-gray-900 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 md:p-6 mb-6">
           <div className="flex flex-col gap-3 md:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
@@ -184,7 +184,7 @@ export default function InventoryPage() {
         </div>
 
         {/* Products Table - Desktop */}
-        <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
           {loading ? (
             <div className="p-12 text-center">
               <p className="text-gray-500">Cargando productos...</p>

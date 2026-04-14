@@ -159,8 +159,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 pt-20 md:pt-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8 md:my-0">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4 pt-20 md:pt-4 overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-transparent dark:border-gray-800 max-w-4xl w-full my-8 md:my-0">
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between p-4 md:p-6 border-b border-gray-200 bg-white rounded-t-lg">
           <h2 className="text-lg md:text-xl font-semibold text-gray-900">

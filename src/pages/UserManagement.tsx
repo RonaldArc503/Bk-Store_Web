@@ -130,7 +130,7 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex">
       <Sidebar activeItem="usuarios" />
 
       <main className="flex-1 p-8 overflow-auto">

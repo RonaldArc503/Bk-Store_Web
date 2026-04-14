@@ -205,7 +205,7 @@ export default function POS() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex">
       <Sidebar activeItem="pos" />
 
       <main className="flex-1 p-6">
