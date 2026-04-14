@@ -13,6 +13,7 @@ const POS = React.lazy(() => import('../pages/POS'))
 const CorteDeCaja = React.lazy(() => import('../pages/CorteDeCaja'))
 const Inventory = React.lazy(() => import('../pages/Inventory'))
 const UserManagement = React.lazy(() => import('../pages/UserManagement'))
+const Configuracion = React.lazy(() => import('../pages/Configuracion'))
 const NotFound = React.lazy(() => import('../pages/NotFound'))
 
 export interface Route {
@@ -58,6 +59,13 @@ export const routes: Route[] = [
     name: 'Gestión de Usuarios',
     private: true,
     icon: '👥'
+  },
+  {
+    path: '/configuracion',
+    component: Configuracion,
+    name: 'Configuración',
+    private: true,
+    icon: '⚙️'
   },
   {
     path: '/login',
