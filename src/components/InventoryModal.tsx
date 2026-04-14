@@ -158,36 +158,36 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 pt-20 md:pt-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8 md:my-0">
         {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-white">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="sticky top-0 flex items-center justify-between p-4 md:p-6 border-b border-gray-200 bg-white rounded-t-lg">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-900">
             {editingProduct ? 'Editar Producto' : 'Agregar Producto'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 p-1"
             disabled={loading}
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5 md:w-6 md:h-6" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 md:p-6 space-y-4 md:space-y-6 max-h-[70vh] overflow-y-auto">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 md:px-4 py-2 md:py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
           {/* Información Básica */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Básica</h3>
-            <div className="space-y-4">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Información Básica</h3>
+            <div className="space-y-3 md:space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Nombre del Producto *
                 </label>
                 <input
@@ -196,13 +196,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   value={formData.nombre}
                   onChange={handleInputChange}
                   placeholder="Ej: Bikini Floral Rojo"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Código de Barras
                 </label>
                 <div className="flex gap-2">
@@ -212,13 +212,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     value={formData.codigo}
                     onChange={handleInputChange}
                     placeholder="Escanear o generar"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                    className="flex-1 px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                     disabled={loading}
                   />
                   <button
                     type="button"
                     onClick={generateBarcode}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700 transition"
+                    className="px-2 md:px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700 transition text-sm whitespace-nowrap"
                     disabled={loading}
                   >
                     Generar
@@ -227,10 +227,10 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     <button
                       type="button"
                       onClick={copyBarcode}
-                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                      className="px-2 md:px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
                       disabled={loading}
                     >
-                      <Copy className="w-5 h-5" />
+                      <Copy className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                   )}
                 </div>
@@ -240,17 +240,17 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
           {/* Atributos */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Atributos del Producto</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Atributos del Producto</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Tipo de Prenda *
                 </label>
                 <select
                   name="tipo"
                   value={formData.tipo}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 >
                   <option value="">Seleccionar...</option>
@@ -263,14 +263,14 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Material *
                 </label>
                 <select
                   name="material"
                   value={formData.material}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 >
                   <option value="">Seleccionar...</option>
@@ -282,9 +282,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 </select>
               </div>
 
-              <div className="md:col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Género *</label>
-                <div className="space-y-2">
+              <div className="sm:col-span-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">Género *</label>
+                <div className="grid grid-cols-3 gap-2">
                   {genders.map((gender) => (
                     <label key={gender} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -296,7 +296,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                         disabled={loading}
                         className="w-4 h-4"
                       />
-                      <span className="text-sm text-gray-700">{gender}</span>
+                      <span className="text-xs md:text-sm text-gray-700">{gender}</span>
                     </label>
                   ))}
                 </div>
@@ -306,9 +306,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
           {/* Inventario */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventario</h3>
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Inventario</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                 Cantidad en Stock *
               </label>
               <input
@@ -317,11 +317,11 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 value={formData.stock}
                 onChange={handleInputChange}
                 min="0"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                 disabled={loading}
               />
               {stockWarning && (
-                <p className="mt-2 text-sm text-orange-600 flex items-center gap-2">
+                <p className="mt-2 text-xs md:text-sm text-orange-600 flex items-center gap-2">
                   ⚠️ El stock está por debajo del mínimo recomendado (24 unidades)
                 </p>
               )}
@@ -330,10 +330,10 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
           {/* Precios */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Precios</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Precios</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Costo de Adquisición
                 </label>
                 <input
@@ -343,13 +343,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   onChange={handleInputChange}
                   min="0"
                   step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Precio por Unidad *
                 </label>
                 <input
@@ -359,13 +359,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   onChange={handleInputChange}
                   min="0"
                   step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Precio por Media Docena (6 unidades) *
                 </label>
                 <input
@@ -375,13 +375,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   onChange={handleInputChange}
                   min="0"
                   step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Precio por Docena (12 unidades) *
                 </label>
                 <input
@@ -391,7 +391,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   onChange={handleInputChange}
                   min="0"
                   step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                   disabled={loading}
                 />
               </div>
@@ -399,18 +399,18 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-4 justify-end pt-6 border-t border-gray-200">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 md:gap-4 justify-end pt-4 md:pt-6 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition"
+              className="px-4 md:px-6 py-2 md:py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm"
               disabled={loading}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition disabled:opacity-50"
+              className="px-4 md:px-6 py-2 md:py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition disabled:opacity-50 text-sm"
               disabled={loading}
             >
               {loading ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Agregar Producto'}

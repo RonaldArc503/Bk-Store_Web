@@ -109,66 +109,66 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       <Sidebar activeItem="inventario" />
 
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 overflow-auto md:p-8 p-4 pt-20 md:pt-0">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Inventario</h1>
-          <p className="text-gray-500 mt-1">Gestión de productos y stock</p>
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Inventario</h1>
+          <p className="text-gray-500 mt-1 text-sm md:text-base">Gestión de productos y stock</p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 mb-6 md:mb-8">
           {/* Total Productos */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-lime-100 rounded-lg flex items-center justify-center">
-                <Package className="w-6 h-6 text-lime-600" />
+          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-lime-100 rounded-lg flex items-center justify-center">
+                <Package className="w-5 h-5 md:w-6 md:h-6 text-lime-600" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Total de Productos</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.totalProductos}</p>
+            <p className="text-gray-500 text-xs md:text-sm font-medium">Total de Productos</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.totalProductos}</p>
             <p className="text-xs text-gray-400 mt-2">En catálogo</p>
           </div>
 
           {/* Stock Total */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Package className="w-6 h-6 text-blue-600" />
+          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Package className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Stock Total</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.stockTotal}</p>
+            <p className="text-gray-500 text-xs md:text-sm font-medium">Stock Total</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.stockTotal}</p>
             <p className="text-xs text-gray-400 mt-2">Unidades disponibles</p>
           </div>
 
           {/* Alertas Stock */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-orange-600" />
+          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 sm:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-orange-600" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Alertas de Stock</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.alertasStock}</p>
+            <p className="text-gray-500 text-xs md:text-sm font-medium">Alertas de Stock</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.alertasStock}</p>
             <p className="text-xs text-gray-400 mt-2">Productos con stock bajo</p>
           </div>
         </div>
 
         {/* Search and Add Button */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
+          <div className="flex flex-col gap-3 md:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por nombre, código de barras o tipo..."
+                placeholder="Buscar por nombre, código..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
               />
             </div>
             <button
@@ -176,15 +176,15 @@ export default function InventoryPage() {
                 setEditingProduct(null)
                 setIsModalOpen(true)
               }}
-              className="px-6 py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition whitespace-nowrap"
+              className="w-full md:w-auto px-4 md:px-6 py-3 md:py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition whitespace-nowrap text-sm md:text-base"
             >
               + Agregar Producto
             </button>
           </div>
         </div>
 
-        {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Products Table - Desktop */}
+        <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           {loading ? (
             <div className="p-12 text-center">
               <p className="text-gray-500">Cargando productos...</p>
@@ -278,6 +278,82 @@ export default function InventoryPage() {
           )}
         </div>
 
+        {/* Products Cards - Mobile */}
+        <div className="md:hidden space-y-4 pb-8">
+          {loading ? (
+            <div className="p-8 text-center bg-white rounded-lg">
+              <p className="text-gray-500">Cargando productos...</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-lg">
+              <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No se encontraron productos</p>
+            </div>
+          ) : (
+            filteredProducts.map((product) => (
+              <div key={product.id} className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                <div className="mb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-semibold text-gray-900">{product.nombre}</p>
+                      <p className="text-xs text-gray-500 font-mono">{product.codigo}</p>
+                    </div>
+                    {product.stock < MIN_STOCK_WARNING && (
+                      <AlertTriangle className="w-5 h-5 text-orange-600" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                  <div>
+                    <p className="text-gray-500">Tipo</p>
+                    <p className="font-medium text-gray-900">{product.tipo}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Material</p>
+                    <p className="font-medium text-gray-900">{product.material}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Género</p>
+                    <p className="font-medium text-gray-900">{product.genero}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Stock</p>
+                    <p className={`font-medium ${product.stock < MIN_STOCK_WARNING ? 'text-orange-600' : 'text-green-600'}`}>
+                      {product.stock} unidades
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Costo</p>
+                    <p className="font-medium text-gray-900">${product.costo.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Precio</p>
+                    <p className="font-medium text-gray-900">${product.precioUnitario.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEditClick(product)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition border border-blue-200"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span className="text-sm font-medium">Editar</span>
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(product.id)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 hover:bg-red-50 rounded-lg transition border border-red-200"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-sm font-medium">Eliminar</span>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Delete Confirmation Modal */}
         {deleteConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
@@ -286,18 +362,18 @@ export default function InventoryPage() {
               <p className="text-gray-600 mb-6">
                 Esta acción no se puede deshacer. El producto será eliminado permanentemente.
               </p>
-              <div className="flex gap-4 justify-end">
+              <div className="flex flex-col sm:flex-row gap-3 justify-end">
                 <button
                   onClick={() => setDeleteConfirm(null)}
                   disabled={deleteLoading}
-                  className="px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition"
+                  className="px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => handleDeleteProduct(deleteConfirm)}
                   disabled={deleteLoading}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition disabled:opacity-50"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition disabled:opacity-50 text-sm"
                 >
                   {deleteLoading ? 'Eliminando...' : 'Eliminar'}
                 </button>
