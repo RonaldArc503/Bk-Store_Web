@@ -5,10 +5,9 @@
 
 import React from 'react'
 import { Navigate } from 'react-router-dom'
-import type { Route } from '../app/routes.tsx'
 
 interface ProtectedRouteProps {
-  route: Route
+  isPrivate: boolean
   isAuthenticated: boolean
   element: React.ReactElement
 }
@@ -17,23 +16,13 @@ interface ProtectedRouteProps {
  * Componente para proteger rutas
  */
 export function ProtectedRoute({
-  route,
+  isPrivate,
   isAuthenticated,
   element
 }: ProtectedRouteProps) {
-  if (route.private && !isAuthenticated) {
+  if (isPrivate && !isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
   return element
-}
-
-/**
- * Verificar si una ruta es accesible
- */
-export function isRouteAccessible(route: Route, isAuthenticated: boolean): boolean {
-  if (route.private && !isAuthenticated) {
-    return false
-  }
-  return true
 }

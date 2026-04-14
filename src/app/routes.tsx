@@ -5,17 +5,14 @@
 
 import React from 'react'
 
-// Páginas
-const Products = React.lazy(() => import('../pages/Products'))
-const ProductDetail = React.lazy(() => import('../pages/ProductDetail'))
-const Cart = React.lazy(() => import('../pages/Cart'))
-const Checkout = React.lazy(() => import('../pages/Checkout'))
+// Páginas activas del sistema
 const Login = React.lazy(() => import('../auth/pages/Login'))
 const Register = React.lazy(() => import('../auth/pages/Register'))
 const Dashboard = React.lazy(() => import('../pages/Dashboard'))
+const POS = React.lazy(() => import('../pages/POS'))
+const CorteDeCaja = React.lazy(() => import('../pages/CorteDeCaja'))
 const Inventory = React.lazy(() => import('../pages/Inventory'))
 const UserManagement = React.lazy(() => import('../pages/UserManagement'))
-const Pos = React.lazy(() => import('../pages/Pos'))
 const NotFound = React.lazy(() => import('../pages/NotFound'))
 
 export interface Route {
@@ -43,10 +40,17 @@ export const routes: Route[] = [
   },
   {
     path: '/pos',
-    component: Pos,
-    name: 'Punto de venta',
+    component: POS,
+    name: 'Punto de Venta',
     private: true,
-    icon: '🛒'
+    icon: '💳'
+  },
+  {
+    path: '/corte',
+    component: CorteDeCaja,
+    name: 'Corte de Caja',
+    private: true,
+    icon: '💰'
   },
   {
     path: '/users',
@@ -54,29 +58,6 @@ export const routes: Route[] = [
     name: 'Gestión de Usuarios',
     private: true,
     icon: '👥'
-  },
-  {
-    path: '/products',
-    component: Products,
-    name: 'Productos',
-    icon: '📦'
-  },
-  {
-    path: '/products/:id',
-    component: ProductDetail,
-    name: 'Detalle Producto'
-  },
-  {
-    path: '/cart',
-    component: Cart,
-    name: 'Carrito',
-    icon: '🛒'
-  },
-  {
-    path: '/checkout',
-    component: Checkout,
-    name: 'Checkout',
-    private: true
   },
   {
     path: '/login',

@@ -12,28 +12,23 @@ import {
   onValue,
 } from "firebase/database"
 import { database } from "../app/firebase"
-import type { Inventario, CreateInventarioInput, UpdateInventarioInput, Product, CreateProductInput, UpdateProductInput, InventoryStats } from '../types/product'
+import type { Producto, Inventario, CreateInventarioInput, UpdateInventarioInput, Product, CreateProductInput, UpdateProductInput, InventoryStats } from '../types/product'
 import { ProductService } from './ProductService'
 import { MovimientosService } from './MovimientosService'
 
 const INVENTARIO_PATH = 'inventario'
 
 /**
- * NUEVA API: Métodos específicos de Inventario
+ * Unified InventoryService: inventory core + legacy product helpers
  */
-export const InventarioService = {
-  /**
-   * Obtener todo el inventario
-   */
+export const InventoryService = {
+  /** Inventory core: Obtener todo el inventario */
   async getInventario(): Promise<Inventario[]> {
     try {
       const inventarioRef = ref(database, INVENTARIO_PATH)
       const snapshot = await get(inventarioRef)
 
-      if (!snapshot.exists()) {
-        return []
-      }
-
+      if (!snapshot.exists()) return []
       const data = snapshot.val()
       return Object.values(data) as Inventario[]
     } catch (error) {
@@ -42,41 +37,31 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Obtener inventario por ID
-   */
+  /** Obtener inventario por ID */
   async getInventarioById(id: string): Promise<Inventario | null> {
     try {
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${id}`)
       const snapshot = await get(inventarioRef)
-
-      if (!snapshot.exists()) {
-        return null
-      }
-
+      if (!snapshot.exists()) return null
       return snapshot.val() as Inventario
     } catch (error) {
-      console.error('Error fetching inventario:', error)
+      console.error('Error fetching inventario by id:', error)
       throw new Error('Error al obtener inventario')
     }
   },
 
-  /**
-   * Obtener inventario por producto ID
-   */
+  /** Obtener inventario por producto ID */
   async getInventarioByProductoId(productoId: string): Promise<Inventario | null> {
     try {
       const inventario = await this.getInventario()
-      return inventario.find(i => i.productoId === productoId) || null
+      return inventario.find((i: Inventario) => i.productoId === productoId) || null
     } catch (error) {
       console.error('Error fetching inventario by producto:', error)
       throw new Error('Error al obtener inventario')
     }
   },
 
-  /**
-   * Crear inventario (usado cuando se crea un producto)
-   */
+  /** Crear inventario (usado cuando se crea un producto) */
   async createInventario(input: CreateInventarioInput): Promise<Inventario> {
     try {
       const id = Math.random().toString(36).substr(2, 9)
@@ -97,13 +82,8 @@ export const InventarioService = {
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${id}`)
       await set(inventarioRef, newInventario)
 
-      // Registrar movimiento de entrada (stock inicial)
       if (input.stock > 0) {
-        await MovimientosService.registrarEntrada(
-          input.productoId,
-          input.stock,
-          'stock inicial'
-        )
+        await MovimientosService.registrarEntrada(input.productoId, input.stock, 'stock inicial')
       }
 
       return newInventario
@@ -113,17 +93,12 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Actualizar inventario (precios, stock mínimo)
-   */
+  /** Actualizar inventario (precios, stock mínimo) */
   async updateInventario(input: UpdateInventarioInput): Promise<Inventario> {
     try {
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${input.id}`)
       const snapshot = await get(inventarioRef)
-
-      if (!snapshot.exists()) {
-        throw new Error('Inventario no encontrado')
-      }
+      if (!snapshot.exists()) throw new Error('Inventario no encontrado')
 
       const currentInventario = snapshot.val() as Inventario
       const now = new Date().toISOString().split('T')[0]
@@ -147,38 +122,22 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Descontar stock (para ventas)
-   */
+  /** Descontar stock (para ventas) */
   async descontarStock(inventarioId: string, cantidad: number, motivo: string = 'venta'): Promise<Inventario> {
     try {
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${inventarioId}`)
       const snapshot = await get(inventarioRef)
-
-      if (!snapshot.exists()) {
-        throw new Error('Inventario no encontrado')
-      }
+      if (!snapshot.exists()) throw new Error('Inventario no encontrado')
 
       const currentInventario = snapshot.val() as Inventario
       const newStock = currentInventario.stock - cantidad
-
-      if (newStock < 0) {
-        throw new Error('Stock insuficiente')
-      }
+      if (newStock < 0) throw new Error('Stock insuficiente')
 
       const now = new Date().toISOString().split('T')[0]
-
-      const updatedInventario: Inventario = {
-        ...currentInventario,
-        stock: newStock,
-        updatedAt: now,
-      }
+      const updatedInventario: Inventario = { ...currentInventario, stock: newStock, updatedAt: now }
 
       await set(inventarioRef, updatedInventario)
-
-      // Registrar movimiento de salida
       await MovimientosService.registrarSalida(currentInventario.productoId, cantidad, motivo)
-
       return updatedInventario
     } catch (error) {
       console.error('Error descontando stock:', error)
@@ -186,33 +145,20 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Agregar stock (ajuste, devolución, etc.)
-   */
+  /** Agregar stock (ajuste, devolución, etc.) */
   async agregarStock(inventarioId: string, cantidad: number, motivo: string = 'ajuste'): Promise<Inventario> {
     try {
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${inventarioId}`)
       const snapshot = await get(inventarioRef)
-
-      if (!snapshot.exists()) {
-        throw new Error('Inventario no encontrado')
-      }
+      if (!snapshot.exists()) throw new Error('Inventario no encontrado')
 
       const currentInventario = snapshot.val() as Inventario
       const newStock = currentInventario.stock + cantidad
       const now = new Date().toISOString().split('T')[0]
 
-      const updatedInventario: Inventario = {
-        ...currentInventario,
-        stock: newStock,
-        updatedAt: now,
-      }
-
+      const updatedInventario: Inventario = { ...currentInventario, stock: newStock, updatedAt: now }
       await set(inventarioRef, updatedInventario)
-
-      // Registrar movimiento de entrada
       await MovimientosService.registrarEntrada(currentInventario.productoId, cantidad, motivo)
-
       return updatedInventario
     } catch (error) {
       console.error('Error agregando stock:', error)
@@ -220,13 +166,10 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Obtener estadísticas de inventario
-   */
+  /** Obtener estadísticas de inventario */
   async getInventarioStats(): Promise<InventoryStats> {
     try {
       const inventario = await this.getInventario()
-
       const MIN_STOCK = 24
       return {
         totalProductos: inventario.length,
@@ -239,9 +182,7 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Eliminar inventario
-   */
+  /** Eliminar inventario */
   async deleteInventario(id: string): Promise<void> {
     try {
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${id}`)
@@ -252,12 +193,9 @@ export const InventarioService = {
     }
   },
 
-  /**
-   * Suscribirse a cambios en tiempo real
-   */
+  /** Suscribirse a cambios en tiempo real */
   onInventarioChange(callback: (inventario: Inventario[]) => void): () => void {
     const inventarioRef = ref(database, INVENTARIO_PATH)
-
     const unsubscribe = onValue(inventarioRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val()
@@ -267,22 +205,14 @@ export const InventarioService = {
         callback([])
       }
     })
-
     return unsubscribe
   },
-}
 
-/**
- * COMPATIBILIDAD: Métodos heredados (Producto + Inventario combinados)
- */
-export const InventoryService = {
   /**
-   * Crear Producto + Inventario en un solo flujo
-   * (internamente usa ProductService + InventarioService)
+   * Legacy helpers (Producto + Inventario combined)
    */
   async createProductWithInventory(input: CreateProductInput): Promise<{ producto: any; inventario: Inventario }> {
     try {
-      // 1. Crear producto
       const producto = await ProductService.createProducto({
         codigo: input.codigo,
         nombre: input.nombre,
@@ -291,11 +221,10 @@ export const InventoryService = {
         genero: input.genero,
       })
 
-      // 2. Crear inventario
-      const inventario = await InventarioService.createInventario({
+      const inventario = await this.createInventario({
         productoId: producto.id,
         stock: input.stock,
-        stockMinimo: 24, // Default
+        stockMinimo: 24,
         costo: input.costo,
         precioUnitario: input.precioUnitario,
         precioMediaDocena: input.precioMediaDocena,
@@ -309,16 +238,13 @@ export const InventoryService = {
     }
   },
 
-  /**
-   * Obtener todos los productos (HEREDADO)
-   */
   async getProducts(): Promise<Product[]> {
     try {
-      const inventario = await InventarioService.getInventario()
+      const inventario = await this.getInventario()
       const productos = await ProductService.getProductos()
 
-      return productos.map((p) => {
-        const inv = inventario.find(i => i.productoId === p.id)
+      return productos.map((p: Producto) => {
+        const inv = inventario.find((i: Inventario) => i.productoId === p.id)
         return {
           id: p.id,
           codigo: p.codigo,
@@ -341,19 +267,15 @@ export const InventoryService = {
     }
   },
 
-  /**
-   * Buscar productos (HEREDADO)
-   */
   async searchProducts(query: string): Promise<Product[]> {
     try {
       const productos = await this.getProducts()
       const lowerQuery = query.toLowerCase()
-
       return productos.filter(
-        (p) =>
+        (p: Product) =>
           p.nombre.toLowerCase().includes(lowerQuery) ||
-          p.codigo.toLowerCase().includes(lowerQuery) ||
-          p.tipo.toLowerCase().includes(lowerQuery)
+          (p.codigo || '').toLowerCase().includes(lowerQuery) ||
+          (p.tipo || '').toLowerCase().includes(lowerQuery)
       )
     } catch (error) {
       console.error('Error searching products:', error)
@@ -361,32 +283,18 @@ export const InventoryService = {
     }
   },
 
-  /**
-   * Obtener estadísticas de inventario (HEREDADO)
-   */
   async getInventoryStats(): Promise<InventoryStats> {
-    return InventarioService.getInventarioStats()
+    return this.getInventarioStats()
   },
 
-  /**
-   * Generar código de barras (HEREDADO)
-   */
   generateBarcode(): string {
     return ProductService.generateBarcode()
   },
 
-  /**
-   * Actualizar producto (HEREDADO)
-   */
   async updateProduct(input: UpdateProductInput): Promise<Product> {
     try {
-      const producto = await ProductService.updateProducto({
-        id: input.id,
-        nombre: input.nombre,
-      })
-
-      const inventario = await InventarioService.getInventarioByProductoId(input.id)
-
+      const producto = await ProductService.updateProducto({ id: input.id, nombre: input.nombre })
+      const inventario = await this.getInventarioByProductoId(input.id)
       return {
         id: producto.id,
         codigo: producto.codigo,
@@ -408,19 +316,11 @@ export const InventoryService = {
     }
   },
 
-  /**
-   * Eliminar producto (HEREDADO)
-   */
   async deleteProduct(id: string): Promise<void> {
     try {
-      // Eliminar producto
       await ProductService.deleteProducto(id)
-
-      // Eliminar inventario asociado
-      const inventario = await InventarioService.getInventarioByProductoId(id)
-      if (inventario) {
-        await InventarioService.deleteInventario(inventario.id)
-      }
+      const inventario = await this.getInventarioByProductoId(id)
+      if (inventario) await this.deleteInventario(inventario.id)
     } catch (error) {
       console.error('Error deleting product:', error)
       throw new Error('Error al eliminar producto')

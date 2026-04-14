@@ -30,7 +30,7 @@ function AppContent() {
               element={
                 route.private ? (
                   <ProtectedRoute
-                    route={route}
+                    isPrivate={route.private}
                     isAuthenticated={isAuthenticated}
                     element={<route.component />}
                   />
