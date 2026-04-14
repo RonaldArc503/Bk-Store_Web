@@ -233,7 +233,6 @@ export default function POS() {
             <div className="flex flex-wrap gap-2 items-center shrink-0">
               <BarcodeImageScanButton
                 onDecoded={(text) => tryAddByBarcode(text)}
-                label="Foto o imagen"
               />
               <button
                 type="submit"

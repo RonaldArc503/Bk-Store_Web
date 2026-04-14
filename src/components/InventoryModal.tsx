@@ -230,7 +230,6 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                       onDecoded={(text) =>
                         setFormData((prev) => ({ ...prev, codigo: text }))
                       }
-                      label="Foto o imagen"
                     />
                     {formData.codigo && (
                       <button
