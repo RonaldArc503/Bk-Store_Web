@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import { Card, CardContent, CardHeader, CardTitle } from "../components/card"; 
+import { Card, CardContent, CardHeader, CardTitle } from "../components/Card"; 
 import { Button } from "../components/Button"; 
 import { Input } from "../components/input";
 
