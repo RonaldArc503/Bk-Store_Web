@@ -293,8 +293,45 @@ export const InventoryService = {
 
   async updateProduct(input: UpdateProductInput): Promise<Product> {
     try {
-      const producto = await ProductService.updateProducto({ id: input.id, nombre: input.nombre })
+      // Update producto fields (catalog)
+      const producto = await ProductService.updateProducto({
+        id: input.id,
+        nombre: input.nombre,
+        // pass through other optional product fields if provided
+        codigo: (input as any).codigo,
+        tipo: (input as any).tipo,
+        material: (input as any).material,
+        genero: (input as any).genero,
+        descripcion: (input as any).descripcion,
+        estado: (input as any).estado,
+      })
+
+      // Update or create inventario (stock/precios)
       const inventario = await this.getInventarioByProductoId(input.id)
+      if (inventario) {
+        await this.updateInventario({
+          id: inventario.id,
+          stock: (input as any).stock ?? inventario.stock,
+          costo: (input as any).costo ?? inventario.costo,
+          precioUnitario: (input as any).precioUnitario ?? inventario.precioUnitario,
+          precioMediaDocena: (input as any).precioMediaDocena ?? inventario.precioMediaDocena,
+          precioDocena: (input as any).precioDocena ?? inventario.precioDocena,
+        })
+      } else {
+        // create inventory record if stock/costo/prices provided
+        const shouldCreate = typeof (input as any).stock !== 'undefined' || typeof (input as any).costo !== 'undefined' || typeof (input as any).precioUnitario !== 'undefined'
+        if (shouldCreate) {
+          await this.createInventario({
+            productoId: producto.id,
+            stock: (input as any).stock ?? 0,
+            stockMinimo: 24,
+            costo: (input as any).costo ?? 0,
+            precioUnitario: (input as any).precioUnitario ?? 0,
+            precioMediaDocena: (input as any).precioMediaDocena ?? 0,
+            precioDocena: (input as any).precioDocena ?? 0,
+          })
+        }
+      }
       return {
         id: producto.id,
         codigo: producto.codigo,
@@ -302,11 +339,11 @@ export const InventoryService = {
         tipo: producto.tipo,
         material: producto.material,
         genero: producto.genero,
-        stock: inventario?.stock || 0,
-        costo: inventario?.costo || 0,
-        precioUnitario: inventario?.precioUnitario || 0,
-        precioMediaDocena: inventario?.precioMediaDocena || 0,
-        precioDocena: inventario?.precioDocena || 0,
+        stock: inventario?.stock ?? 0,
+        costo: inventario?.costo ?? 0,
+        precioUnitario: inventario?.precioUnitario ?? 0,
+        precioMediaDocena: inventario?.precioMediaDocena ?? 0,
+        precioDocena: inventario?.precioDocena ?? 0,
         fechaCreacion: producto.createdAt,
         fechaActualizacion: producto.updatedAt,
       }

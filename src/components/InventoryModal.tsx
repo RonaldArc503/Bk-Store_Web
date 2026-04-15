@@ -21,17 +21,30 @@ const materials = ['Lycra', 'Poliéster', 'Lycra Sport', 'Algodón', 'Nylon', 'M
 const genders = ['Femenino', 'Masculino', 'Unisex']
 
 export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: InventoryModalProps) {
-  const [formData, setFormData] = useState<CreateProductInput>({
+  type FormState = {
+    codigo: string
+    nombre: string
+    tipo: string
+    material: string
+    genero: string
+    stock: number | ''
+    costo: number | ''
+    precioUnitario: number | ''
+    precioMediaDocena: number | ''
+    precioDocena: number | ''
+  }
+
+  const [formData, setFormData] = useState<FormState>({
     codigo: '',
     nombre: '',
     tipo: '',
     material: '',
     genero: 'Femenino',
-    stock: 0,
-    costo: 0,
-    precioUnitario: 0,
-    precioMediaDocena: 0,
-    precioDocena: 0,
+    stock: '',
+    costo: '',
+    precioUnitario: '',
+    precioMediaDocena: '',
+    precioDocena: '',
   })
 
   const [loading, setLoading] = useState(false)
@@ -48,11 +61,12 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         tipo: editingProduct.tipo,
         material: editingProduct.material,
         genero: editingProduct.genero,
-        stock: editingProduct.stock,
-        costo: editingProduct.costo,
-        precioUnitario: editingProduct.precioUnitario,
-        precioMediaDocena: editingProduct.precioMediaDocena,
-        precioDocena: editingProduct.precioDocena,
+        // use empty string for zero values so inputs show placeholder instead of literal 0
+        stock: editingProduct.stock === 0 ? '' : editingProduct.stock,
+        costo: editingProduct.costo === 0 ? '' : editingProduct.costo,
+        precioUnitario: editingProduct.precioUnitario === 0 ? '' : editingProduct.precioUnitario,
+        precioMediaDocena: editingProduct.precioMediaDocena === 0 ? '' : editingProduct.precioMediaDocena,
+        precioDocena: editingProduct.precioDocena === 0 ? '' : editingProduct.precioDocena,
       })
     } else {
       setFormData({
@@ -61,11 +75,11 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         tipo: '',
         material: '',
         genero: 'Femenino',
-        stock: 0,
-        costo: 0,
-        precioUnitario: 0,
-        precioMediaDocena: 0,
-        precioDocena: 0,
+        stock: '',
+        costo: '',
+        precioUnitario: '',
+        precioMediaDocena: '',
+        precioDocena: '',
       })
     }
     setError('')
@@ -80,7 +94,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     setFormData((prev) => ({
       ...prev,
       [name]: ['stock', 'costo', 'precioUnitario', 'precioMediaDocena', 'precioDocena'].includes(name)
-        ? Number(value)
+        ? (value === '' ? '' : Number(value))
         : value,
     }))
 
@@ -111,7 +125,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
       setError('Selecciona un material')
       return false
     }
-    if (formData.precioUnitario <= 0) {
+    const precioUnitarioNum = Number(formData.precioUnitario)
+    if (!precioUnitarioNum || precioUnitarioNum <= 0) {
       setError('El precio debe ser mayor a 0')
       return false
     }
@@ -128,22 +143,23 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     try {
       let product: Product
 
+      const payload = {
+        nombre: formData.nombre,
+        codigo: formData.codigo,
+        tipo: formData.tipo,
+        material: formData.material,
+        genero: formData.genero,
+        stock: Number(formData.stock) || 0,
+        costo: Number(formData.costo) || 0,
+        precioUnitario: Number(formData.precioUnitario) || 0,
+        precioMediaDocena: Number(formData.precioMediaDocena) || 0,
+        precioDocena: Number(formData.precioDocena) || 0,
+      }
+
       if (editingProduct) {
-        product = await InventoryService.updateProduct({
-          id: editingProduct.id,
-          nombre: formData.nombre,
-          codigo: formData.codigo,
-          tipo: formData.tipo,
-          material: formData.material,
-          genero: formData.genero,
-          stock: formData.stock,
-          costo: formData.costo,
-          precioUnitario: formData.precioUnitario,
-          precioMediaDocena: formData.precioMediaDocena,
-          precioDocena: formData.precioDocena,
-        })
+        product = await InventoryService.updateProduct({ id: editingProduct.id, ...payload } as any)
       } else {
-        const result = await InventoryService.createProductWithInventory(formData)
+        const result = await InventoryService.createProductWithInventory(payload as any)
         product = result.producto as any
       }
 
