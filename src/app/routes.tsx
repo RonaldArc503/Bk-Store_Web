@@ -14,6 +14,7 @@ const CorteDeCaja = React.lazy(() => import('../pages/CorteDeCaja'))
 const Inventory = React.lazy(() => import('../pages/Inventory'))
 const UserManagement = React.lazy(() => import('../pages/UserManagement'))
 const Configuracion = React.lazy(() => import('../pages/Configuracion'))
+const Reports = React.lazy(() => import('../pages/Reports')) // 👈 recuperado
 const NotFound = React.lazy(() => import('../pages/NotFound'))
 
 export interface Route {
@@ -27,6 +28,13 @@ export interface Route {
 export const routes: Route[] = [
   {
     path: '/',
+    component: Dashboard,
+    name: 'Dashboard',
+    private: true,
+    icon: '📊'
+  },
+  {
+    path: '/dashboard',
     component: Dashboard,
     name: 'Dashboard',
     private: true,
@@ -54,6 +62,13 @@ export const routes: Route[] = [
     icon: '💰'
   },
   {
+    path: '/reports',
+    component: Reports,
+    name: 'Reportes',
+    private: true,
+    icon: '📄'
+  },
+  {
     path: '/users',
     component: UserManagement,
     name: 'Gestión de Usuarios',
@@ -76,13 +91,6 @@ export const routes: Route[] = [
     path: '/register',
     component: Register,
     name: 'Registrarse'
-  },
-  {
-    path: '/dashboard',
-    component: Dashboard,
-    name: 'Dashboard',
-    private: true,
-    icon: '📊'
   },
   {
     path: '*',

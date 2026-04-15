@@ -10,8 +10,10 @@ import {
   Banknote,
   Moon,
   Sun,
+  ReceiptText,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../context/ThemeContext'
 import { useState } from 'react'
@@ -20,19 +22,20 @@ interface SidebarProps {
   activeItem?: string
 }
 
+/* ---------------- THEME ---------------- */
 function ThemeRow() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
   return (
     <div className="flex items-center justify-between gap-3 px-1 py-1">
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2">
         {isDark ? (
-          <Moon className="w-4 h-4 shrink-0 text-indigo-300" aria-hidden />
+          <Moon className="w-4 h-4 text-indigo-300" />
         ) : (
-          <Sun className="w-4 h-4 shrink-0 text-amber-500" aria-hidden />
+          <Sun className="w-4 h-4 text-amber-500" />
         )}
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
           Modo oscuro
         </span>
       </div>
@@ -47,26 +50,24 @@ function ThemeToggle() {
 
   return (
     <button
-      type="button"
-      role="switch"
-      aria-checked={isDark}
-      aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       onClick={toggleTheme}
-      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
-        isDark ? 'bg-lime-600' : 'bg-gray-200 dark:bg-gray-600'
+      className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
+        isDark ? 'bg-lime-600' : 'bg-gray-300'
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-          isDark ? 'translate-x-6' : 'translate-x-0.5'
+        className={`inline-block h-5 w-5 transform bg-white rounded-full transition ${
+          isDark ? 'translate-x-6' : 'translate-x-1'
         }`}
       />
     </button>
   )
 }
 
-export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
+/* ---------------- SIDEBAR ---------------- */
+export function Sidebar({ activeItem }: SidebarProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { logout } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -75,133 +76,110 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
     { id: 'pos', label: 'Punto de Venta', path: '/pos', icon: ShoppingBag },
     { id: 'corte', label: 'Corte de Caja', path: '/corte', icon: Banknote },
     { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart },
-    { id: 'usuarios', label: 'Gestión de Usuarios', path: '/users', icon: Users },
-    { id: 'configuracion', label: 'Configuracion', path: '/configuracion', icon: Settings },
+    { id: 'reportes', label: 'Reportes', path: '/reports', icon: ReceiptText },
+    { id: 'usuarios', label: 'Usuarios', path: '/users', icon: Users },
+    { id: 'configuracion', label: 'Configuración', path: '/configuracion', icon: Settings },
   ]
-
-  const navButtonClass = (isActive: boolean) =>
-    `w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-      isActive
-        ? 'bg-lime-50 text-lime-600 dark:bg-lime-950/50 dark:text-lime-400'
-        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
-    }`
-
-  const iconClass = (isActive: boolean) =>
-    `w-5 h-5 ${isActive ? 'text-lime-500 dark:text-lime-400' : 'text-gray-400 dark:text-gray-500'}`
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
 
   const handleNavigate = (path: string) => {
     navigate(path)
     setIsMobileMenuOpen(false)
   }
 
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const isActive = (item: any) =>
+    activeItem ? item.id === activeItem : location.pathname === item.path
+
   return (
     <>
-      <aside className="hidden md:flex w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 min-h-screen flex-col">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-800">
+      {/* DESKTOP */}
+      <aside className="hidden md:flex w-64 bg-white dark:bg-gray-900 border-r dark:border-gray-800 min-h-screen flex-col">
+        <div className="p-6 border-b dark:border-gray-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-lime-500 dark:bg-lime-600 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-lime-500 rounded-full flex items-center justify-center">
               <ShoppingCart className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-gray-900 dark:text-white">Bikini Store</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Sistema de Inventario</p>
+              <h1 className="font-bold dark:text-white">Bikini Store</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Sistema de Inventario
+              </p>
             </div>
           </div>
         </div>
 
         <nav className="flex-1 p-4">
-          <ul className="space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = activeItem === item.id
+          {menuItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item)
 
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleNavigate(item.path)}
-                    className={navButtonClass(isActive)}
-                  >
-                    <Icon className={iconClass(isActive)} />
-                    {item.label}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavigate(item.path)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${
+                  active
+                    ? 'bg-lime-50 text-lime-600 dark:bg-lime-900 dark:text-lime-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                {item.label}
+              </button>
+            )
+          })}
         </nav>
 
-        <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
+        <div className="p-4 border-t dark:border-gray-800 space-y-3">
           <ThemeRow />
+
           <button
-            type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg"
           >
-            <LogOut className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-            Cerrar Sesion
+            <LogOut className="w-5 h-5" />
+            Cerrar Sesión
           </button>
         </div>
       </aside>
 
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-40">
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-lime-500 dark:bg-lime-600 rounded-full flex items-center justify-center">
-              <ShoppingCart className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h1 className="font-bold text-sm text-gray-900 dark:text-white">Bikini Store</h1>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition text-gray-700 dark:text-gray-200"
-          >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      {/* MOBILE */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-900 border-b dark:border-gray-800">
+        <div className="p-4 flex justify-between items-center">
+          <h1 className="font-bold dark:text-white">Bikini Store</h1>
+
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+            {isMobileMenuOpen ? <X /> : <Menu />}
           </button>
         </div>
 
         {isMobileMenuOpen && (
-          <nav className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-h-[calc(100vh-72px)] overflow-y-auto">
-            <ul className="space-y-1 p-4">
-              {menuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = activeItem === item.id
-
-                return (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleNavigate(item.path)}
-                      className={navButtonClass(isActive)}
-                    >
-                      <Icon className={iconClass(isActive)} />
-                      {item.label}
-                    </button>
-                  </li>
-                )
-              })}
-              <li className="pt-3 border-t border-gray-100 dark:border-gray-800">
-                <ThemeRow />
-              </li>
-              <li className="pt-1">
+          <div className="p-4 space-y-2">
+            {menuItems.map((item) => {
+              const Icon = item.icon
+              return (
                 <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+                  key={item.id}
+                  onClick={() => handleNavigate(item.path)}
+                  className="w-full flex items-center gap-3 px-4 py-2"
                 >
-                  <LogOut className="w-5 h-5 text-gray-400" />
-                  Cerrar Sesion
+                  <Icon className="w-5 h-5" />
+                  {item.label}
                 </button>
-              </li>
-            </ul>
-          </nav>
+              )
+            })}
+
+            <ThemeRow />
+
+            <button onClick={handleLogout} className="w-full flex gap-2">
+              <LogOut />
+              Cerrar Sesión
+            </button>
+          </div>
         )}
       </div>
     </>
