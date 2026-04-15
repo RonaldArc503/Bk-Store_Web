@@ -1,0 +1,6 @@
+@media print {
+  header, nav, .no-print { display: none !important; }
+  body { color: #000; background: #fff; }
+  /* ajustar márgenes según setting.printMargins */
+  @page { margin: 10mm; }
+}

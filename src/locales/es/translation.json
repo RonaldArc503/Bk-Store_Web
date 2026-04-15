@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "apply": "Aplicar cambios",
+    "cancel": "Cancelar",
+    "title": "Configuración",
+    "subtitle": "Preferencias del sistema",
+    "theme": "Tema",
+    "dark": "Oscuro",
+    "light": "Claro",
+    "language": "Idioma",
+    "notifications": "Notificaciones",
+    "enableNotifications": "Activar notificaciones",
+    "notificationsUnsupported": "Notificaciones no soportadas en este navegador.",
+    "notificationsDenied": "Permiso de notificaciones denegado.",
+    "print": "Impresión",
+    "printDefault": "Default",
+    "printNarrow": "Narrow",
+    "printWide": "Wide",
+    "printNow": "Imprimir",
+    "timezone": "Zona horaria",
+    "dateFormat": "Formato de fecha",
+    "reset": "Restablecer ajustes",
+    "savedLocally": "Los ajustes se guardan localmente."
+  }
+}
