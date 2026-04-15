@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react'
 import { X, Copy } from 'lucide-react'
 import { BarcodeImageScanButton } from './BarcodeImageScanButton'
-import type { Product, CreateProductInput } from '../types/product'
+import type { Product } from '../types/product'
 import { InventoryService } from '../services/InventoryService'
 
 interface InventoryModalProps {
