@@ -30,8 +30,6 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     stock: number | ''
     costo: number | ''
     precioUnitario: number | ''
-    precioMediaDocena: number | ''
-    precioDocena: number | ''
   }
 
   const [formData, setFormData] = useState<FormState>({
@@ -43,8 +41,6 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     stock: '',
     costo: '',
     precioUnitario: '',
-    precioMediaDocena: '',
-    precioDocena: '',
   })
 
   const [loading, setLoading] = useState(false)
@@ -61,12 +57,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         tipo: editingProduct.tipo,
         material: editingProduct.material,
         genero: editingProduct.genero,
-        // use empty string for zero values so inputs show placeholder instead of literal 0
         stock: editingProduct.stock === 0 ? '' : editingProduct.stock,
         costo: editingProduct.costo === 0 ? '' : editingProduct.costo,
         precioUnitario: editingProduct.precioUnitario === 0 ? '' : editingProduct.precioUnitario,
-        precioMediaDocena: editingProduct.precioMediaDocena === 0 ? '' : editingProduct.precioMediaDocena,
-        precioDocena: editingProduct.precioDocena === 0 ? '' : editingProduct.precioDocena,
       })
     } else {
       setFormData({
@@ -78,8 +71,6 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         stock: '',
         costo: '',
         precioUnitario: '',
-        precioMediaDocena: '',
-        precioDocena: '',
       })
     }
     setError('')
@@ -93,7 +84,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
     setFormData((prev) => ({
       ...prev,
-      [name]: ['stock', 'costo', 'precioUnitario', 'precioMediaDocena', 'precioDocena'].includes(name)
+      [name]: ['stock', 'costo', 'precioUnitario'].includes(name)
         ? (value === '' ? '' : Number(value))
         : value,
     }))
@@ -112,6 +103,20 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     navigator.clipboard.writeText(formData.codigo)
   }
 
+  const costo = Number(formData.costo) || 0
+  const unitario = Number(formData.precioUnitario) || 0
+  // Calculados automáticamente — no se ingresan
+  const mediaDocena = unitario * 6
+  const docena = unitario * 12
+
+  const margenUnitario = costo > 0 && unitario > 0 ? ((unitario - costo) / unitario * 100) : null
+  const costoInvalido = costo > 0 && unitario > 0 && costo >= unitario
+
+  // Bloquea caracteres que HTML permite en type="number" pero rompen la lógica de negocio
+  const blockInvalidNumericKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault()
+  }
+
   const validateForm = (): boolean => {
     if (!formData.nombre.trim()) {
       setError('El nombre del producto es requerido')
@@ -125,9 +130,12 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
       setError('Selecciona un material')
       return false
     }
-    const precioUnitarioNum = Number(formData.precioUnitario)
-    if (!precioUnitarioNum || precioUnitarioNum <= 0) {
-      setError('El precio debe ser mayor a 0')
+    if (!unitario || unitario <= 0) {
+      setError('El precio unitario debe ser mayor a 0')
+      return false
+    }
+    if (costo > 0 && costo >= unitario) {
+      setError(`El costo ($${costo.toFixed(2)}) debe ser menor al precio unitario ($${unitario.toFixed(2)})`)
       return false
     }
     return true
@@ -150,10 +158,10 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         material: formData.material,
         genero: formData.genero,
         stock: Number(formData.stock) || 0,
-        costo: Number(formData.costo) || 0,
-        precioUnitario: Number(formData.precioUnitario) || 0,
-        precioMediaDocena: Number(formData.precioMediaDocena) || 0,
-        precioDocena: Number(formData.precioDocena) || 0,
+        costo,
+        precioUnitario: unitario,
+        precioMediaDocena: mediaDocena,
+        precioDocena: docena,
       }
 
       if (editingProduct) {
@@ -341,6 +349,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 name="stock"
                 value={formData.stock}
                 onChange={handleInputChange}
+                onKeyDown={blockInvalidNumericKeys}
                 min="0"
                 className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
                 disabled={loading}
@@ -361,66 +370,97 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Costo de Adquisición
                 </label>
-                <input
-                  type="number"
-                  name="costo"
-                  value={formData.costo}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
-                  disabled={loading}
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    name="costo"
+                    value={formData.costo}
+                    onChange={handleInputChange}
+                    onKeyDown={blockInvalidNumericKeys}
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm ${costoInvalido ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                    disabled={loading}
+                  />
+                </div>
+                {costoInvalido && (
+                  <p className="mt-1 text-xs text-red-600">El costo debe ser menor al precio unitario</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Precio por Unidad *
                 </label>
-                <input
-                  type="number"
-                  name="precioUnitario"
-                  value={formData.precioUnitario}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
-                  disabled={loading}
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    name="precioUnitario"
+                    value={formData.precioUnitario}
+                    onChange={handleInputChange}
+                    onKeyDown={blockInvalidNumericKeys}
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Campos calculados automáticamente */}
+              <div>
+                <label className="block text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">
+                  Precio Media Docena (6 u.) — calculado
+                </label>
+                <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
+                  {unitario > 0 ? `$${mediaDocena.toFixed(2)}` : '—'}
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
-                  Precio por Media Docena (6 unidades) *
+                <label className="block text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">
+                  Precio Docena (12 u.) — calculado
                 </label>
-                <input
-                  type="number"
-                  name="precioMediaDocena"
-                  value={formData.precioMediaDocena}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
-                  disabled={loading}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
-                  Precio por Docena (12 unidades) *
-                </label>
-                <input
-                  type="number"
-                  name="precioDocena"
-                  value={formData.precioDocena}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
-                  disabled={loading}
-                />
+                <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
+                  {unitario > 0 ? `$${docena.toFixed(2)}` : '—'}
+                </div>
               </div>
             </div>
+
+            {/* Resumen de precios en tiempo real */}
+            {unitario > 0 && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Resumen</p>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white rounded-lg p-2 border border-gray-200">
+                    <p className="text-xs text-gray-400 mb-1">1 unidad</p>
+                    <p className="text-sm font-bold text-gray-900">${unitario.toFixed(2)}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 border border-gray-200">
+                    <p className="text-xs text-gray-400 mb-1">½ docena (×6)</p>
+                    <p className="text-sm font-bold text-gray-900">${mediaDocena.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500">${unitario.toFixed(2)}/u.</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 border border-gray-200">
+                    <p className="text-xs text-gray-400 mb-1">docena (×12)</p>
+                    <p className="text-sm font-bold text-gray-900">${docena.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500">${unitario.toFixed(2)}/u.</p>
+                  </div>
+                </div>
+                {margenUnitario !== null && (
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-200">
+                    <span className="text-xs text-gray-500">Margen bruto:</span>
+                    <span className={`text-xs font-semibold ${margenUnitario < 0 ? 'text-red-600' : margenUnitario < 20 ? 'text-orange-500' : 'text-green-600'}`}>
+                      {margenUnitario.toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Buttons */}
