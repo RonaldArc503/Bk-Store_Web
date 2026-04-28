@@ -101,11 +101,21 @@ export const ProductService = {
         nombre: input.nombre ?? currentProducto.nombre,
         descripcion: input.descripcion ?? currentProducto.descripcion,
         estado: input.estado ?? currentProducto.estado,
+        codigo: (input as any).codigo ?? currentProducto.codigo,
+        tipo: (input as any).tipo ?? currentProducto.tipo,
+        material: (input as any).material ?? currentProducto.material,
+        genero: (input as any).genero ?? currentProducto.genero,
         updatedAt: now,
       }
 
-      await set(productoRef, updatedProducto)
-      return updatedProducto
+      // Sanitize undefined values: Firebase Realtime Database rejects undefined.
+      // Convert any undefined fields to null so they are safely written (null removes the key).
+      const sanitizedProducto = Object.fromEntries(
+        Object.entries(updatedProducto).map(([key, value]) => [key, value === undefined ? null : value])
+      ) as Producto
+
+      await set(productoRef, sanitizedProducto)
+      return sanitizedProducto
     } catch (error) {
       console.error('Error updating producto:', error)
       throw new Error('Error al actualizar producto')

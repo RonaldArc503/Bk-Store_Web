@@ -113,13 +113,7 @@ function SettingRow({
   )
 }
 
-function SectionTitle({
-  icon,
-  title,
-}: {
-  icon: React.ReactNode
-  title: string
-}) {
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-3">
       {icon}
@@ -139,19 +133,12 @@ function ThemeSection() {
   return (
     <div>
       <SectionTitle
-        icon={isDark
-          ? <Moon className="w-4 h-4 text-indigo-400" />
-          : <Sun className="w-4 h-4 text-amber-500" />
-        }
+        icon={isDark ? <Moon className="w-4 h-4 text-indigo-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
         title="Apariencia"
       />
       <SettingCard>
         <SettingRow
-          icon={
-            isDark
-              ? <Moon className="w-5 h-5 shrink-0 text-indigo-300" aria-hidden />
-              : <Sun className="w-5 h-5 shrink-0 text-amber-500" aria-hidden />
-          }
+          icon={isDark ? <Moon className="w-5 h-5 shrink-0 text-indigo-300" /> : <Sun className="w-5 h-5 shrink-0 text-amber-500" />}
           title="Tema"
           description={isDark ? 'Modo oscuro activado' : 'Modo claro activado'}
           border={false}
@@ -165,7 +152,6 @@ function ThemeSection() {
 
 function LanguageSection() {
   const { settings, updateSettings } = useSettings()
-
   const languageOptions: { value: StoreSettings['language']; label: string }[] = [
     { value: 'es', label: 'Español' },
     { value: 'en', label: 'English' },
@@ -173,24 +159,17 @@ function LanguageSection() {
 
   return (
     <div>
-      <SectionTitle
-        icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />}
-        title="Regional"
-      />
+      <SectionTitle icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />} title="Regional" />
       <SettingCard>
         <SettingRow
-          icon={<Globe className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400" aria-hidden />}
+          icon={<Globe className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400" />}
           title="Idioma"
           description="Idioma de la interfaz"
         >
-          <Select
-            value={settings.language}
-            onChange={(v) => updateSettings({ language: v })}
-            options={languageOptions}
-          />
+          <Select value={settings.language} onChange={(v) => updateSettings({ language: v })} options={languageOptions} />
         </SettingRow>
         <SettingRow
-          icon={<Banknote className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" aria-hidden />}
+          icon={<Banknote className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" />}
           title="Moneda"
           description="Formato de precios en el sistema"
           border={false}
@@ -218,47 +197,18 @@ function NotificationsSection() {
   return (
     <div>
       <SectionTitle
-        icon={
-          anyActive
-            ? <Bell className="w-4 h-4 text-orange-500 dark:text-orange-400" />
-            : <BellOff className="w-4 h-4 text-gray-400" />
-        }
+        icon={anyActive ? <Bell className="w-4 h-4 text-orange-500 dark:text-orange-400" /> : <BellOff className="w-4 h-4 text-gray-400" />}
         title="Notificaciones"
       />
       <SettingCard>
-        <SettingRow
-          icon={<Package className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" aria-hidden />}
-          title="Alertas de stock bajo"
-          description="Avisar cuando un producto tenga poco inventario"
-        >
-          <Toggle
-            checked={notifications.lowStock}
-            onChange={(v) => updateNotifications({ lowStock: v })}
-            label="Alertas de stock bajo"
-          />
+        <SettingRow icon={<Package className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />} title="Alertas de stock bajo" description="Avisar cuando un producto tenga poco inventario">
+          <Toggle checked={notifications.lowStock} onChange={(v) => updateNotifications({ lowStock: v })} label="Alertas de stock bajo" />
         </SettingRow>
-        <SettingRow
-          icon={<Banknote className="w-5 h-5 shrink-0 text-lime-500 dark:text-lime-400" aria-hidden />}
-          title="Notificaciones de ventas"
-          description="Recibir aviso al completar cada venta"
-        >
-          <Toggle
-            checked={notifications.sales}
-            onChange={(v) => updateNotifications({ sales: v })}
-            label="Notificaciones de ventas"
-          />
+        <SettingRow icon={<Banknote className="w-5 h-5 shrink-0 text-lime-500 dark:text-lime-400" />} title="Notificaciones de ventas" description="Recibir aviso al completar cada venta">
+          <Toggle checked={notifications.sales} onChange={(v) => updateNotifications({ sales: v })} label="Notificaciones de ventas" />
         </SettingRow>
-        <SettingRow
-          icon={<Bell className="w-5 h-5 shrink-0 text-orange-500 dark:text-orange-400" aria-hidden />}
-          title="Recordatorio de corte"
-          description="Recordar hacer el corte de caja al final del día"
-          border={false}
-        >
-          <Toggle
-            checked={notifications.cashRegister}
-            onChange={(v) => updateNotifications({ cashRegister: v })}
-            label="Recordatorio de corte de caja"
-          />
+        <SettingRow icon={<Bell className="w-5 h-5 shrink-0 text-orange-500 dark:text-orange-400" />} title="Recordatorio de corte" description="Recordar hacer el corte de caja al final del día" border={false}>
+          <Toggle checked={notifications.cashRegister} onChange={(v) => updateNotifications({ cashRegister: v })} label="Recordatorio de corte de caja" />
         </SettingRow>
       </SettingCard>
     </div>
@@ -267,9 +217,7 @@ function NotificationsSection() {
 
 function InventorySection() {
   const { settings, updateInventory } = useSettings()
-  const [localThreshold, setLocalThreshold] = useState(
-    String(settings.inventory.lowStockThreshold),
-  )
+  const [localThreshold, setLocalThreshold] = useState(String(settings.inventory.lowStockThreshold))
 
   const handleBlur = () => {
     const n = parseInt(localThreshold, 10)
@@ -282,17 +230,9 @@ function InventorySection() {
 
   return (
     <div>
-      <SectionTitle
-        icon={<Package className="w-4 h-4 text-violet-500 dark:text-violet-400" />}
-        title="Inventario"
-      />
+      <SectionTitle icon={<Package className="w-4 h-4 text-violet-500 dark:text-violet-400" />} title="Inventario" />
       <SettingCard>
-        <SettingRow
-          icon={<Package className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" aria-hidden />}
-          title="Umbral de stock bajo"
-          description="Cantidad mínima antes de considerar bajo"
-          border={false}
-        >
+        <SettingRow icon={<Package className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" />} title="Umbral de stock bajo" description="Cantidad mínima antes de considerar bajo" border={false}>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -318,28 +258,12 @@ function PrintingSection() {
 
   return (
     <div>
-      <SectionTitle
-        icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />}
-        title="Impresión"
-      />
+      <SectionTitle icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />} title="Impresión" />
       <SettingCard>
-        <SettingRow
-          icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" aria-hidden />}
-          title="Imprimir ticket automático"
-          description="Imprimir al finalizar cada venta"
-        >
-          <Toggle
-            checked={printing.autoPrint}
-            onChange={(v) => updatePrinting({ autoPrint: v })}
-            label="Imprimir ticket automático"
-          />
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Imprimir al finalizar cada venta">
+          <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
-        <SettingRow
-          icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" aria-hidden />}
-          title="Tamaño de papel"
-          description="Ancho del rollo de la impresora térmica"
-          border={false}
-        >
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica" border={false}>
           <Select
             value={printing.paperSize}
             onChange={(v) => updatePrinting({ paperSize: v })}
@@ -372,22 +296,16 @@ export default function ConfiguracionPage() {
 
       <main className="flex-1 overflow-auto md:p-8 p-4 pt-20 md:pt-0">
         <div className="max-w-2xl">
-          {/* Header */}
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 rounded-xl bg-lime-100 dark:bg-lime-950/50 flex items-center justify-center">
               <Settings className="w-7 h-7 text-lime-600 dark:text-lime-400" />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-                Configuración
-              </h1>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                Preferencias del sistema
-              </p>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Configuración</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Preferencias del sistema</p>
             </div>
           </div>
 
-          {/* Secciones */}
           <div className="space-y-8">
             <ThemeSection />
             <LanguageSection />
@@ -396,7 +314,6 @@ export default function ConfiguracionPage() {
             <PrintingSection />
           </div>
 
-          {/* Restablecer */}
           <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
             {!showReset ? (
               <button
@@ -412,18 +329,10 @@ export default function ConfiguracionPage() {
                 <p className="text-sm text-red-600 dark:text-red-400 flex-1">
                   ¿Estás seguro? Esto restablecerá todas las preferencias (excepto el tema).
                 </p>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
-                >
+                <button type="button" onClick={handleReset} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors">
                   Confirmar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowReset(false)}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors"
-                >
+                <button type="button" onClick={() => setShowReset(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors">
                   Cancelar
                 </button>
               </div>

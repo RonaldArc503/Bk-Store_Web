@@ -141,7 +141,6 @@ export const CajaService = {
       const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
       await update(cajaRef, { status: 'closed', cierreData: cierreData || null, closedAt: new Date().toISOString() })
 
-      // Attempt to clear user-active mapping if present
       try {
         const snap = await get(cajaRef)
         if (snap.exists()) {
@@ -159,6 +158,23 @@ export const CajaService = {
     } catch (error) {
       console.error('Error closing caja:', error)
       throw error
+    }
+  },
+
+  async getAllCajas(): Promise<any[]> {
+    try {
+      const snap = await get(ref(database, CAJAS_PATH))
+      if (!snap.exists()) return []
+      const data = snap.val() as Record<string, any>
+      const list = Object.entries(data).map(([key, val]) => ({
+        ...val,
+        id: val.id || key,
+      }))
+      list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      return list
+    } catch (error) {
+      console.error('Error getting all cajas:', error)
+      return []
     }
   },
 }

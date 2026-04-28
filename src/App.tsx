@@ -15,7 +15,21 @@ function AppContent() {
   useEffect(() => {
     void (async () => {
       await initializeDemoData()
-      await ensureDemoAuthAccounts()
+
+      // Crear cuentas en Firebase Auth solo si la variable Vite VITE_ENABLE_DEMO_AUTH está activada.
+      // Esto evita intentos automáticos de signup en entornos donde la API Key/Auth no está configurada.
+      try {
+        // import.meta.env.VITE_ENABLE_DEMO_AUTH se inyecta por Vite (cadena 'true' para activar)
+        // También solo en modo desarrollo
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const enableDemoAuth = import.meta.env?.VITE_ENABLE_DEMO_AUTH === 'true' && import.meta.env?.DEV
+        if (enableDemoAuth) {
+          await ensureDemoAuthAccounts()
+        }
+      } catch (e) {
+        console.warn('Skipping demo auth account creation:', e)
+      }
     })()
   }, [])
 

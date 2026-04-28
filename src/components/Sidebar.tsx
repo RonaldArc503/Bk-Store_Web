@@ -9,7 +9,7 @@ import {
   X,
   Banknote,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useState } from 'react'
 
@@ -17,8 +17,9 @@ interface SidebarProps {
   activeItem?: string
 }
 
-export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
+export function Sidebar({ activeItem }: SidebarProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { logout } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -27,32 +28,26 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
     { id: 'pos', label: 'Punto de Venta', path: '/pos', icon: ShoppingBag },
     { id: 'corte', label: 'Corte de Caja', path: '/corte', icon: Banknote },
     { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart },
-    { id: 'usuarios', label: 'Gestión de Usuarios', path: '/users', icon: Users },
-    { id: 'configuracion', label: 'Configuracion', path: '/configuracion', icon: Settings },
+    { id: 'usuarios', label: 'Usuarios', path: '/users', icon: Users },
+    { id: 'configuracion', label: 'Configuración', path: '/configuracion', icon: Settings },
   ]
-
-  const navButtonClass = (isActive: boolean) =>
-    `w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-      isActive
-        ? 'bg-lime-50 text-lime-600 dark:bg-lime-950/50 dark:text-lime-400'
-        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
-    }`
-
-  const iconClass = (isActive: boolean) =>
-    `w-5 h-5 ${isActive ? 'text-lime-500 dark:text-lime-400' : 'text-gray-400 dark:text-gray-500'}`
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
 
   const handleNavigate = (path: string) => {
     navigate(path)
     setIsMobileMenuOpen(false)
   }
 
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const isActive = (item: (typeof menuItems)[number]) =>
+    activeItem ? item.id === activeItem : location.pathname === item.path
+
   return (
     <>
+      {/* DESKTOP */}
       <aside className="hidden md:flex w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 min-h-screen flex-col">
         <div className="p-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
@@ -67,48 +62,45 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
         </div>
 
         <nav className="flex-1 p-4">
-          <ul className="space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = activeItem === item.id
-
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleNavigate(item.path)}
-                    className={navButtonClass(isActive)}
-                  >
-                    <Icon className={iconClass(isActive)} />
-                    {item.label}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+          {menuItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item)
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavigate(item.path)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-lime-50 text-lime-600 dark:bg-lime-950/50 dark:text-lime-400'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${active ? 'text-lime-500 dark:text-lime-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                {item.label}
+              </button>
+            )
+          })}
         </nav>
 
-        <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
+        <div className="p-4 border-t border-gray-100 dark:border-gray-800">
           <button
-            type="button"
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white transition-colors"
           >
             <LogOut className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-            Cerrar Sesion
+            Cerrar Sesión
           </button>
         </div>
       </aside>
 
+      {/* MOBILE */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-40">
         <div className="p-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-lime-500 dark:bg-lime-600 rounded-full flex items-center justify-center">
               <ShoppingCart className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <h1 className="font-bold text-sm text-gray-900 dark:text-white">Bikini Store</h1>
-            </div>
+            <h1 className="font-bold text-sm text-gray-900 dark:text-white">Bikini Store</h1>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -119,36 +111,34 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
         </div>
 
         {isMobileMenuOpen && (
-          <nav className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-h-[calc(100vh-72px)] overflow-y-auto">
-            <ul className="space-y-1 p-4">
-              {menuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = activeItem === item.id
-
-                return (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleNavigate(item.path)}
-                      className={navButtonClass(isActive)}
-                    >
-                      <Icon className={iconClass(isActive)} />
-                      {item.label}
-                    </button>
-                  </li>
-                )
-              })}
-              <li className="pt-2 border-t border-gray-100 dark:border-gray-800">
+          <nav className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 max-h-[calc(100vh-72px)] overflow-y-auto p-4 space-y-1">
+            {menuItems.map((item) => {
+              const Icon = item.icon
+              const active = isActive(item)
+              return (
                 <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+                  key={item.id}
+                  onClick={() => handleNavigate(item.path)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-lime-50 text-lime-600 dark:bg-lime-950/50 dark:text-lime-400'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                  }`}
                 >
-                  <LogOut className="w-5 h-5 text-gray-400" />
-                  Cerrar Sesion
+                  <Icon className="w-5 h-5" />
+                  {item.label}
                 </button>
-              </li>
-            </ul>
+              )
+            })}
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+              >
+                <LogOut className="w-5 h-5 text-gray-400" />
+                Cerrar Sesión
+              </button>
+            </div>
           </nav>
         )}
       </div>

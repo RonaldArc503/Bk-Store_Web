@@ -16,4 +16,14 @@
   html {
     scroll-behavior: smooth;
   }
+  /* Márgenes de impresión controlados por clases en <html> */
+  @media print {
+  @page { margin: 10mm; }
+  @page { margin: 5mm; }
+  @page { margin: 20mm; }
+
+  /* ocultar elementos no deseados */
+  .no-print, header, nav, .sidebar { display: none !important; }
+}
+
 }

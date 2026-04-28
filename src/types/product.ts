@@ -31,6 +31,10 @@ export interface UpdateProductoInput {
   nombre?: string
   descripcion?: string
   estado?: 'Activo' | 'Inactivo'
+  codigo?: string
+  tipo?: string
+  material?: string
+  genero?: string
 }
 
 // 🟡 TABLA: inventario (stock y precios)

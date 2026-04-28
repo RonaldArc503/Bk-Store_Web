@@ -1,0 +1,14 @@
+:root.theme-light {
+  --bg: #ffffff;
+  --text: #111827;
+  --primary: #0ea5a4;
+}
+:root.theme-dark {
+  --bg: #0b1220;
+  --text: #e6eef8;
+  --primary: #06b6d4;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+}
