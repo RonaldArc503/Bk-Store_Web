@@ -8,61 +8,13 @@ import {
   Menu,
   X,
   Banknote,
-  Moon,
-  Sun,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useTheme } from '../context/ThemeContext'
 import { useState } from 'react'
 
 interface SidebarProps {
   activeItem?: string
-}
-
-function ThemeRow() {
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
-
-  return (
-    <div className="flex items-center justify-between gap-3 px-1 py-1">
-      <div className="flex items-center gap-2 min-w-0">
-        {isDark ? (
-          <Moon className="w-4 h-4 shrink-0 text-indigo-300" aria-hidden />
-        ) : (
-          <Sun className="w-4 h-4 shrink-0 text-amber-500" aria-hidden />
-        )}
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
-          Modo oscuro
-        </span>
-      </div>
-      <ThemeToggle />
-    </div>
-  )
-}
-
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
-  const isDark = theme === 'dark'
-
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={isDark}
-      aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-      onClick={toggleTheme}
-      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
-        isDark ? 'bg-lime-600' : 'bg-gray-200 dark:bg-gray-600'
-      }`}
-    >
-      <span
-        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-          isDark ? 'translate-x-6' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  )
 }
 
 export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
@@ -137,7 +89,6 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
         </nav>
 
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
-          <ThemeRow />
           <button
             type="button"
             onClick={handleLogout}
@@ -187,10 +138,7 @@ export function Sidebar({ activeItem = 'dashboard' }: SidebarProps) {
                   </li>
                 )
               })}
-              <li className="pt-3 border-t border-gray-100 dark:border-gray-800">
-                <ThemeRow />
-              </li>
-              <li className="pt-1">
+              <li className="pt-2 border-t border-gray-100 dark:border-gray-800">
                 <button
                   type="button"
                   onClick={handleLogout}
