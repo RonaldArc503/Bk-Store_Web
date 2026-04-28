@@ -1,10 +1,10 @@
-/**
- * Cámara (getUserMedia) o archivo: decodifica código de barras / QR desde la imagen.
- * En escritorio, <input capture> abre el explorador; la cámara real usa la API de video.
- */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Camera, ImageUp, Loader2, X } from 'lucide-react'
-import { decodeBarcodeFromImageFile } from '../utils/decodeBarcodeFromImage'
+import { Html5Qrcode } from 'html5-qrcode'
+import {
+  decodeBarcodeFromImageFile,
+  BARCODE_FORMATS,
+} from '../utils/decodeBarcodeFromImage'
 
 interface BarcodeImageScanButtonProps {
   onDecoded: (text: string) => void
@@ -13,6 +13,8 @@ interface BarcodeImageScanButtonProps {
   buttonGroupClassName?: string
 }
 
+const CAMERA_REGION_ID = 'html5qr-camera-region'
+
 export function BarcodeImageScanButton({
   onDecoded,
   disabled,
@@ -20,69 +22,131 @@ export function BarcodeImageScanButton({
   buttonGroupClassName = '',
 }: BarcodeImageScanButtonProps) {
   const galleryInputRef = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [cameraOpen, setCameraOpen] = useState(false)
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [lastScanned, setLastScanned] = useState('')
 
-  const stopStream = useCallback((stream: MediaStream | null) => {
-    stream?.getTracks().forEach((t) => t.stop())
+  const stopScanner = useCallback(async () => {
+    try {
+      const s = scannerRef.current
+      if (s) {
+        const state = s.getState()
+        if (state === 2 || state === 3) {
+          await s.stop()
+        }
+        s.clear()
+      }
+    } catch {
+      // ignore cleanup errors
+    }
+    scannerRef.current = null
+    setScanning(false)
   }, [])
 
-  const closeCameraModal = useCallback(() => {
-    stopStream(mediaStream)
-    setMediaStream(null)
+  const closeCameraModal = useCallback(async () => {
+    await stopScanner()
     setCameraOpen(false)
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
-  }, [mediaStream, stopStream])
-
-  const openCamera = async () => {
-    setError('')
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError('Tu navegador no permite usar la cámara.')
-      return
-    }
-    try {
-      let stream: MediaStream
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        })
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        })
-      }
-      setMediaStream(stream)
-      setCameraOpen(true)
-    } catch {
-      setError('No se pudo abrir la cámara. Revisa permisos del navegador.')
-    }
-  }
-
-  useEffect(() => {
-    if (!cameraOpen || !mediaStream) return
-    const video = videoRef.current
-    if (!video) return
-    video.srcObject = mediaStream
-    video.setAttribute('playsinline', 'true')
-    video.muted = true
-    const play = video.play()
-    if (play !== undefined) {
-      void play.catch(() => {})
-    }
-  }, [cameraOpen, mediaStream])
+    setLastScanned('')
+  }, [stopScanner])
 
   useEffect(() => {
     return () => {
-      stopStream(mediaStream)
+      void stopScanner()
     }
-  }, [mediaStream, stopStream])
+  }, [stopScanner])
+
+  const openCamera = async () => {
+    setError('')
+    setLastScanned('')
+    setCameraOpen(true)
+  }
+
+  useEffect(() => {
+    if (!cameraOpen) return
+
+    let cancelled = false
+
+    const startScanning = async () => {
+      await new Promise((r) => setTimeout(r, 300))
+      if (cancelled) return
+
+      const container = document.getElementById(CAMERA_REGION_ID)
+      if (!container) return
+
+      try {
+        const scanner = new Html5Qrcode(CAMERA_REGION_ID, {
+          verbose: false,
+          formatsToSupport: BARCODE_FORMATS,
+        })
+        scannerRef.current = scanner
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 280, height: 160 },
+            aspectRatio: 1.333,
+            disableFlip: false,
+          },
+          (decodedText) => {
+            if (!cancelled) {
+              setLastScanned(decodedText.trim())
+              onDecoded(decodedText.trim())
+              void closeCameraModal()
+            }
+          },
+          () => {
+            // frame sin lectura — normal, sigue escaneando
+          },
+        )
+        if (!cancelled) setScanning(true)
+      } catch (err) {
+        if (!cancelled) {
+          try {
+            const scanner = new Html5Qrcode(CAMERA_REGION_ID, {
+              verbose: false,
+              formatsToSupport: BARCODE_FORMATS,
+            })
+            scannerRef.current = scanner
+            await scanner.start(
+              { facingMode: 'user' },
+              {
+                fps: 10,
+                qrbox: { width: 280, height: 160 },
+                aspectRatio: 1.333,
+                disableFlip: false,
+              },
+              (decodedText) => {
+                if (!cancelled) {
+                  setLastScanned(decodedText.trim())
+                  onDecoded(decodedText.trim())
+                  void closeCameraModal()
+                }
+              },
+              () => {},
+            )
+            if (!cancelled) setScanning(true)
+          } catch {
+            if (!cancelled) {
+              console.error('Camera error:', err)
+              setError('No se pudo abrir la cámara. Revisa permisos del navegador.')
+              setCameraOpen(false)
+            }
+          }
+        }
+      }
+    }
+
+    void startScanning()
+
+    return () => {
+      cancelled = true
+      void stopScanner()
+    }
+  }, [cameraOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const processFile = async (file: File | undefined) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -100,39 +164,10 @@ export function BarcodeImageScanButton({
       }
       onDecoded(text)
     } catch {
-      setError('No se detectó un código legible. Prueba otra foto más nítida.')
+      setError('No se detectó un código legible. Prueba con otra foto más nítida y centrada.')
     } finally {
       setBusy(false)
     }
-  }
-
-  const captureFrame = () => {
-    const video = videoRef.current
-    if (!video || video.readyState < 2) {
-      setError('Espera a que la cámara esté lista.')
-      return
-    }
-    const w = video.videoWidth
-    const h = video.videoHeight
-    if (!w || !h) {
-      setError('La cámara aún no está lista. Intenta de nuevo.')
-      return
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(video, 0, 0, w, h)
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return
-        closeCameraModal()
-        void processFile(new File([blob], 'camara.jpg', { type: 'image/jpeg' }))
-      },
-      'image/jpeg',
-      0.92
-    )
   }
 
   const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,7 +190,7 @@ export function BarcodeImageScanButton({
       />
 
       {busy ? (
-        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 border border-gray-200 bg-gray-50">
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <Loader2 className="w-5 h-5 animate-spin shrink-0" aria-hidden />
           <span>Leyendo código…</span>
         </div>
@@ -169,10 +204,10 @@ export function BarcodeImageScanButton({
             type="button"
             disabled={isDisabled}
             onClick={() => void openCamera()}
-            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-50 transition disabled:opacity-50"
-            title="Usar la cámara del dispositivo"
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+            title="Escaneo en tiempo real con cámara"
           >
-            <Camera className="w-5 h-5 shrink-0 text-gray-700" aria-hidden />
+            <Camera className="w-5 h-5 shrink-0 text-gray-700 dark:text-gray-300" aria-hidden />
             <span>Cámara</span>
           </button>
 
@@ -180,58 +215,66 @@ export function BarcodeImageScanButton({
             type="button"
             disabled={isDisabled}
             onClick={() => galleryInputRef.current?.click()}
-            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-50 transition disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
             title="Elegir imagen de archivos"
           >
-            <ImageUp className="w-5 h-5 shrink-0 text-gray-700" aria-hidden />
+            <ImageUp className="w-5 h-5 shrink-0 text-gray-700 dark:text-gray-300" aria-hidden />
             <span>Subir imagen</span>
           </button>
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600 max-w-[260px]">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 max-w-[300px]">{error}</p>}
 
       {cameraOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 dark:bg-black/80 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Vista de cámara"
+          aria-label="Escáner de código de barras"
         >
           <div className="relative w-full max-w-lg rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 shadow-xl">
             <button
               type="button"
-              onClick={closeCameraModal}
+              onClick={() => void closeCameraModal()}
               className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
               aria-label="Cerrar"
             >
               <X className="w-5 h-5" />
             </button>
-            <p className="mb-3 pr-10 text-sm font-medium text-gray-900 dark:text-gray-100">Enfoca el código y captura</p>
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-black">
-              <video
-                ref={videoRef}
-                className="h-full w-full object-cover"
-                autoPlay
-                playsInline
-                muted
-              />
+
+            <p className="mb-3 pr-10 text-sm font-medium text-gray-900 dark:text-gray-100">
+              Apunta al código de barras — se lee automáticamente
+            </p>
+
+            <div className="relative w-full overflow-hidden rounded-lg bg-black">
+              <div id={CAMERA_REGION_ID} className="w-full" />
+              {!scanning && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                  <Loader2 className="w-8 h-8 animate-spin text-white" />
+                </div>
+              )}
             </div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
+
+            {scanning && (
+              <p className="mt-3 text-xs text-center text-gray-500 dark:text-gray-400 animate-pulse">
+                Buscando código de barras…
+              </p>
+            )}
+
+            {lastScanned && (
+              <p className="mt-2 text-xs text-center text-lime-600 dark:text-lime-400 font-medium">
+                Código detectado: {lastScanned}
+              </p>
+            )}
+
+            <div className="mt-4 flex justify-end">
               <button
                 type="button"
-                onClick={closeCameraModal}
+                onClick={() => void closeCameraModal()}
                 className="rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={captureFrame}
-                disabled={busy}
-                className="rounded-lg bg-lime-500 dark:bg-lime-600 px-4 py-2 text-sm font-medium text-white hover:bg-lime-600 dark:hover:bg-lime-500 disabled:opacity-50"
-              >
-                Capturar
+                Cerrar
               </button>
             </div>
           </div>
