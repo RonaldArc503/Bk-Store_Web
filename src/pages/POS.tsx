@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import {
   ShoppingCart,
@@ -15,7 +16,9 @@ import {
   QrCode,
   ArrowRightLeft,
   ChevronLeft,
-  Store
+  Store,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react'
  
 import { OrderService } from '../services/OrderService'
@@ -38,6 +41,7 @@ type CartItemLocal = ProductDB & { quantity: number }
 
 export default function POS() {
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [cart, setCart] = useState<CartItemLocal[]>([])
   const [products, setProducts] = useState<ProductDB[]>([])
@@ -48,13 +52,20 @@ export default function POS() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
   const [lastOrderInfo, setLastOrderInfo] = useState<any>(null)
 
+  const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
+
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        const prods = await InventoryService.getProducts()
+        const [prods, activeCaja] = await Promise.all([
+          InventoryService.getProducts(),
+          CajaService.getActiveCaja(user?.uid),
+        ])
         if (!mounted) return
-        // map to ProductDB shape
+
+        setCajaOpen(activeCaja != null && activeCaja.status !== 'closed')
+
         setProducts(
           prods.map((p) => ({
             id: p.id,
@@ -67,7 +78,8 @@ export default function POS() {
           }))
         )
       } catch (err) {
-        console.error('Error loading products', err)
+        console.error('Error loading POS data', err)
+        if (mounted) setCajaOpen(false)
       }
     })()
     return () => { mounted = false }
@@ -202,6 +214,45 @@ export default function POS() {
   const printTicket = () => {
     window.print()
     setIsTicketModalOpen(false)
+  }
+
+  if (cajaOpen === null) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex">
+        <Sidebar activeItem="pos" />
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-gray-500 dark:text-gray-400 animate-pulse">Verificando estado de caja…</p>
+        </main>
+      </div>
+    )
+  }
+
+  if (!cajaOpen) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+        <Sidebar activeItem="pos" />
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-md text-center">
+            <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-950/40 flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 text-red-500 dark:text-red-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Caja Cerrada</h2>
+            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 mb-6 text-left">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                No puedes realizar ventas hasta que se abra la caja del día. Dirígete al módulo de <strong>Corte de Caja</strong> para realizar la apertura.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/corte')}
+              className="px-6 py-3 bg-[#8CC63F] hover:bg-[#7ab535] text-white font-bold rounded-xl transition-colors"
+            >
+              Ir a Corte de Caja
+            </button>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
