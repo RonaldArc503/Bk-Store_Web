@@ -1,4 +1,4 @@
-import { ref, push, set, get, query, orderByChild } from 'firebase/database'
+import { ref, push, set, get } from 'firebase/database'
 import { database } from '../app/firebase'
 
 const CORTES_PATH = 'cortes'
@@ -69,14 +69,19 @@ export const CorteService = {
   },
 
   async getAllCortes(): Promise<CorteRecord[]> {
-    const snap = await get(query(ref(database, CORTES_PATH), orderByChild('createdAt')))
-    if (!snap.exists()) return []
-    const data = snap.val() as Record<string, any>
-    const list: CorteRecord[] = Object.entries(data).map(([key, val]) => ({
-      ...val,
-      id: val.id || key,
-    }))
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    return list
+    try {
+      const snap = await get(ref(database, CORTES_PATH))
+      if (!snap.exists()) return []
+      const data = snap.val() as Record<string, any>
+      const list: CorteRecord[] = Object.entries(data).map(([key, val]) => ({
+        ...val,
+        id: val.id || key,
+      }))
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      return list
+    } catch (error) {
+      console.error('Error getting all cortes:', error)
+      return []
+    }
   },
 }

@@ -282,57 +282,54 @@ export default function CorteDeCaja() {
   }
 
   const reloadData = async () => {
-    try {
-      const [cajas, cortes, todayC] = await Promise.all([
-        CajaService.getAllCajas(),
-        CorteService.getAllCortes(),
-        CorteService.getTodayCorte(),
-      ])
-      console.log('[CorteDeCaja] reloadData → cajas:', cajas.length, 'cortes:', cortes.length)
-      setTimelineEntries(buildTimeline(cortes, cajas))
-      if (todayC) { setTodayClosed(true); setTodayCorte(todayC) }
-      setLoadingHistory(false)
-    } catch (err) {
-      console.error('[CorteDeCaja] reloadData error', err)
-      setLoadingHistory(false)
-    }
+    let cajas: any[] = []
+    let cortes: CorteRecord[] = []
+    let todayC: CorteRecord | null = null
+
+    try { cajas = await CajaService.getAllCajas() } catch (e) { console.error('[CorteDeCaja] reloadData getAllCajas error', e) }
+    try { cortes = await CorteService.getAllCortes() } catch (e) { console.error('[CorteDeCaja] reloadData getAllCortes error', e) }
+    try { todayC = await CorteService.getTodayCorte() } catch (e) { console.error('[CorteDeCaja] reloadData getTodayCorte error', e) }
+
+    console.log('[CorteDeCaja] reloadData → cajas:', cajas.length, 'cortes:', cortes.length, 'todayCorte:', !!todayC)
+    setTimelineEntries(buildTimeline(cortes, cajas))
+    if (todayC) { setTodayClosed(true); setTodayCorte(todayC) }
+    setLoadingHistory(false)
   }
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      try {
-        const [active, existing, cajas, cortes] = await Promise.all([
-          CajaService.getActiveCaja(user?.uid),
-          CorteService.getTodayCorte(),
-          CajaService.getAllCajas(),
-          CorteService.getAllCortes(),
-        ])
-        if (!mounted) return
+      let active: any = null
+      let existing: CorteRecord | null = null
+      let cajas: any[] = []
+      let cortes: CorteRecord[] = []
 
-        console.log('[CorteDeCaja] init → cajas:', cajas.length, 'cortes:', cortes.length, 'active:', !!active, 'todayCorte:', !!existing)
+      try { active = await CajaService.getActiveCaja(user?.uid) } catch (e) { console.error('[CorteDeCaja] init getActiveCaja error', e) }
+      try { existing = await CorteService.getTodayCorte() } catch (e) { console.error('[CorteDeCaja] init getTodayCorte error', e) }
+      try { cajas = await CajaService.getAllCajas() } catch (e) { console.error('[CorteDeCaja] init getAllCajas error', e) }
+      try { cortes = await CorteService.getAllCortes() } catch (e) { console.error('[CorteDeCaja] init getAllCortes error', e) }
 
-        if (existing) { setTodayClosed(true); setTodayCorte(existing) }
-        setTimelineEntries(buildTimeline(cortes, cajas))
-        setLoadingHistory(false)
+      if (!mounted) return
 
-        if (active && active.status !== 'closed') {
-          setIsCajaOpen(true)
-          setAperturaMonto(String(active.apertura?.monto ?? ''))
-          setAperturaFecha(active.apertura?.fecha ? localDatetimeString(new Date(active.apertura.fecha)) : localDatetimeString())
-          setAperturaUsuario(active.apertura?.usuario ?? user?.displayName ?? 'Usuario de Caja')
-          setVentasEfectivo(String(active.totals?.efectivo ?? ''))
-          setVentasTransferencia(String(active.totals?.transferencia ?? ''))
-          setVentasQr(String(active.totals?.qr ?? ''))
-          setRemesas(active.remesas || [])
-          setIsAperturaSaved(Boolean(active.apertura))
-        } else {
-          setIsCajaOpen(false)
-          setIsAperturaSaved(false)
-        }
-      } catch (err) {
-        console.error('[CorteDeCaja] init error', err)
-        if (mounted) { setIsCajaOpen(false); setLoadingHistory(false) }
+      console.log('[CorteDeCaja] init → cajas:', cajas.length, 'cortes:', cortes.length, 'active:', !!active, 'todayCorte:', !!existing)
+
+      if (existing) { setTodayClosed(true); setTodayCorte(existing) }
+      setTimelineEntries(buildTimeline(cortes, cajas))
+      setLoadingHistory(false)
+
+      if (active && active.status !== 'closed') {
+        setIsCajaOpen(true)
+        setAperturaMonto(String(active.apertura?.monto ?? ''))
+        setAperturaFecha(active.apertura?.fecha ? localDatetimeString(new Date(active.apertura.fecha)) : localDatetimeString())
+        setAperturaUsuario(active.apertura?.usuario ?? user?.displayName ?? 'Usuario de Caja')
+        setVentasEfectivo(String(active.totals?.efectivo ?? ''))
+        setVentasTransferencia(String(active.totals?.transferencia ?? ''))
+        setVentasQr(String(active.totals?.qr ?? ''))
+        setRemesas(active.remesas || [])
+        setIsAperturaSaved(Boolean(active.apertura))
+      } else {
+        setIsCajaOpen(false)
+        setIsAperturaSaved(false)
       }
     })()
     return () => { mounted = false }
