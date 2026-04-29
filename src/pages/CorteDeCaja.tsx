@@ -49,6 +49,16 @@ function fmt(n: number) {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function localDatetimeString(date?: Date): string {
+  const d = date ?? new Date()
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const da = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const mi = String(d.getMinutes()).padStart(2, '0')
+  return `${y}-${mo}-${da}T${h}:${mi}`
+}
+
 /* ─── Historial expandible ─── */
 
 function CorteHistoryRow({ corte }: { corte: CorteRecord }) {
@@ -155,7 +165,7 @@ export default function CorteDeCaja() {
   const [notas, setNotas] = useState('')
 
   const [aperturaMonto, setAperturaMonto] = useState('')
-  const [aperturaFecha, setAperturaFecha] = useState(() => new Date().toISOString().slice(0, 16))
+  const [aperturaFecha, setAperturaFecha] = useState(() => localDatetimeString())
   const [aperturaUsuario, setAperturaUsuario] = useState(user?.displayName ?? 'Usuario de Caja')
   const [isAperturaSaved, setIsAperturaSaved] = useState(false)
 
@@ -202,8 +212,8 @@ export default function CorteDeCaja() {
           setAperturaMonto(String(active.apertura?.monto ?? ''))
           setAperturaFecha(
             active.apertura?.fecha
-              ? new Date(active.apertura.fecha).toISOString().slice(0, 16)
-              : new Date().toISOString().slice(0, 16),
+              ? localDatetimeString(new Date(active.apertura.fecha))
+              : localDatetimeString(),
           )
           setAperturaUsuario(active.apertura?.usuario ?? user?.displayName ?? 'Usuario de Caja')
           setVentasEfectivo(String(active.totals?.efectivo ?? ''))
@@ -238,12 +248,15 @@ export default function CorteDeCaja() {
     }
 
     try {
+      const now = new Date()
       const aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string } = {
         monto: parseFloat(aperturaMonto || '0'),
-        fecha: aperturaFecha ? new Date(aperturaFecha).toISOString() : new Date().toISOString(),
-        usuario: aperturaUsuario,
+        fecha: aperturaFecha ? new Date(aperturaFecha).toISOString() : now.toISOString(),
+        usuario: aperturaUsuario || 'Usuario de Caja',
       }
       if (user?.uid) aperturaInfo.createdBy = user.uid
+
+      setAperturaFecha(localDatetimeString(aperturaFecha ? new Date(aperturaFecha) : now))
 
       const active = await CajaService.getActiveCaja(user?.uid)
       if (active && active.id) {
@@ -276,8 +289,8 @@ export default function CorteDeCaja() {
         setAperturaMonto(String(active.apertura?.monto ?? ''))
         setAperturaFecha(
           active.apertura?.fecha
-            ? new Date(active.apertura.fecha).toISOString().slice(0, 16)
-            : new Date().toISOString().slice(0, 16),
+            ? localDatetimeString(new Date(active.apertura.fecha))
+            : localDatetimeString(),
         )
         setAperturaUsuario(active.apertura?.usuario ?? user?.displayName ?? 'Usuario de Caja')
         setVentasEfectivo(String(active.totals?.efectivo ?? ''))
@@ -288,7 +301,7 @@ export default function CorteDeCaja() {
       } else {
         setIsAperturaSaved(false)
         setAperturaMonto('')
-        setAperturaFecha(new Date().toISOString().slice(0, 16))
+        setAperturaFecha(localDatetimeString())
         setAperturaUsuario(user?.displayName ?? 'Usuario de Caja')
         setVentasEfectivo('')
         setVentasTransferencia('')
@@ -328,11 +341,15 @@ export default function CorteDeCaja() {
 
     if (!window.confirm('¿Está seguro que desea cerrar la caja? Esta acción no se puede deshacer.')) return
 
+    const cleanRemesas = remesas.length > 0
+      ? remesas.map((r) => ({ id: r.id, monto: r.monto, motivo: r.motivo || '' }))
+      : []
+
     const corte = {
       aperturaInfo: {
         monto: parseFloat(aperturaMonto || '0'),
         fecha: aperturaFecha ? new Date(aperturaFecha).toISOString() : new Date().toISOString(),
-        usuario: aperturaUsuario,
+        usuario: aperturaUsuario || 'Usuario de Caja',
       },
       ventasDia: {
         efectivo: ventasDia.efectivo,
@@ -340,14 +357,14 @@ export default function CorteDeCaja() {
         qr: ventasDia.qr,
       },
       totalVentas,
-      remesas,
+      remesas: cleanRemesas,
       totalRemesas,
       efectivoContado: parseFloat(efectivoContado || '0'),
       transferenciasContado: parseFloat(transferenciasContado || '0'),
       qrContado: parseFloat(qrContado || '0'),
       esperadoEfectivo,
-      notas,
-      createdBy: user?.uid || null,
+      notas: notas || '',
+      createdBy: user?.uid || 'anonymous',
       createdAt: new Date().toISOString(),
     }
 
@@ -357,7 +374,10 @@ export default function CorteDeCaja() {
       try {
         const active = await CajaService.getActiveCaja(user?.uid)
         if (active && active.id) {
-          await CajaService.closeCaja(active.id, { corteId: created.id, corte })
+          await CajaService.closeCaja(active.id, {
+            corteId: created.id,
+            closedAt: new Date().toISOString(),
+          })
         }
       } catch (err) {
         console.error('Error closing active caja after corte:', err)
@@ -367,14 +387,13 @@ export default function CorteDeCaja() {
       setTodayClosed(true)
       setTodayCorte(created.corte as CorteRecord)
 
-      // Refrescar historial
       const allCortes = await CorteService.getAllCortes()
       setHistory(allCortes)
 
       alert('Cierre de caja guardado correctamente')
     } catch (err) {
       console.error('Error saving corte', err)
-      alert('Error al guardar el cierre de caja')
+      alert('Error al guardar el cierre de caja: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
 
