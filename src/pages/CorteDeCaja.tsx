@@ -17,32 +17,24 @@ import {
   History,
   ChevronDown,
   ChevronUp,
+  DoorOpen,
+  DoorClosed,
 } from 'lucide-react'
 import { CorteService, type CorteRecord } from '../services/CorteService'
 import { useAuth } from '../hooks/useAuth'
 import { CajaService } from '../services/CajaService'
 
+/* ─── Helpers ─── */
+
 function formatDate(iso: string) {
   try {
-    return new Date(iso).toLocaleDateString('es-MX', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    })
-  } catch {
-    return iso
-  }
+    return new Date(iso).toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+  } catch { return iso }
 }
 
 function formatTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleTimeString('es-MX', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return ''
-  }
+  try { return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) }
+  catch { return '' }
 }
 
 function fmt(n: number) {
@@ -59,92 +51,150 @@ function localDatetimeString(date?: Date): string {
   return `${y}-${mo}-${da}T${h}:${mi}`
 }
 
-/* ─── Historial expandible ─── */
+/* ─── Timeline item from caja record ─── */
 
-function CorteHistoryRow({ corte }: { corte: CorteRecord }) {
+interface CajaRecord {
+  id: string
+  apertura?: { monto: number; fecha: string; usuario: string }
+  totals?: { efectivo: number; transferencia: number; qr: number; totalVentas: number }
+  status: string
+  createdAt: string
+  closedAt?: string
+  cierreData?: { corteId?: string; closedAt?: string }
+}
+
+function TimelineItem({ caja, corte }: { caja: CajaRecord; corte?: CorteRecord }) {
   const [open, setOpen] = useState(false)
-  const diff =
-    corte.efectivoContado - corte.esperadoEfectivo
+  const isClosed = caja.status === 'closed'
+  const aperturaTime = caja.apertura?.fecha || caja.createdAt
+  const cierreTime = caja.closedAt || caja.cierreData?.closedAt || ''
+  const totalVentas = corte?.totalVentas ?? caja.totals?.totalVentas ?? 0
 
   return (
-    <div className="border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-      >
-        <div className="w-10 h-10 rounded-lg bg-lime-100 dark:bg-lime-950/40 flex items-center justify-center shrink-0">
-          <CheckCircle2 className="w-5 h-5 text-lime-600 dark:text-lime-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-white">
-            {formatDate(corte.createdAt)}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Cierre a las {formatTime(corte.createdAt)} · {corte.aperturaInfo?.usuario || 'Usuario'}
-          </p>
-        </div>
-        <div className="text-right shrink-0 mr-2">
-          <p className="text-sm font-bold text-gray-900 dark:text-white">
-            ${fmt(corte.totalVentas ?? 0)}
-          </p>
-          <p className={`text-xs font-medium ${diff >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-red-500 dark:text-red-400'}`}>
-            {diff >= 0 ? '+' : ''}{fmt(diff)}
-          </p>
-        </div>
-        {open ? (
-          <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-        )}
-      </button>
+    <div className="relative pl-8">
+      {/* Timeline line */}
+      <div className="absolute left-[13px] top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
 
-      {open && (
-        <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30 p-4 space-y-3 text-sm">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Apertura</p>
-              <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.aperturaInfo?.monto ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo</p>
-              <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.efectivo ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Transferencia</p>
-              <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.transferencia ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">QR</p>
-              <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.qr ?? 0)}</p>
-            </div>
+      {/* Apertura dot */}
+      <div className="absolute left-0 top-1 w-7 h-7 rounded-full bg-lime-100 dark:bg-lime-950/60 border-2 border-lime-500 dark:border-lime-400 flex items-center justify-center z-10">
+        <DoorOpen className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+      </div>
+
+      <div className="mb-1">
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+          <span className="font-semibold text-lime-600 dark:text-lime-400 uppercase text-[10px] tracking-wider">Apertura</span>
+          <span>·</span>
+          <span>{formatDate(aperturaTime)}</span>
+          <span>·</span>
+          <span>{formatTime(aperturaTime)}</span>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="font-bold text-gray-900 dark:text-white">${fmt(caja.apertura?.monto ?? 0)}</span>
+          <span className="text-gray-400 dark:text-gray-500">—</span>
+          <span className="text-gray-600 dark:text-gray-300">{caja.apertura?.usuario || 'Usuario'}</span>
+        </div>
+      </div>
+
+      {isClosed && (
+        <div className="relative mt-4 mb-2">
+          {/* Cierre dot */}
+          <div className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-red-100 dark:bg-red-950/60 border-2 border-red-500 dark:border-red-400 flex items-center justify-center z-10">
+            <DoorClosed className="w-3.5 h-3.5 text-red-500 dark:text-red-400" />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo contado</p>
-              <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.efectivoContado ?? 0)}</p>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="w-full text-left"
+          >
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+              <span className="font-semibold text-red-500 dark:text-red-400 uppercase text-[10px] tracking-wider">Cierre</span>
+              <span>·</span>
+              <span>{cierreTime ? formatDate(cierreTime) : formatDate(caja.createdAt)}</span>
+              <span>·</span>
+              <span>{cierreTime ? formatTime(cierreTime) : ''}</span>
             </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Esperado</p>
-              <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.esperadoEfectivo ?? 0)}</p>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-bold text-gray-900 dark:text-white">Ventas: ${fmt(totalVentas)}</span>
+              {corte && (
+                <>
+                  <span className="text-gray-400 dark:text-gray-500">—</span>
+                  {(() => {
+                    const diff = (corte.efectivoContado ?? 0) - (corte.esperadoEfectivo ?? 0)
+                    return (
+                      <span className={`text-xs font-medium ${diff >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-red-500 dark:text-red-400'}`}>
+                        Diferencia: {diff >= 0 ? '+' : ''}${fmt(diff)}
+                      </span>
+                    )
+                  })()}
+                </>
+              )}
+              <span className="ml-auto">
+                {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              </span>
             </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Remesas</p>
-              <p className="font-medium text-orange-600 dark:text-orange-400">
-                {(corte.totalRemesas ?? 0) > 0 ? `-$${fmt(corte.totalRemesas)}` : '$0.00'}
-              </p>
-            </div>
-          </div>
+          </button>
 
-          {corte.notas && (
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Notas</p>
-              <p className="text-gray-700 dark:text-gray-300 mt-0.5">{corte.notas}</p>
+          {open && corte && (
+            <div className="mt-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 space-y-3 text-sm border border-gray-100 dark:border-gray-700">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo</p>
+                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.efectivo ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Transferencia</p>
+                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.transferencia ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">QR</p>
+                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.qr ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Total Ventas</p>
+                  <p className="font-bold text-lime-600 dark:text-lime-400">${fmt(corte.totalVentas ?? 0)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo contado</p>
+                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.efectivoContado ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Esperado</p>
+                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.esperadoEfectivo ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Remesas</p>
+                  <p className="font-medium text-orange-600 dark:text-orange-400">
+                    {(corte.totalRemesas ?? 0) > 0 ? `-$${fmt(corte.totalRemesas)}` : '$0.00'}
+                  </p>
+                </div>
+              </div>
+              {corte.notas && (
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Notas</p>
+                  <p className="text-gray-700 dark:text-gray-300 mt-0.5">{corte.notas}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
+
+      {!isClosed && (
+        <div className="relative mt-4 mb-2">
+          <div className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-lime-100 dark:bg-lime-950/40 border-2 border-lime-500 dark:border-lime-400 flex items-center justify-center z-10 animate-pulse">
+            <Unlock className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+          </div>
+          <p className="text-xs font-semibold text-lime-600 dark:text-lime-400 uppercase tracking-wider">Caja abierta actualmente</p>
+          <div className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
+            Ventas acumuladas: ${fmt(caja.totals?.totalVentas ?? 0)}
+          </div>
+        </div>
+      )}
+
+      <div className="h-4" />
     </div>
   )
 }
@@ -173,10 +223,10 @@ export default function CorteDeCaja() {
   const [ventasTransferencia, setVentasTransferencia] = useState('')
   const [ventasQr, setVentasQr] = useState('')
 
-  // Validación y historial
   const [todayClosed, setTodayClosed] = useState(false)
   const [todayCorte, setTodayCorte] = useState<CorteRecord | null>(null)
-  const [history, setHistory] = useState<CorteRecord[]>([])
+  const [allCajas, setAllCajas] = useState<CajaRecord[]>([])
+  const [allCortes, setAllCortes] = useState<CorteRecord[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
 
   const ventasDia = {
@@ -185,36 +235,42 @@ export default function CorteDeCaja() {
     qr: parseFloat(ventasQr || '0'),
   }
 
-  // Cargar estado de caja activa + historial
+  const reloadData = async () => {
+    const [cajas, cortes, todayC] = await Promise.all([
+      CajaService.getAllCajas(),
+      CorteService.getAllCortes(),
+      CorteService.getTodayCorte(),
+    ])
+    setAllCajas(cajas)
+    setAllCortes(cortes)
+    if (todayC) {
+      setTodayClosed(true)
+      setTodayCorte(todayC)
+    }
+    setLoadingHistory(false)
+  }
+
   useEffect(() => {
     let mounted = true
-
     ;(async () => {
       try {
-        const [active, existing, allCortes] = await Promise.all([
+        const [active, existing, cajas, cortes] = await Promise.all([
           CajaService.getActiveCaja(user?.uid),
           CorteService.getTodayCorte(),
+          CajaService.getAllCajas(),
           CorteService.getAllCortes(),
         ])
-
         if (!mounted) return
 
-        if (existing) {
-          setTodayClosed(true)
-          setTodayCorte(existing)
-        }
-
-        setHistory(allCortes)
+        if (existing) { setTodayClosed(true); setTodayCorte(existing) }
+        setAllCajas(cajas)
+        setAllCortes(cortes)
         setLoadingHistory(false)
 
         if (active && active.status !== 'closed') {
           setIsCajaOpen(true)
           setAperturaMonto(String(active.apertura?.monto ?? ''))
-          setAperturaFecha(
-            active.apertura?.fecha
-              ? localDatetimeString(new Date(active.apertura.fecha))
-              : localDatetimeString(),
-          )
+          setAperturaFecha(active.apertura?.fecha ? localDatetimeString(new Date(active.apertura.fecha)) : localDatetimeString())
           setAperturaUsuario(active.apertura?.usuario ?? user?.displayName ?? 'Usuario de Caja')
           setVentasEfectivo(String(active.totals?.efectivo ?? ''))
           setVentasTransferencia(String(active.totals?.transferencia ?? ''))
@@ -227,26 +283,15 @@ export default function CorteDeCaja() {
         }
       } catch (err) {
         console.error('Error loading caja state', err)
-        setIsCajaOpen(false)
-        setLoadingHistory(false)
+        if (mounted) { setIsCajaOpen(false); setLoadingHistory(false) }
       }
     })()
-
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveApertura = async () => {
-    if (isAperturaSaved) {
-      alert('Apertura ya guardada')
-      return
-    }
-    if (todayClosed) {
-      alert('Ya se realizó un cierre de caja hoy. No se puede abrir otra caja.')
-      return
-    }
-
+    if (isAperturaSaved) { alert('Apertura ya guardada'); return }
+    if (todayClosed) { alert('Ya se realizó un cierre hoy.'); return }
     try {
       const now = new Date()
       const aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string } = {
@@ -255,20 +300,15 @@ export default function CorteDeCaja() {
         usuario: aperturaUsuario || 'Usuario de Caja',
       }
       if (user?.uid) aperturaInfo.createdBy = user.uid
-
       setAperturaFecha(localDatetimeString(aperturaFecha ? new Date(aperturaFecha) : now))
 
       const active = await CajaService.getActiveCaja(user?.uid)
-      if (active && active.id) {
-        setIsAperturaSaved(true)
-        setIsCajaOpen(true)
-        alert('Apertura ya registrada en la caja activa')
-        return
-      }
+      if (active && active.id) { setIsAperturaSaved(true); setIsCajaOpen(true); return }
 
       await CajaService.openCaja(aperturaInfo)
       setIsAperturaSaved(true)
       setIsCajaOpen(true)
+      await reloadData()
       alert('Apertura guardada correctamente')
     } catch (err) {
       console.error('Error saving apertura', err)
@@ -277,21 +317,13 @@ export default function CorteDeCaja() {
   }
 
   const handleOpenView = async () => {
-    if (todayClosed) {
-      alert('Ya se realizó un cierre de caja hoy. No se puede abrir otra caja hasta mañana.')
-      return
-    }
-
+    if (todayClosed) { alert('Ya se realizó un cierre hoy. No se puede abrir otra caja hasta mañana.'); return }
     try {
       const active = await CajaService.getActiveCaja(user?.uid)
       if (active) {
         setIsCajaOpen(active.status !== 'closed')
         setAperturaMonto(String(active.apertura?.monto ?? ''))
-        setAperturaFecha(
-          active.apertura?.fecha
-            ? localDatetimeString(new Date(active.apertura.fecha))
-            : localDatetimeString(),
-        )
+        setAperturaFecha(active.apertura?.fecha ? localDatetimeString(new Date(active.apertura.fecha)) : localDatetimeString())
         setAperturaUsuario(active.apertura?.usuario ?? user?.displayName ?? 'Usuario de Caja')
         setVentasEfectivo(String(active.totals?.efectivo ?? ''))
         setVentasTransferencia(String(active.totals?.transferencia ?? ''))
@@ -303,9 +335,7 @@ export default function CorteDeCaja() {
         setAperturaMonto('')
         setAperturaFecha(localDatetimeString())
         setAperturaUsuario(user?.displayName ?? 'Usuario de Caja')
-        setVentasEfectivo('')
-        setVentasTransferencia('')
-        setVentasQr('')
+        setVentasEfectivo(''); setVentasTransferencia(''); setVentasQr('')
         setRemesas([])
         setIsCajaOpen(true)
       }
@@ -327,38 +357,22 @@ export default function CorteDeCaja() {
     setNewRemesa({ monto: '', motivo: '' })
     setIsRemesaModalOpen(false)
   }
-
   const removeRemesa = (id: number) => setRemesas((prev) => prev.filter((r) => r.id !== id))
 
   const handleCerrarCaja = async () => {
-    // Validación: solo un cierre por día
     const alreadyClosed = await CorteService.hasTodayCorte()
-    if (alreadyClosed) {
-      alert('Ya se realizó un cierre de caja el día de hoy. Solo se permite un cierre por día.')
-      setTodayClosed(true)
-      return
-    }
+    if (alreadyClosed) { alert('Ya se realizó un cierre hoy.'); setTodayClosed(true); return }
+    if (!window.confirm('¿Está seguro que desea cerrar la caja?')) return
 
-    if (!window.confirm('¿Está seguro que desea cerrar la caja? Esta acción no se puede deshacer.')) return
-
-    const cleanRemesas = remesas.length > 0
-      ? remesas.map((r) => ({ id: r.id, monto: r.monto, motivo: r.motivo || '' }))
-      : []
-
+    const cleanRemesas = remesas.map((r) => ({ id: r.id, monto: r.monto, motivo: r.motivo || '' }))
     const corte = {
       aperturaInfo: {
         monto: parseFloat(aperturaMonto || '0'),
         fecha: aperturaFecha ? new Date(aperturaFecha).toISOString() : new Date().toISOString(),
         usuario: aperturaUsuario || 'Usuario de Caja',
       },
-      ventasDia: {
-        efectivo: ventasDia.efectivo,
-        transferencia: ventasDia.transferencia,
-        qr: ventasDia.qr,
-      },
-      totalVentas,
-      remesas: cleanRemesas,
-      totalRemesas,
+      ventasDia: { efectivo: ventasDia.efectivo, transferencia: ventasDia.transferencia, qr: ventasDia.qr },
+      totalVentas, remesas: cleanRemesas, totalRemesas,
       efectivoContado: parseFloat(efectivoContado || '0'),
       transferenciasContado: parseFloat(transferenciasContado || '0'),
       qrContado: parseFloat(qrContado || '0'),
@@ -370,155 +384,126 @@ export default function CorteDeCaja() {
 
     try {
       const created = await CorteService.saveCorte(corte)
-
       try {
         const active = await CajaService.getActiveCaja(user?.uid)
-        if (active && active.id) {
-          await CajaService.closeCaja(active.id, {
-            corteId: created.id,
-            closedAt: new Date().toISOString(),
-          })
-        }
-      } catch (err) {
-        console.error('Error closing active caja after corte:', err)
-      }
+        if (active && active.id) await CajaService.closeCaja(active.id, { corteId: created.id, closedAt: new Date().toISOString() })
+      } catch (err) { console.error('Error closing active caja:', err) }
 
       setIsCajaOpen(false)
       setTodayClosed(true)
       setTodayCorte(created.corte as CorteRecord)
-
-      const allCortes = await CorteService.getAllCortes()
-      setHistory(allCortes)
-
+      await reloadData()
       alert('Cierre de caja guardado correctamente')
     } catch (err) {
       console.error('Error saving corte', err)
-      alert('Error al guardar el cierre de caja: ' + (err instanceof Error ? err.message : String(err)))
+      alert('Error al guardar el cierre: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
+
+  // Match cortes to cajas by corteId or date
+  const findCorteForCaja = (caja: CajaRecord): CorteRecord | undefined => {
+    const corteId = caja.cierreData?.corteId
+    if (corteId) return allCortes.find((c) => c.id === corteId)
+    if (!caja.closedAt) return undefined
+    const cajaDate = new Date(caja.closedAt).toDateString()
+    return allCortes.find((c) => new Date(c.createdAt).toDateString() === cajaDate)
+  }
+
+  /* ─── Historial compartido ─── */
+  const HistorySection = () => (
+    <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
+      <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+        <History className="w-5 h-5 text-gray-400" />
+        Historial de Aperturas y Cierres
+      </h3>
+      <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+        Línea de tiempo completa del flujo de caja
+      </p>
+
+      {loadingHistory ? (
+        <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
+          <Clock className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Cargando historial…</span>
+        </div>
+      ) : allCajas.length === 0 ? (
+        <div className="text-center py-8">
+          <Calendar className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+          <p className="text-gray-500 dark:text-gray-400 text-sm">No hay registros de caja aún</p>
+        </div>
+      ) : (
+        <div>
+          {allCajas.map((caja) => (
+            <TimelineItem key={caja.id} caja={caja} corte={findCorteForCaja(caja)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   /* ─── Vista: Caja Cerrada ─── */
   if (!isCajaOpen) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="corte" />
-        <div className="flex-1 p-4 md:p-8 pt-20 md:pt-8">
-          {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start mb-6 md:mb-8 border-b border-gray-200 dark:border-gray-800 pb-4 md:pb-6 gap-4">
+        <div className="flex-1 p-4 md:p-8 pt-20 md:pt-8 space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-4 md:pb-6 gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <button className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg">
-                  <ChevronLeft size={20} />
-                </button>
+                <button className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg"><ChevronLeft size={20} /></button>
                 <h2 className="text-xl md:text-2xl font-bold">Corte de Caja</h2>
               </div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
-                Gestione la apertura y cierre de caja diario
-              </p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Gestione la apertura y cierre de caja diario</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
-              <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm md:text-base">
-                <Lock size={18} />
-                Caja Cerrada
-              </div>
+              <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm"><Lock size={18} /> Caja Cerrada</div>
               <button
                 onClick={() => handleOpenView()}
                 disabled={todayClosed}
-                className="px-3 md:px-4 py-2 bg-[#8CC63F] text-white rounded-lg text-sm md:text-base hover:bg-[#7ab535] transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Abrir Caja
-              </button>
+                className="px-3 md:px-4 py-2 bg-[#8CC63F] text-white rounded-lg text-sm hover:bg-[#7ab535] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >Abrir Caja</button>
             </div>
           </div>
 
-          {/* Aviso: ya se hizo cierre hoy */}
           {todayClosed && todayCorte && (
-            <div className="mb-6 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                  Ya se realizó un cierre de caja hoy
-                </p>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Ya se realizó un cierre de caja hoy</p>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Cierre registrado a las {formatTime(todayCorte.createdAt)} por{' '}
-                  {todayCorte.aperturaInfo?.usuario || 'Usuario'} — Total ventas: $
-                  {fmt(todayCorte.totalVentas ?? 0)}. Solo se permite un cierre por día.
+                  Cierre a las {formatTime(todayCorte.createdAt)} por {todayCorte.aperturaInfo?.usuario || 'Usuario'} — Ventas: ${fmt(todayCorte.totalVentas ?? 0)}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Resumen del último cierre */}
           {todayCorte && (
-            <div className="mb-6 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-lime-500" />
-                Cierre de Hoy
-              </h3>
+            <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar className="w-5 h-5 text-lime-500" /> Resumen del Día</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Apertura</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    ${fmt(todayCorte.aperturaInfo?.monto ?? 0)}
-                  </p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">${fmt(todayCorte.aperturaInfo?.monto ?? 0)}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total Ventas</p>
-                  <p className="text-lg font-bold text-lime-600 dark:text-lime-400">
-                    ${fmt(todayCorte.totalVentas ?? 0)}
-                  </p>
+                  <p className="text-lg font-bold text-lime-600 dark:text-lime-400">${fmt(todayCorte.totalVentas ?? 0)}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Efectivo Contado</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    ${fmt(todayCorte.efectivoContado ?? 0)}
-                  </p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">${fmt(todayCorte.efectivoContado ?? 0)}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Diferencia</p>
                   {(() => {
                     const d = (todayCorte.efectivoContado ?? 0) - (todayCorte.esperadoEfectivo ?? 0)
-                    return (
-                      <p className={`text-lg font-bold ${d >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-red-500 dark:text-red-400'}`}>
-                        {d >= 0 ? '+' : ''}${fmt(d)}
-                      </p>
-                    )
+                    return <p className={`text-lg font-bold ${d >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-red-500 dark:text-red-400'}`}>{d >= 0 ? '+' : ''}${fmt(d)}</p>
                   })()}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Historial */}
-          <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-            <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
-              <History className="w-5 h-5 text-gray-400" />
-              Historial de Cierres
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
-              Registro de todas las aperturas y cierres de caja
-            </p>
-
-            {loadingHistory ? (
-              <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
-                <Clock className="w-5 h-5 animate-spin" />
-                <span className="text-sm">Cargando historial…</span>
-              </div>
-            ) : history.length === 0 ? (
-              <div className="text-center py-8">
-                <Calendar className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                <p className="text-gray-500 dark:text-gray-400 text-sm">
-                  No hay cierres registrados aún
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {history.map((corte) => (
-                  <CorteHistoryRow key={corte.id} corte={corte} />
-                ))}
-              </div>
-            )}
-          </div>
+          <HistorySection />
         </div>
       </div>
     )
@@ -532,78 +517,45 @@ export default function CorteDeCaja() {
         <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <button className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg">
-                <ChevronLeft size={20} />
-              </button>
+              <button className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg"><ChevronLeft size={20} /></button>
               <h2 className="text-xl md:text-2xl font-bold">Corte de Caja</h2>
             </div>
-            <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
-              Gestione la apertura y cierre de caja diario
-            </p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Gestione la apertura y cierre de caja diario</p>
           </div>
-          <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg text-sm md:text-base">
-            <Unlock size={18} />
-            Caja Abierta
-          </div>
+          <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg text-sm"><Unlock size={18} /> Caja Abierta</div>
         </div>
 
-        {/* Aviso si ya existe cierre hoy */}
         {todayClosed && (
           <div className="mb-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              Ya existe un cierre de caja registrado hoy. No se podrá realizar otro cierre.
-            </p>
+            <p className="text-sm text-amber-700 dark:text-amber-300">Ya existe un cierre hoy. No se podrá realizar otro cierre.</p>
           </div>
         )}
 
         <div className="space-y-4 md:space-y-6 w-full">
           {/* Apertura */}
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-            <h3 className="font-bold mb-4 text-lg md:text-base">Información de Apertura</h3>
+            <h3 className="font-bold mb-4 text-lg">Información de Apertura</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
               <div>
-                <label className="text-gray-500 dark:text-gray-400 text-xs md:text-sm block mb-1">Monto de Apertura</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-xl md:text-2xl font-bold text-[#8CC63F] bg-white dark:bg-gray-800"
-                  value={aperturaMonto}
-                  onChange={(e) => setAperturaMonto(e.target.value)}
-                  placeholder="0.00"
-                  disabled={isAperturaSaved}
-                />
+                <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Monto de Apertura</label>
+                <input type="number" step="0.01" className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-xl md:text-2xl font-bold text-[#8CC63F] bg-white dark:bg-gray-800" value={aperturaMonto} onChange={(e) => setAperturaMonto(e.target.value)} placeholder="0.00" disabled={isAperturaSaved} />
               </div>
               <div>
-                <label className="text-gray-500 dark:text-gray-400 text-xs md:text-sm block mb-1">Fecha y Hora</label>
-                <input
-                  type="datetime-local"
-                  className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm md:text-base bg-white dark:bg-gray-800"
-                  value={aperturaFecha}
-                  onChange={(e) => setAperturaFecha(e.target.value)}
-                  disabled={isAperturaSaved}
-                />
+                <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Fecha y Hora</label>
+                <input type="datetime-local" className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800" value={aperturaFecha} onChange={(e) => setAperturaFecha(e.target.value)} disabled={isAperturaSaved} />
               </div>
               <div>
-                <label className="text-gray-500 dark:text-gray-400 text-xs md:text-sm block mb-1">Usuario Responsable</label>
-                <input
-                  type="text"
-                  className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm md:text-base bg-white dark:bg-gray-800"
-                  value={aperturaUsuario}
-                  onChange={(e) => setAperturaUsuario(e.target.value)}
-                  disabled={isAperturaSaved}
-                />
+                <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Usuario Responsable</label>
+                <input type="text" className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800" value={aperturaUsuario} onChange={(e) => setAperturaUsuario(e.target.value)} disabled={isAperturaSaved} />
               </div>
             </div>
             <div className="mt-4 flex gap-3">
               {!isAperturaSaved ? (
-                <button onClick={handleSaveApertura} className="px-4 py-2 bg-[#8CC63F] text-white rounded-lg hover:bg-[#7ab535] transition">
-                  Guardar Apertura
-                </button>
+                <button onClick={handleSaveApertura} className="px-4 py-2 bg-[#8CC63F] text-white rounded-lg hover:bg-[#7ab535] transition">Guardar Apertura</button>
               ) : (
                 <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300">
-                  <CheckCircle2 className="w-4 h-4 text-lime-500" />
-                  Apertura guardada
+                  <CheckCircle2 className="w-4 h-4 text-lime-500" /> Apertura guardada
                 </div>
               )}
             </div>
@@ -611,41 +563,32 @@ export default function CorteDeCaja() {
 
           {/* Ventas del día */}
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-            <h3 className="font-bold mb-2 text-lg md:text-base">Resumen de Ventas del Día</h3>
+            <h3 className="font-bold mb-2 text-lg">Resumen de Ventas del Día</h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">Ingresos agrupados por método de pago</p>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
               <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
-                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center">
-                  <Banknote size={20} />
-                </div>
+                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><Banknote size={20} /></div>
                 <div className="flex-1">
                   <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo</p>
                   <input type="number" step="0.01" className="w-full p-1 text-lg font-bold text-gray-900 dark:text-white bg-transparent outline-none" value={ventasEfectivo} onChange={(e) => setVentasEfectivo(e.target.value)} placeholder="0.00" />
                 </div>
               </div>
               <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
-                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center">
-                  <CreditCard size={20} />
-                </div>
+                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><CreditCard size={20} /></div>
                 <div className="flex-1">
                   <p className="text-gray-500 dark:text-gray-400 text-xs">Transferencia</p>
                   <input type="number" step="0.01" className="w-full p-1 text-lg font-bold text-gray-900 dark:text-white bg-transparent outline-none" value={ventasTransferencia} onChange={(e) => setVentasTransferencia(e.target.value)} placeholder="0.00" />
                 </div>
               </div>
               <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
-                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center">
-                  <QrCode size={20} />
-                </div>
+                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><QrCode size={20} /></div>
                 <div className="flex-1">
                   <p className="text-gray-500 dark:text-gray-400 text-xs">Código QR</p>
                   <input type="number" step="0.01" className="w-full p-1 text-lg font-bold text-gray-900 dark:text-white bg-transparent outline-none" value={ventasQr} onChange={(e) => setVentasQr(e.target.value)} placeholder="0.00" />
                 </div>
               </div>
               <div className="flex items-center gap-4 bg-[#8CC63F]/5 dark:bg-[#8CC63F]/10 p-4 rounded-xl border border-[#8CC63F]/30">
-                <div className="w-10 h-10 bg-[#8CC63F]/20 text-[#8CC63F] rounded-lg flex items-center justify-center">
-                  <Banknote size={20} />
-                </div>
+                <div className="w-10 h-10 bg-[#8CC63F]/20 text-[#8CC63F] rounded-lg flex items-center justify-center"><Banknote size={20} /></div>
                 <div>
                   <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">Total</p>
                   <p className="font-bold text-[#8CC63F]">${fmt(totalVentas)}</p>
@@ -656,39 +599,30 @@ export default function CorteDeCaja() {
 
           {/* Remesas y Cierre */}
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-            <h3 className="font-bold mb-2 text-lg md:text-base">Remesas</h3>
+            <h3 className="font-bold mb-2 text-lg">Remesas</h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">Registre las remesas realizadas durante el día</p>
             <div className="flex flex-col sm:flex-row items-end gap-3 md:gap-4 mb-4">
               <div className="flex-1 w-full">
-                <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Monto de Remesa</label>
+                <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Monto</label>
                 <input type="number" step="0.01" placeholder="0.00" className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl" value={newRemesa.monto} onChange={(e) => setNewRemesa({ ...newRemesa, monto: e.target.value })} />
               </div>
               <div className="flex-1 w-full">
-                <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Motivo de Remesa</label>
-                <input type="text" placeholder="Motivo de la remesa..." className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl" value={newRemesa.motivo} onChange={(e) => setNewRemesa({ ...newRemesa, motivo: e.target.value })} />
+                <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Motivo</label>
+                <input type="text" placeholder="Motivo..." className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl" value={newRemesa.motivo} onChange={(e) => setNewRemesa({ ...newRemesa, motivo: e.target.value })} />
               </div>
-              <div>
-                <button onClick={() => handleAddRemesa()} className="flex items-center gap-2 text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                  <Plus size={18} /> Agregar Remesa
-                </button>
-              </div>
+              <button onClick={() => handleAddRemesa()} className="flex items-center gap-2 text-gray-900 dark:text-gray-100 whitespace-nowrap"><Plus size={18} /> Agregar</button>
             </div>
 
             {remesas.length > 0 && (
               <div className="mb-4">
                 <div className="bg-orange-50 dark:bg-orange-950/30 p-4 rounded-xl mb-3">
-                  <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 font-medium mb-2">
-                    <MinusCircle size={18} /> Total Remesas del Día
-                  </div>
+                  <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 font-medium mb-2"><MinusCircle size={18} /> Total Remesas</div>
                   <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">-${fmt(totalRemesas)}</p>
                 </div>
                 <div className="space-y-2">
                   {remesas.map((r) => (
                     <div key={r.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded p-3">
-                      <div>
-                        <p className="font-medium">-${fmt(r.monto)}</p>
-                        {r.motivo && <p className="text-xs text-gray-500 dark:text-gray-400">{r.motivo}</p>}
-                      </div>
+                      <div><p className="font-medium">-${fmt(r.monto)}</p>{r.motivo && <p className="text-xs text-gray-500 dark:text-gray-400">{r.motivo}</p>}</div>
                       <button onClick={() => removeRemesa(r.id)} className="text-red-500 text-sm">Eliminar</button>
                     </div>
                   ))}
@@ -698,21 +632,12 @@ export default function CorteDeCaja() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
               <div>
-                <label className="block text-gray-900 dark:text-gray-100 text-sm font-bold mb-2">Efectivo Contado (Total en Caja)</label>
-                <input type="number" className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mb-3 md:mb-4" value={efectivoContado} onChange={(e) => setEfectivoContado(e.target.value)} />
-                <div className="bg-blue-50 dark:bg-blue-950/30 p-3 md:p-4 rounded-lg text-sm md:text-base">
-                  <div className="flex justify-between text-sm text-blue-600 dark:text-blue-400">
-                    <span>Efectivo contado:</span>
-                    <span className="font-bold">${fmt(parseFloat(efectivoContado || '0'))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-blue-600 dark:text-blue-400">
-                    <span>Apertura (se resta):</span>
-                    <span className="font-bold">-${fmt(parseFloat(aperturaMonto || '0'))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-[#8CC63F] font-bold">
-                    <span>Ventas en efectivo:</span>
-                    <span>${fmt(Math.max(0, parseFloat(efectivoContado || '0') - parseFloat(aperturaMonto || '0')))}</span>
-                  </div>
+                <label className="block text-gray-900 dark:text-gray-100 text-sm font-bold mb-2">Efectivo Contado</label>
+                <input type="number" className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mb-3" value={efectivoContado} onChange={(e) => setEfectivoContado(e.target.value)} />
+                <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg text-sm">
+                  <div className="flex justify-between text-blue-600 dark:text-blue-400"><span>Contado:</span><span className="font-bold">${fmt(parseFloat(efectivoContado || '0'))}</span></div>
+                  <div className="flex justify-between text-blue-600 dark:text-blue-400"><span>Apertura:</span><span className="font-bold">-${fmt(parseFloat(aperturaMonto || '0'))}</span></div>
+                  <div className="flex justify-between text-[#8CC63F] font-bold"><span>Ventas efectivo:</span><span>${fmt(Math.max(0, parseFloat(efectivoContado || '0') - parseFloat(aperturaMonto || '0')))}</span></div>
                 </div>
               </div>
               <div>
@@ -729,48 +654,31 @@ export default function CorteDeCaja() {
 
             <div>
               <label className="block text-gray-900 dark:text-gray-100 text-sm font-bold mb-2">Notas / Observaciones</label>
-              <textarea className="w-full p-3 md:p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl h-20 md:h-24" value={notas} onChange={(e) => setNotas(e.target.value)} />
+              <textarea className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl h-20" value={notas} onChange={(e) => setNotas(e.target.value)} />
             </div>
 
-            <button
-              onClick={handleCerrarCaja}
-              disabled={todayClosed}
-              className="w-full mt-4 md:mt-6 bg-[#C81E41] text-white font-bold py-3 md:py-4 rounded-xl hover:bg-[#a91835] transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleCerrarCaja} disabled={todayClosed} className="w-full mt-4 md:mt-6 bg-[#C81E41] text-white font-bold py-3 md:py-4 rounded-xl hover:bg-[#a91835] transition disabled:opacity-50 disabled:cursor-not-allowed">
               {todayClosed ? 'Cierre ya realizado hoy' : 'Cerrar Caja'}
             </button>
-
-            {todayClosed && (
-              <p className="text-center text-xs text-amber-600 dark:text-amber-400 mt-2">
-                Solo se permite un cierre de caja por día.
-              </p>
-            )}
           </div>
+
+          {/* Historial debajo del formulario */}
+          <HistorySection />
         </div>
 
-        {/* Modal Remesa */}
         {isRemesaModalOpen && (
           <div className="fixed inset-0 bg-gray-900/40 z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6">
               <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="font-bold text-lg">Agregar Remesa</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Ingrese los detalles de la remesa</p>
-                </div>
+                <div><h3 className="font-bold text-lg">Agregar Remesa</h3><p className="text-sm text-gray-500 dark:text-gray-400">Detalles de la remesa</p></div>
                 <button onClick={() => setIsRemesaModalOpen(false)} className="text-gray-400"><X size={18} /></button>
               </div>
               <form onSubmit={handleAddRemesa} className="space-y-3">
-                <div>
-                  <label className="block text-sm font-bold mb-1">Monto de Remesa</label>
-                  <input type="number" step="0.01" className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800" value={newRemesa.monto} onChange={(e) => setNewRemesa({ ...newRemesa, monto: e.target.value })} autoFocus />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-1">Motivo</label>
-                  <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800" value={newRemesa.motivo} onChange={(e) => setNewRemesa({ ...newRemesa, motivo: e.target.value })} />
-                </div>
+                <div><label className="block text-sm font-bold mb-1">Monto</label><input type="number" step="0.01" className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800" value={newRemesa.monto} onChange={(e) => setNewRemesa({ ...newRemesa, monto: e.target.value })} autoFocus /></div>
+                <div><label className="block text-sm font-bold mb-1">Motivo</label><input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800" value={newRemesa.motivo} onChange={(e) => setNewRemesa({ ...newRemesa, motivo: e.target.value })} /></div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setIsRemesaModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-xl">Cancelar</button>
-                  <button type="submit" className="flex-1 py-3 bg-[#8CC63F] text-white rounded-xl">Agregar Remesa</button>
+                  <button type="submit" className="flex-1 py-3 bg-[#8CC63F] text-white rounded-xl">Agregar</button>
                 </div>
               </form>
             </div>
