@@ -8,6 +8,7 @@ import {
   Menu,
   X,
   Banknote,
+  FileText,
 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -28,6 +29,7 @@ export function Sidebar({ activeItem }: SidebarProps) {
     { id: 'pos', label: 'Punto de Venta', path: '/pos', icon: ShoppingBag },
     { id: 'corte', label: 'Corte de Caja', path: '/corte', icon: Banknote },
     { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart },
+    { id: 'reportes', label: 'Reportes', path: '/reports', icon: FileText },
     { id: 'usuarios', label: 'Usuarios', path: '/users', icon: Users },
     { id: 'configuracion', label: 'Configuración', path: '/configuracion', icon: Settings },
   ]
