@@ -26,15 +26,18 @@ import { CajaService } from '../services/CajaService'
 
 /* ─── Helpers ─── */
 
-function formatDate(iso: string) {
+function formatDateFull(iso: string) {
   try {
-    return new Date(iso).toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(iso).toLocaleDateString('es-MX', {
+      weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
+    })
   } catch { return iso }
 }
 
 function formatTime(iso: string) {
-  try { return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) }
-  catch { return '' }
+  try {
+    return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  } catch { return '' }
 }
 
 function fmt(n: number) {
@@ -51,150 +54,169 @@ function localDatetimeString(date?: Date): string {
   return `${y}-${mo}-${da}T${h}:${mi}`
 }
 
-/* ─── Timeline item from caja record ─── */
+/* ─── Timeline entry (built from corte + optional caja) ─── */
 
-interface CajaRecord {
-  id: string
-  apertura?: { monto: number; fecha: string; usuario: string }
-  totals?: { efectivo: number; transferencia: number; qr: number; totalVentas: number }
-  status: string
-  createdAt: string
-  closedAt?: string
-  cierreData?: { corteId?: string; closedAt?: string }
+interface TimelineEntry {
+  type: 'corte' | 'caja-open'
+  corte?: CorteRecord
+  caja?: any
+  date: string
 }
 
-function TimelineItem({ caja, corte }: { caja: CajaRecord; corte?: CorteRecord }) {
-  const [open, setOpen] = useState(false)
-  const isClosed = caja.status === 'closed'
-  const aperturaTime = caja.apertura?.fecha || caja.createdAt
-  const cierreTime = caja.closedAt || caja.cierreData?.closedAt || ''
-  const totalVentas = corte?.totalVentas ?? caja.totals?.totalVentas ?? 0
+function TimelineCard({ entry }: { entry: TimelineEntry }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (entry.type === 'caja-open') {
+    const caja = entry.caja
+    return (
+      <div className="relative pl-10 pb-6">
+        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700 ml-[14px]" />
+        <div className="absolute left-[3px] top-1 w-6 h-6 rounded-full bg-lime-100 dark:bg-lime-900/60 border-2 border-lime-500 flex items-center justify-center z-10">
+          <Unlock className="w-3 h-3 text-lime-600 dark:text-lime-400" />
+        </div>
+        <div className="bg-lime-50 dark:bg-lime-950/30 border border-lime-200 dark:border-lime-800/50 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-lime-600 dark:text-lime-400 bg-lime-100 dark:bg-lime-900/40 px-2 py-0.5 rounded">Caja Abierta</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {formatDateFull(caja?.apertura?.fecha || caja?.createdAt)} · {formatTime(caja?.apertura?.fecha || caja?.createdAt)}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 mt-2 text-sm">
+            <div>
+              <span className="text-gray-500 dark:text-gray-400 text-xs">Monto Apertura</span>
+              <p className="font-bold text-lime-700 dark:text-lime-300">${fmt(caja?.apertura?.monto ?? 0)}</p>
+            </div>
+            <div>
+              <span className="text-gray-500 dark:text-gray-400 text-xs">Usuario</span>
+              <p className="font-medium text-gray-800 dark:text-gray-200">{caja?.apertura?.usuario || 'Usuario'}</p>
+            </div>
+            <div>
+              <span className="text-gray-500 dark:text-gray-400 text-xs">Ventas Acum.</span>
+              <p className="font-medium text-gray-800 dark:text-gray-200">${fmt(caja?.totals?.totalVentas ?? 0)}</p>
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-lime-500" /></span>
+            <span className="text-xs text-lime-600 dark:text-lime-400 font-medium">En curso</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const corte = entry.corte!
+  const diff = (corte.efectivoContado ?? 0) - (corte.esperadoEfectivo ?? 0)
 
   return (
-    <div className="relative pl-8">
-      {/* Timeline line */}
-      <div className="absolute left-[13px] top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+    <div className="relative pl-10 pb-6">
+      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700 ml-[14px]" />
 
       {/* Apertura dot */}
-      <div className="absolute left-0 top-1 w-7 h-7 rounded-full bg-lime-100 dark:bg-lime-950/60 border-2 border-lime-500 dark:border-lime-400 flex items-center justify-center z-10">
-        <DoorOpen className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+      <div className="absolute left-[3px] top-1 w-6 h-6 rounded-full bg-lime-100 dark:bg-lime-900/60 border-2 border-lime-500 flex items-center justify-center z-10">
+        <DoorOpen className="w-3 h-3 text-lime-600 dark:text-lime-400" />
       </div>
 
-      <div className="mb-1">
-        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-          <span className="font-semibold text-lime-600 dark:text-lime-400 uppercase text-[10px] tracking-wider">Apertura</span>
-          <span>·</span>
-          <span>{formatDate(aperturaTime)}</span>
-          <span>·</span>
-          <span>{formatTime(aperturaTime)}</span>
+      {/* Apertura info */}
+      <div className="mb-3">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-lime-600 dark:text-lime-400 bg-lime-50 dark:bg-lime-900/40 px-2 py-0.5 rounded">Apertura</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {formatDateFull(corte.aperturaInfo?.fecha || corte.createdAt)} · {formatTime(corte.aperturaInfo?.fecha || corte.createdAt)}
+          </span>
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="font-bold text-gray-900 dark:text-white">${fmt(caja.apertura?.monto ?? 0)}</span>
-          <span className="text-gray-400 dark:text-gray-500">—</span>
-          <span className="text-gray-600 dark:text-gray-300">{caja.apertura?.usuario || 'Usuario'}</span>
+        <div className="flex items-center gap-3 text-sm mt-1">
+          <span className="font-bold text-gray-900 dark:text-white">${fmt(corte.aperturaInfo?.monto ?? 0)}</span>
+          <span className="text-gray-400">—</span>
+          <span className="text-gray-600 dark:text-gray-300">{corte.aperturaInfo?.usuario || 'Usuario'}</span>
         </div>
       </div>
 
-      {isClosed && (
-        <div className="relative mt-4 mb-2">
-          {/* Cierre dot */}
-          <div className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-red-100 dark:bg-red-950/60 border-2 border-red-500 dark:border-red-400 flex items-center justify-center z-10">
-            <DoorClosed className="w-3.5 h-3.5 text-red-500 dark:text-red-400" />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            className="w-full text-left"
-          >
-            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-              <span className="font-semibold text-red-500 dark:text-red-400 uppercase text-[10px] tracking-wider">Cierre</span>
-              <span>·</span>
-              <span>{cierreTime ? formatDate(cierreTime) : formatDate(caja.createdAt)}</span>
-              <span>·</span>
-              <span>{cierreTime ? formatTime(cierreTime) : ''}</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-bold text-gray-900 dark:text-white">Ventas: ${fmt(totalVentas)}</span>
-              {corte && (
-                <>
-                  <span className="text-gray-400 dark:text-gray-500">—</span>
-                  {(() => {
-                    const diff = (corte.efectivoContado ?? 0) - (corte.esperadoEfectivo ?? 0)
-                    return (
-                      <span className={`text-xs font-medium ${diff >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-red-500 dark:text-red-400'}`}>
-                        Diferencia: {diff >= 0 ? '+' : ''}${fmt(diff)}
-                      </span>
-                    )
-                  })()}
-                </>
-              )}
-              <span className="ml-auto">
-                {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-              </span>
-            </div>
-          </button>
-
-          {open && corte && (
-            <div className="mt-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 space-y-3 text-sm border border-gray-100 dark:border-gray-700">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo</p>
-                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.efectivo ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Transferencia</p>
-                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.transferencia ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">QR</p>
-                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.qr ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Total Ventas</p>
-                  <p className="font-bold text-lime-600 dark:text-lime-400">${fmt(corte.totalVentas ?? 0)}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo contado</p>
-                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.efectivoContado ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Esperado</p>
-                  <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.esperadoEfectivo ?? 0)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Remesas</p>
-                  <p className="font-medium text-orange-600 dark:text-orange-400">
-                    {(corte.totalRemesas ?? 0) > 0 ? `-$${fmt(corte.totalRemesas)}` : '$0.00'}
-                  </p>
-                </div>
-              </div>
-              {corte.notas && (
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Notas</p>
-                  <p className="text-gray-700 dark:text-gray-300 mt-0.5">{corte.notas}</p>
-                </div>
-              )}
-            </div>
-          )}
+      {/* Cierre dot */}
+      <div className="relative">
+        <div className="absolute -left-10 top-2 w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/60 border-2 border-red-500 flex items-center justify-center z-10 ml-[3px]">
+          <DoorClosed className="w-3 h-3 text-red-500 dark:text-red-400" />
         </div>
-      )}
 
-      {!isClosed && (
-        <div className="relative mt-4 mb-2">
-          <div className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-lime-100 dark:bg-lime-950/40 border-2 border-lime-500 dark:border-lime-400 flex items-center justify-center z-10 animate-pulse">
-            <Unlock className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="w-full text-left bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 hover:shadow-sm transition"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded">Cierre</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {formatDateFull(corte.createdAt)} · {formatTime(corte.createdAt)}
+            </span>
           </div>
-          <p className="text-xs font-semibold text-lime-600 dark:text-lime-400 uppercase tracking-wider">Caja abierta actualmente</p>
-          <div className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
-            Ventas acumuladas: ${fmt(caja.totals?.totalVentas ?? 0)}
-          </div>
-        </div>
-      )}
 
-      <div className="h-4" />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+            <div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Total Ventas</span>
+              <p className="text-sm font-bold text-lime-600 dark:text-lime-400">${fmt(corte.totalVentas ?? 0)}</p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Efectivo Contado</span>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">${fmt(corte.efectivoContado ?? 0)}</p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Diferencia</span>
+              <p className={`text-sm font-bold ${diff >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-red-500 dark:text-red-400'}`}>
+                {diff >= 0 ? '+' : ''}${fmt(diff)}
+              </p>
+            </div>
+            <div className="ml-auto">
+              {expanded
+                ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                : <ChevronDown className="w-4 h-4 text-gray-400" />}
+            </div>
+          </div>
+        </button>
+
+        {expanded && (
+          <div className="mt-2 bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 space-y-3 text-sm border border-gray-100 dark:border-gray-700">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo</p>
+                <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.efectivo ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Transferencia</p>
+                <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.transferencia ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">QR</p>
+                <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.ventasDia?.qr ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Total</p>
+                <p className="font-bold text-lime-600 dark:text-lime-400">${fmt(corte.totalVentas ?? 0)}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Efectivo Contado</p>
+                <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.efectivoContado ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Esperado</p>
+                <p className="font-medium text-gray-900 dark:text-white">${fmt(corte.esperadoEfectivo ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Remesas</p>
+                <p className="font-medium text-orange-600 dark:text-orange-400">
+                  {(corte.totalRemesas ?? 0) > 0 ? `-$${fmt(corte.totalRemesas)}` : '$0.00'}
+                </p>
+              </div>
+            </div>
+            {corte.notas && (
+              <div>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">Notas</p>
+                <p className="text-gray-700 dark:text-gray-300 mt-0.5">{corte.notas}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -225,8 +247,8 @@ export default function CorteDeCaja() {
 
   const [todayClosed, setTodayClosed] = useState(false)
   const [todayCorte, setTodayCorte] = useState<CorteRecord | null>(null)
-  const [allCajas, setAllCajas] = useState<CajaRecord[]>([])
-  const [allCortes, setAllCortes] = useState<CorteRecord[]>([])
+
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
 
   const ventasDia = {
@@ -235,19 +257,45 @@ export default function CorteDeCaja() {
     qr: parseFloat(ventasQr || '0'),
   }
 
-  const reloadData = async () => {
-    const [cajas, cortes, todayC] = await Promise.all([
-      CajaService.getAllCajas(),
-      CorteService.getAllCortes(),
-      CorteService.getTodayCorte(),
-    ])
-    setAllCajas(cajas)
-    setAllCortes(cortes)
-    if (todayC) {
-      setTodayClosed(true)
-      setTodayCorte(todayC)
+  const buildTimeline = (cortes: CorteRecord[], cajas: any[]): TimelineEntry[] => {
+    const entries: TimelineEntry[] = []
+
+    const openCajas = cajas.filter((c) => c.status !== 'closed')
+    for (const caja of openCajas) {
+      entries.push({
+        type: 'caja-open',
+        caja,
+        date: caja.apertura?.fecha || caja.createdAt,
+      })
     }
-    setLoadingHistory(false)
+
+    for (const corte of cortes) {
+      entries.push({
+        type: 'corte',
+        corte,
+        date: corte.createdAt,
+      })
+    }
+
+    entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return entries
+  }
+
+  const reloadData = async () => {
+    try {
+      const [cajas, cortes, todayC] = await Promise.all([
+        CajaService.getAllCajas(),
+        CorteService.getAllCortes(),
+        CorteService.getTodayCorte(),
+      ])
+      console.log('[CorteDeCaja] reloadData → cajas:', cajas.length, 'cortes:', cortes.length)
+      setTimelineEntries(buildTimeline(cortes, cajas))
+      if (todayC) { setTodayClosed(true); setTodayCorte(todayC) }
+      setLoadingHistory(false)
+    } catch (err) {
+      console.error('[CorteDeCaja] reloadData error', err)
+      setLoadingHistory(false)
+    }
   }
 
   useEffect(() => {
@@ -262,9 +310,10 @@ export default function CorteDeCaja() {
         ])
         if (!mounted) return
 
+        console.log('[CorteDeCaja] init → cajas:', cajas.length, 'cortes:', cortes.length, 'active:', !!active, 'todayCorte:', !!existing)
+
         if (existing) { setTodayClosed(true); setTodayCorte(existing) }
-        setAllCajas(cajas)
-        setAllCortes(cortes)
+        setTimelineEntries(buildTimeline(cortes, cajas))
         setLoadingHistory(false)
 
         if (active && active.status !== 'closed') {
@@ -282,7 +331,7 @@ export default function CorteDeCaja() {
           setIsAperturaSaved(false)
         }
       } catch (err) {
-        console.error('Error loading caja state', err)
+        console.error('[CorteDeCaja] init error', err)
         if (mounted) { setIsCajaOpen(false); setLoadingHistory(false) }
       }
     })()
@@ -317,7 +366,7 @@ export default function CorteDeCaja() {
   }
 
   const handleOpenView = async () => {
-    if (todayClosed) { alert('Ya se realizó un cierre hoy. No se puede abrir otra caja hasta mañana.'); return }
+    if (todayClosed) { alert('Ya se realizó un cierre hoy.'); return }
     try {
       const active = await CajaService.getActiveCaja(user?.uid)
       if (active) {
@@ -400,17 +449,8 @@ export default function CorteDeCaja() {
     }
   }
 
-  // Match cortes to cajas by corteId or date
-  const findCorteForCaja = (caja: CajaRecord): CorteRecord | undefined => {
-    const corteId = caja.cierreData?.corteId
-    if (corteId) return allCortes.find((c) => c.id === corteId)
-    if (!caja.closedAt) return undefined
-    const cajaDate = new Date(caja.closedAt).toDateString()
-    return allCortes.find((c) => new Date(c.createdAt).toDateString() === cajaDate)
-  }
-
-  /* ─── Historial compartido ─── */
-  const HistorySection = () => (
+  /* ─── Historial compartido (timeline) ─── */
+  const HistoryTimeline = () => (
     <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
       <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
         <History className="w-5 h-5 text-gray-400" />
@@ -425,16 +465,20 @@ export default function CorteDeCaja() {
           <Clock className="w-5 h-5 animate-spin" />
           <span className="text-sm">Cargando historial…</span>
         </div>
-      ) : allCajas.length === 0 ? (
-        <div className="text-center py-8">
-          <Calendar className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-          <p className="text-gray-500 dark:text-gray-400 text-sm">No hay registros de caja aún</p>
+      ) : timelineEntries.length === 0 ? (
+        <div className="text-center py-10">
+          <Calendar className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">No hay registros de caja aún</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
+            Abre tu primera caja para comenzar a registrar el historial
+          </p>
         </div>
       ) : (
-        <div>
-          {allCajas.map((caja) => (
-            <TimelineItem key={caja.id} caja={caja} corte={findCorteForCaja(caja)} />
+        <div className="relative">
+          {timelineEntries.map((entry, i) => (
+            <TimelineCard key={entry.corte?.id || entry.caja?.id || i} entry={entry} />
           ))}
+          <div className="absolute left-[14px] bottom-0 w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 z-10" />
         </div>
       )}
     </div>
@@ -446,6 +490,7 @@ export default function CorteDeCaja() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="corte" />
         <div className="flex-1 p-4 md:p-8 pt-20 md:pt-8 space-y-6">
+          {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-4 md:pb-6 gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -455,15 +500,18 @@ export default function CorteDeCaja() {
               <p className="text-gray-500 dark:text-gray-400 text-sm">Gestione la apertura y cierre de caja diario</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
-              <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm"><Lock size={18} /> Caja Cerrada</div>
+              <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium">
+                <Lock size={18} /> Caja Cerrada
+              </div>
               <button
                 onClick={() => handleOpenView()}
                 disabled={todayClosed}
-                className="px-3 md:px-4 py-2 bg-[#8CC63F] text-white rounded-lg text-sm hover:bg-[#7ab535] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-[#8CC63F] text-white rounded-lg text-sm font-medium hover:bg-[#7ab535] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >Abrir Caja</button>
             </div>
           </div>
 
+          {/* Aviso cierre hoy */}
           {todayClosed && todayCorte && (
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
@@ -476,6 +524,7 @@ export default function CorteDeCaja() {
             </div>
           )}
 
+          {/* Resumen del día */}
           {todayCorte && (
             <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar className="w-5 h-5 text-lime-500" /> Resumen del Día</h3>
@@ -503,7 +552,8 @@ export default function CorteDeCaja() {
             </div>
           )}
 
-          <HistorySection />
+          {/* Timeline */}
+          <HistoryTimeline />
         </div>
       </div>
     )
@@ -522,7 +572,9 @@ export default function CorteDeCaja() {
             </div>
             <p className="text-gray-500 dark:text-gray-400 text-sm">Gestione la apertura y cierre de caja diario</p>
           </div>
-          <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg text-sm"><Unlock size={18} /> Caja Abierta</div>
+          <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-lime-50 dark:bg-lime-950/30 text-lime-600 dark:text-lime-400 rounded-lg text-sm font-medium">
+            <Unlock size={18} /> Caja Abierta
+          </div>
         </div>
 
         {todayClosed && (
@@ -554,7 +606,7 @@ export default function CorteDeCaja() {
               {!isAperturaSaved ? (
                 <button onClick={handleSaveApertura} className="px-4 py-2 bg-[#8CC63F] text-white rounded-lg hover:bg-[#7ab535] transition">Guardar Apertura</button>
               ) : (
-                <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300">
+                <div className="flex items-center gap-2 px-4 py-2 bg-lime-50 dark:bg-lime-900/30 rounded-lg text-lime-700 dark:text-lime-300 font-medium">
                   <CheckCircle2 className="w-4 h-4 text-lime-500" /> Apertura guardada
                 </div>
               )}
@@ -662,8 +714,8 @@ export default function CorteDeCaja() {
             </button>
           </div>
 
-          {/* Historial debajo del formulario */}
-          <HistorySection />
+          {/* Timeline */}
+          <HistoryTimeline />
         </div>
 
         {isRemesaModalOpen && (
