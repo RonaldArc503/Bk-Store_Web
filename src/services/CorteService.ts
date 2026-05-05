@@ -14,6 +14,7 @@ export interface CorteRecord {
     efectivo: number
     transferencia: number
     qr: number
+    tarjeta: number
   }
   totalVentas: number
   remesas: { id: number; monto: number; motivo?: string }[]
@@ -21,6 +22,7 @@ export interface CorteRecord {
   efectivoContado: number
   transferenciasContado: number
   qrContado: number
+  tarjetaContado: number
   esperadoEfectivo: number
   notas: string
   createdBy: string | null

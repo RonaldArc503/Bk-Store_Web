@@ -11,6 +11,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "../app/firebase";
+import { UserService } from "../services/UserService";
 
 export interface AuthResponse {
   user: FirebaseUser;
@@ -21,9 +22,24 @@ export interface AuthResponse {
  * Login con email y contraseña
  */
 export const loginEmail = async (email: string, password: string): Promise<AuthResponse> => {
-  const res = await signInWithEmailAndPassword(auth, email, password);
-  const token = await res.user.getIdToken();
-  return { user: res.user, token };
+  try {
+    const res = await signInWithEmailAndPassword(auth, email, password);
+    const token = await res.user.getIdToken();
+    return { user: res.user, token };
+  } catch (err: unknown) {
+    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : ''
+    if (code === 'auth/user-not-found') {
+      const verified = await UserService.verifyUserCredentials(email, password)
+      if (!verified) {
+        throw new Error('Credenciales inválidas')
+      }
+
+      const res = await createUserWithEmailAndPassword(auth, email, password)
+      const token = await res.user.getIdToken()
+      return { user: res.user, token }
+    }
+    throw err
+  }
 };
 
 /**

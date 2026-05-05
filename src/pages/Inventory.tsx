@@ -8,11 +8,12 @@ import { Package, AlertTriangle, Search, Edit2, Trash2 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { InventoryModal } from '../components/InventoryModal'
 import { InventoryService } from '../services/InventoryService'
+import { useSettings } from '../context/SettingsContext'
 import type { Product, InventoryStats } from '../types/product'
 
-const MIN_STOCK_WARNING = 24
-
 export default function InventoryPage() {
+  const { settings } = useSettings()
+  const lowStockThreshold = settings.inventory.lowStockThreshold
   const [products, setProducts] = useState<Product[]>([])
   const [stats, setStats] = useState<InventoryStats>({ totalProductos: 0, stockTotal: 0, alertasStock: 0 })
   const [searchQuery, setSearchQuery] = useState('')
@@ -26,14 +27,14 @@ export default function InventoryPage() {
   // Cargar productos y estadísticas
   useEffect(() => {
     loadData()
-  }, [])
+  }, [lowStockThreshold])
 
   const loadData = async () => {
     setLoading(true)
     try {
       const [productsData, statsData] = await Promise.all([
         InventoryService.getProducts(),
-        InventoryService.getInventoryStats(),
+        InventoryService.getInventoryStats(lowStockThreshold),
       ])
       setProducts(productsData)
       setFilteredProducts(productsData)
@@ -243,11 +244,11 @@ export default function InventoryPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-sm font-medium ${product.stock < MIN_STOCK_WARNING ? 'text-orange-600' : 'text-green-600'}`}
+                            className={`text-sm font-medium ${product.stock < lowStockThreshold ? 'text-orange-600' : 'text-green-600'}`}
                           >
                             {product.stock}
                           </span>
-                          {product.stock < MIN_STOCK_WARNING && <AlertTriangle className="w-4 h-4 text-orange-600" />}
+                          {product.stock < lowStockThreshold && <AlertTriangle className="w-4 h-4 text-orange-600" />}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 font-medium">${product.costo.toFixed(2)}</td>
@@ -298,7 +299,7 @@ export default function InventoryPage() {
                       <p className="font-semibold text-gray-900">{product.nombre}</p>
                       <p className="text-xs text-gray-500 font-mono">{product.codigo}</p>
                     </div>
-                    {product.stock < MIN_STOCK_WARNING && (
+                    {product.stock < lowStockThreshold && (
                       <AlertTriangle className="w-5 h-5 text-orange-600" />
                     )}
                   </div>
@@ -319,7 +320,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-gray-500">Stock</p>
-                    <p className={`font-medium ${product.stock < MIN_STOCK_WARNING ? 'text-orange-600' : 'text-green-600'}`}>
+                    <p className={`font-medium ${product.stock < lowStockThreshold ? 'text-orange-600' : 'text-green-600'}`}>
                       {product.stock} unidades
                     </p>
                   </div>

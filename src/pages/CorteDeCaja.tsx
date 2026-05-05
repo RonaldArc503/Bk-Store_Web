@@ -6,10 +6,10 @@ import {
   Unlock,
   Banknote,
   CreditCard,
+  ArrowRightLeft,
   QrCode,
   MinusCircle,
   Plus,
-  X,
   Clock,
   Calendar,
   CheckCircle2,
@@ -23,6 +23,8 @@ import {
 import { CorteService, type CorteRecord } from '../services/CorteService'
 import { useAuth } from '../hooks/useAuth'
 import { CajaService } from '../services/CajaService'
+import { toast } from 'react-toastify'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 /* ─── Helpers ─── */
 
@@ -221,20 +223,63 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
   )
 }
 
+function HistoryTimeline({
+  loading,
+  entries,
+}: {
+  loading: boolean
+  entries: TimelineEntry[]
+}) {
+  return (
+    <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
+      <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+        <History className="w-5 h-5 text-gray-400" />
+        Historial de Aperturas y Cierres
+      </h3>
+      <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+        Línea de tiempo completa del flujo de caja
+      </p>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
+          <Clock className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Cargando historial…</span>
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="text-center py-10">
+          <Calendar className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">No hay registros de caja aún</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
+            Abre tu primera caja para comenzar a registrar el historial
+          </p>
+        </div>
+      ) : (
+        <div className="relative">
+          {entries.map((entry, i) => (
+            <TimelineCard key={entry.corte?.id || entry.caja?.id || i} entry={entry} />
+          ))}
+          <div className="absolute left-[14px] bottom-0 w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 z-10" />
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Componente principal ─── */
 
 export default function CorteDeCaja() {
-  const { user } = useAuth()
+  const { user, authReady } = useAuth()
 
   const [isCajaOpen, setIsCajaOpen] = useState(false)
   const [remesas, setRemesas] = useState<{ id: number; monto: number; motivo?: string }[]>([])
-  const [isRemesaModalOpen, setIsRemesaModalOpen] = useState(false)
   const [newRemesa, setNewRemesa] = useState<{ monto: string; motivo: string }>({ monto: '', motivo: '' })
 
   const [efectivoContado, setEfectivoContado] = useState('0.00')
   const [transferenciasContado, setTransferenciasContado] = useState('0.00')
   const [qrContado, setQrContado] = useState('0.00')
+  const [tarjetaContado, setTarjetaContado] = useState('0.00')
   const [notas, setNotas] = useState('')
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
 
   const [aperturaMonto, setAperturaMonto] = useState('')
   const [aperturaFecha, setAperturaFecha] = useState(() => localDatetimeString())
@@ -244,6 +289,7 @@ export default function CorteDeCaja() {
   const [ventasEfectivo, setVentasEfectivo] = useState('')
   const [ventasTransferencia, setVentasTransferencia] = useState('')
   const [ventasQr, setVentasQr] = useState('')
+  const [ventasTarjeta, setVentasTarjeta] = useState('')
 
   const [todayClosed, setTodayClosed] = useState(false)
   const [todayCorte, setTodayCorte] = useState<CorteRecord | null>(null)
@@ -255,6 +301,7 @@ export default function CorteDeCaja() {
     efectivo: parseFloat(ventasEfectivo || '0'),
     transferencia: parseFloat(ventasTransferencia || '0'),
     qr: parseFloat(ventasQr || '0'),
+    tarjeta: parseFloat(ventasTarjeta || '0'),
   }
 
   const buildTimeline = (cortes: CorteRecord[], cajas: any[]): TimelineEntry[] => {
@@ -297,8 +344,18 @@ export default function CorteDeCaja() {
   }
 
   useEffect(() => {
+    if (!authReady) return
+
     let mounted = true
     ;(async () => {
+      if (!user?.uid) {
+        if (mounted) {
+          setIsCajaOpen(false)
+          setLoadingHistory(false)
+        }
+        return
+      }
+
       let active: any = null
       let existing: CorteRecord | null = null
       let cajas: any[] = []
@@ -325,6 +382,7 @@ export default function CorteDeCaja() {
         setVentasEfectivo(String(active.totals?.efectivo ?? ''))
         setVentasTransferencia(String(active.totals?.transferencia ?? ''))
         setVentasQr(String(active.totals?.qr ?? ''))
+        setVentasTarjeta(String(active.totals?.tarjeta ?? ''))
         setRemesas(active.remesas || [])
         setIsAperturaSaved(Boolean(active.apertura))
       } else {
@@ -333,11 +391,11 @@ export default function CorteDeCaja() {
       }
     })()
     return () => { mounted = false }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authReady, user?.uid]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveApertura = async () => {
-    if (isAperturaSaved) { alert('Apertura ya guardada'); return }
-    if (todayClosed) { alert('Ya se realizó un cierre hoy.'); return }
+    if (isAperturaSaved) { toast.info('Apertura ya guardada'); return }
+    if (todayClosed) { toast.warning('Ya se realizo un cierre hoy.'); return }
     try {
       const now = new Date()
       const aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string } = {
@@ -355,15 +413,15 @@ export default function CorteDeCaja() {
       setIsAperturaSaved(true)
       setIsCajaOpen(true)
       await reloadData()
-      alert('Apertura guardada correctamente')
+      toast.success('Apertura guardada correctamente')
     } catch (err) {
       console.error('Error saving apertura', err)
-      alert('Error al guardar la apertura')
+      toast.error('Error al guardar la apertura')
     }
   }
 
   const handleOpenView = async () => {
-    if (todayClosed) { alert('Ya se realizó un cierre hoy.'); return }
+    if (todayClosed) { toast.warning('Ya se realizo un cierre hoy.'); return }
     try {
       const active = await CajaService.getActiveCaja(user?.uid)
       if (active) {
@@ -374,6 +432,7 @@ export default function CorteDeCaja() {
         setVentasEfectivo(String(active.totals?.efectivo ?? ''))
         setVentasTransferencia(String(active.totals?.transferencia ?? ''))
         setVentasQr(String(active.totals?.qr ?? ''))
+        setVentasTarjeta(String(active.totals?.tarjeta ?? ''))
         setRemesas(active.remesas || [])
         setIsAperturaSaved(Boolean(active.apertura))
       } else {
@@ -381,7 +440,7 @@ export default function CorteDeCaja() {
         setAperturaMonto('')
         setAperturaFecha(localDatetimeString())
         setAperturaUsuario(user?.displayName ?? 'Usuario de Caja')
-        setVentasEfectivo(''); setVentasTransferencia(''); setVentasQr('')
+        setVentasEfectivo(''); setVentasTransferencia(''); setVentasQr(''); setVentasTarjeta('')
         setRemesas([])
         setIsCajaOpen(true)
       }
@@ -392,7 +451,17 @@ export default function CorteDeCaja() {
     }
   }
 
-  const totalVentas = ventasDia.efectivo + ventasDia.transferencia + ventasDia.qr
+  const handleRequestCerrarCaja = async () => {
+    const alreadyClosed = await CorteService.hasTodayCorte()
+    if (alreadyClosed) {
+      toast.warning('Ya se realizo un cierre hoy.')
+      setTodayClosed(true)
+      return
+    }
+    setIsCloseConfirmOpen(true)
+  }
+
+  const totalVentas = ventasDia.efectivo + ventasDia.transferencia + ventasDia.qr + ventasDia.tarjeta
   const totalRemesas = remesas.reduce((acc, r) => acc + (r.monto || 0), 0)
   const esperadoEfectivo = parseFloat(aperturaMonto || '0') + ventasDia.efectivo - totalRemesas
 
@@ -401,14 +470,11 @@ export default function CorteDeCaja() {
     if (!newRemesa.monto || parseFloat(newRemesa.monto) <= 0) return
     setRemesas([...remesas, { id: Date.now(), monto: parseFloat(newRemesa.monto), motivo: newRemesa.motivo }])
     setNewRemesa({ monto: '', motivo: '' })
-    setIsRemesaModalOpen(false)
   }
   const removeRemesa = (id: number) => setRemesas((prev) => prev.filter((r) => r.id !== id))
 
   const handleCerrarCaja = async () => {
-    const alreadyClosed = await CorteService.hasTodayCorte()
-    if (alreadyClosed) { alert('Ya se realizó un cierre hoy.'); setTodayClosed(true); return }
-    if (!window.confirm('¿Está seguro que desea cerrar la caja?')) return
+    if (todayClosed) return
 
     const cleanRemesas = remesas.map((r) => ({ id: r.id, monto: r.monto, motivo: r.motivo || '' }))
     const corte = {
@@ -417,11 +483,12 @@ export default function CorteDeCaja() {
         fecha: aperturaFecha ? new Date(aperturaFecha).toISOString() : new Date().toISOString(),
         usuario: aperturaUsuario || 'Usuario de Caja',
       },
-      ventasDia: { efectivo: ventasDia.efectivo, transferencia: ventasDia.transferencia, qr: ventasDia.qr },
+      ventasDia: { efectivo: ventasDia.efectivo, transferencia: ventasDia.transferencia, qr: ventasDia.qr, tarjeta: ventasDia.tarjeta },
       totalVentas, remesas: cleanRemesas, totalRemesas,
       efectivoContado: parseFloat(efectivoContado || '0'),
       transferenciasContado: parseFloat(transferenciasContado || '0'),
       qrContado: parseFloat(qrContado || '0'),
+      tarjetaContado: parseFloat(tarjetaContado || '0'),
       esperadoEfectivo,
       notas: notas || '',
       createdBy: user?.uid || 'anonymous',
@@ -439,47 +506,12 @@ export default function CorteDeCaja() {
       setTodayClosed(true)
       setTodayCorte(created.corte as CorteRecord)
       await reloadData()
-      alert('Cierre de caja guardado correctamente')
+      toast.success('Cierre de caja guardado correctamente')
     } catch (err) {
       console.error('Error saving corte', err)
-      alert('Error al guardar el cierre: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('Error al guardar el cierre: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
-
-  /* ─── Historial compartido (timeline) ─── */
-  const HistoryTimeline = () => (
-    <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-      <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
-        <History className="w-5 h-5 text-gray-400" />
-        Historial de Aperturas y Cierres
-      </h3>
-      <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-        Línea de tiempo completa del flujo de caja
-      </p>
-
-      {loadingHistory ? (
-        <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
-          <Clock className="w-5 h-5 animate-spin" />
-          <span className="text-sm">Cargando historial…</span>
-        </div>
-      ) : timelineEntries.length === 0 ? (
-        <div className="text-center py-10">
-          <Calendar className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-500 dark:text-gray-400 font-medium">No hay registros de caja aún</p>
-          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
-            Abre tu primera caja para comenzar a registrar el historial
-          </p>
-        </div>
-      ) : (
-        <div className="relative">
-          {timelineEntries.map((entry, i) => (
-            <TimelineCard key={entry.corte?.id || entry.caja?.id || i} entry={entry} />
-          ))}
-          <div className="absolute left-[14px] bottom-0 w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 z-10" />
-        </div>
-      )}
-    </div>
-  )
 
   /* ─── Vista: Caja Cerrada ─── */
   if (!isCajaOpen) {
@@ -550,7 +582,7 @@ export default function CorteDeCaja() {
           )}
 
           {/* Timeline */}
-          <HistoryTimeline />
+          <HistoryTimeline loading={loadingHistory} entries={timelineEntries} />
         </div>
       </div>
     )
@@ -614,7 +646,7 @@ export default function CorteDeCaja() {
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
             <h3 className="font-bold mb-2 text-lg">Resumen de Ventas del Día</h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">Ingresos agrupados por método de pago</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
               <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
                 <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><Banknote size={20} /></div>
                 <div className="flex-1">
@@ -623,7 +655,7 @@ export default function CorteDeCaja() {
                 </div>
               </div>
               <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
-                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><CreditCard size={20} /></div>
+                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><ArrowRightLeft size={20} /></div>
                 <div className="flex-1">
                   <p className="text-gray-500 dark:text-gray-400 text-xs">Transferencia</p>
                   <input type="number" step="0.01" className="w-full p-1 text-lg font-bold text-gray-900 dark:text-white bg-transparent outline-none" value={ventasTransferencia} onChange={(e) => setVentasTransferencia(e.target.value)} placeholder="0.00" />
@@ -634,6 +666,13 @@ export default function CorteDeCaja() {
                 <div className="flex-1">
                   <p className="text-gray-500 dark:text-gray-400 text-xs">Código QR</p>
                   <input type="number" step="0.01" className="w-full p-1 text-lg font-bold text-gray-900 dark:text-white bg-transparent outline-none" value={ventasQr} onChange={(e) => setVentasQr(e.target.value)} placeholder="0.00" />
+                </div>
+              </div>
+              <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+                <div className="w-10 h-10 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg flex items-center justify-center"><CreditCard size={20} /></div>
+                <div className="flex-1">
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Tarjeta</p>
+                  <input type="number" step="0.01" className="w-full p-1 text-lg font-bold text-gray-900 dark:text-white bg-transparent outline-none" value={ventasTarjeta} onChange={(e) => setVentasTarjeta(e.target.value)} placeholder="0.00" />
                 </div>
               </div>
               <div className="flex items-center gap-4 bg-[#8CC63F]/5 dark:bg-[#8CC63F]/10 p-4 rounded-xl border border-[#8CC63F]/30">
@@ -679,7 +718,7 @@ export default function CorteDeCaja() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 mb-8">
               <div>
                 <label className="block text-gray-900 dark:text-gray-100 text-sm font-bold mb-2">Efectivo Contado</label>
                 <input type="number" className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mb-3" value={efectivoContado} onChange={(e) => setEfectivoContado(e.target.value)} />
@@ -699,6 +738,11 @@ export default function CorteDeCaja() {
                 <input type="number" className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mb-2" value={qrContado} onChange={(e) => setQrContado(e.target.value)} />
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Esperado: ${fmt(ventasDia.qr)}</p>
               </div>
+              <div>
+                <label className="block text-gray-900 dark:text-gray-100 text-sm font-bold mb-2">Tarjetas</label>
+                <input type="number" className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mb-2" value={tarjetaContado} onChange={(e) => setTarjetaContado(e.target.value)} />
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Esperado: ${fmt(ventasDia.tarjeta)}</p>
+              </div>
             </div>
 
             <div>
@@ -706,33 +750,28 @@ export default function CorteDeCaja() {
               <textarea className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl h-20" value={notas} onChange={(e) => setNotas(e.target.value)} />
             </div>
 
-            <button onClick={handleCerrarCaja} disabled={todayClosed} className="w-full mt-4 md:mt-6 bg-[#C81E41] text-white font-bold py-3 md:py-4 rounded-xl hover:bg-[#a91835] transition disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={handleRequestCerrarCaja} disabled={todayClosed} className="w-full mt-4 md:mt-6 bg-[#C81E41] text-white font-bold py-3 md:py-4 rounded-xl hover:bg-[#a91835] transition disabled:opacity-50 disabled:cursor-not-allowed">
               {todayClosed ? 'Cierre ya realizado hoy' : 'Cerrar Caja'}
             </button>
           </div>
 
           {/* Timeline */}
-          <HistoryTimeline />
+          <HistoryTimeline loading={loadingHistory} entries={timelineEntries} />
         </div>
 
-        {isRemesaModalOpen && (
-          <div className="fixed inset-0 bg-gray-900/40 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6">
-              <div className="flex justify-between items-center mb-4">
-                <div><h3 className="font-bold text-lg">Agregar Remesa</h3><p className="text-sm text-gray-500 dark:text-gray-400">Detalles de la remesa</p></div>
-                <button onClick={() => setIsRemesaModalOpen(false)} className="text-gray-400"><X size={18} /></button>
-              </div>
-              <form onSubmit={handleAddRemesa} className="space-y-3">
-                <div><label className="block text-sm font-bold mb-1">Monto</label><input type="number" step="0.01" className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800" value={newRemesa.monto} onChange={(e) => setNewRemesa({ ...newRemesa, monto: e.target.value })} autoFocus /></div>
-                <div><label className="block text-sm font-bold mb-1">Motivo</label><input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800" value={newRemesa.motivo} onChange={(e) => setNewRemesa({ ...newRemesa, motivo: e.target.value })} /></div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setIsRemesaModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-xl">Cancelar</button>
-                  <button type="submit" className="flex-1 py-3 bg-[#8CC63F] text-white rounded-xl">Agregar</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <ConfirmDialog
+          isOpen={isCloseConfirmOpen}
+          title="Cerrar caja"
+          description="Se guardara el corte y se cerrara la caja actual."
+          confirmLabel="Cerrar"
+          cancelLabel="Cancelar"
+          danger
+          onCancel={() => setIsCloseConfirmOpen(false)}
+          onConfirm={() => {
+            setIsCloseConfirmOpen(false)
+            void handleCerrarCaja()
+          }}
+        />
       </main>
     </div>
   )

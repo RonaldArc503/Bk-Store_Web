@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sidebar } from "../components/Sidebar";
 import { Download, Calendar } from "lucide-react";
 import { format } from "date-fns";
@@ -9,43 +9,173 @@ import autoTable from "jspdf-autotable";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card"; 
 import { Button } from "../components/Button"; 
 import { Input } from "../components/input";
+import { OrderService } from "../services/OrderService";
+import { CorteService, type CorteRecord } from "../services/CorteService";
 
 type ReportType = "sales" | "products" | "income" | "cash-register";
 
-// ================= MOCK DATA =================
-const mockSalesData = [
-  { ticket: "0001", quantity: 3, date: "2026-03-12 10:30", payment: "Efectivo", total: 210 },
-  { ticket: "0002", quantity: 6, date: "2026-03-12 11:15", payment: "Transferencia", total: 400 },
-  { ticket: "0003", quantity: 1, date: "2026-03-12 12:00", payment: "Código QR", total: 85 },
-  { ticket: "0004", quantity: 12, date: "2026-03-12 14:30", payment: "Efectivo", total: 750 },
-  { ticket: "0005", quantity: 2, date: "2026-03-12 15:45", payment: "Transferencia", total: 140 },
-];
+type OrderItem = {
+  id?: string
+  name?: string
+  quantity?: number
+  unitPrice?: number
+  lineTotal?: number
+}
 
-const mockTopProducts = [
-  { name: "Bikini Floral Rojo", sales: 45, revenue: 3150 },
-  { name: "Short de Baño Negro", sales: 38, revenue: 3040 },
-  { name: "Bikini Deportivo Azul", sales: 32, revenue: 2720 },
-  { name: "Traje de Baño Entero", sales: 28, revenue: 2660 },
-  { name: "Bikini Unisex Blanco", sales: 25, revenue: 1500 },
-];
-
-const mockIncomeData = [
-  { ticket: "0001", total: 210 },
-  { ticket: "0002", total: 400 },
-  { ticket: "0003", total: 85 },
-  { ticket: "0004", total: 750 },
-  { ticket: "0005", total: 140 },
-];
-
-const mockCashRegister = [
-  { id: 1, openingAmount: 500, closingAmount: 2067.50, openingDate: "2026-03-12 09:00", closingDate: "2026-03-12 18:00", user: "Juan Pérez" },
-  { id: 2, openingAmount: 500, closingAmount: 1845.00, openingDate: "2026-03-11 09:00", closingDate: "2026-03-11 18:00", user: "María García" },
-];
+type OrderRecord = {
+  id: string
+  date?: string
+  createdAt?: string
+  items?: OrderItem[]
+  method?: string
+  total?: number
+}
 
 export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<ReportType>("sales");
   const [startDate, setStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [orders, setOrders] = useState<OrderRecord[]>([])
+  const [cortes, setCortes] = useState<CorteRecord[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      setLoading(true)
+      try {
+        const [ordersData, cortesData] = await Promise.all([
+          OrderService.getAllOrders(),
+          CorteService.getAllCortes(),
+        ])
+        if (!mounted) return
+        setOrders(ordersData as OrderRecord[])
+        setCortes(cortesData)
+      } catch (error) {
+        console.error('Error loading reports data:', error)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  const startRange = useMemo(() => new Date(`${startDate}T00:00:00`), [startDate])
+  const endRange = useMemo(() => new Date(`${endDate}T23:59:59`), [endDate])
+
+  const isInRange = (value?: string) => {
+    if (!value) return false
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return false
+    return d >= startRange && d <= endRange
+  }
+
+  const formatDateTime = (value?: string) => {
+    if (!value) return ''
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return value
+    return format(d, 'yyyy-MM-dd HH:mm', { locale: es })
+  }
+
+  const paymentLabel = (method?: string) => {
+    switch (method) {
+      case 'efectivo':
+        return 'Efectivo'
+      case 'tarjeta':
+        return 'Tarjeta'
+      case 'transferencia':
+        return 'Transferencia'
+      case 'qr':
+        return 'Codigo QR'
+      default:
+        return method || 'Sin metodo'
+    }
+  }
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => isInRange(order.date || order.createdAt))
+  }, [orders, startRange, endRange])
+
+  const filteredCortes = useMemo(() => {
+    return cortes.filter((corte) => isInRange(corte.createdAt || corte.aperturaInfo?.fecha))
+  }, [cortes, startRange, endRange])
+
+  const salesData = useMemo(() => {
+    return filteredOrders.map((order) => {
+      const qty = (order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0)
+      return {
+        ticket: order.id,
+        quantity: qty,
+        date: formatDateTime(order.date || order.createdAt),
+        payment: paymentLabel(order.method),
+        total: Number(order.total || 0),
+      }
+    })
+  }, [filteredOrders])
+
+  const topProducts = useMemo(() => {
+    const map = new Map<string, { name: string; sales: number; revenue: number }>()
+    filteredOrders.forEach((order) => {
+      ;(order.items || []).forEach((item) => {
+        const key = item.id || item.name || 'unknown'
+        const current = map.get(key) || { name: item.name || 'Producto', sales: 0, revenue: 0 }
+        const qty = item.quantity || 0
+        const revenue = item.lineTotal ?? (qty * (item.unitPrice || 0))
+        map.set(key, {
+          name: current.name,
+          sales: current.sales + qty,
+          revenue: current.revenue + revenue,
+        })
+      })
+    })
+    return Array.from(map.values())
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 10)
+  }, [filteredOrders])
+
+  const incomeData = useMemo(() => {
+    return filteredOrders.map((order) => ({
+      ticket: order.id,
+      total: Number(order.total || 0),
+    }))
+  }, [filteredOrders])
+
+  const cashRegisterData = useMemo(() => {
+    return filteredCortes.map((corte) => ({
+      openingAmount: corte.aperturaInfo?.monto ?? 0,
+      closingAmount: corte.totalVentas ?? 0,
+      openingDate: formatDateTime(corte.aperturaInfo?.fecha),
+      closingDate: formatDateTime(corte.createdAt),
+      user: corte.aperturaInfo?.usuario || 'Usuario',
+    }))
+  }, [filteredCortes])
+
+  const previewRows = useMemo(() => {
+    switch (selectedReport) {
+      case 'sales':
+        return salesData.map((sale) => ({
+          label: `Ticket ${sale.ticket} - ${sale.payment}`,
+          value: `$${sale.total.toFixed(2)}`,
+        }))
+      case 'products':
+        return topProducts.map((product) => ({
+          label: product.name,
+          value: `${product.sales} unidades`,
+        }))
+      case 'income':
+        return incomeData.map((income) => ({
+          label: `Ingreso Ticket ${income.ticket}`,
+          value: `$${income.total.toFixed(2)}`,
+        }))
+      case 'cash-register':
+        return cashRegisterData.map((register) => ({
+          label: `${register.user} (${register.openingDate})`,
+          value: `$${register.closingAmount.toFixed(2)}`,
+        }))
+      default:
+        return []
+    }
+  }, [selectedReport, salesData, topProducts, incomeData, cashRegisterData])
 
   const generatePDF = () => {
     const doc = new jsPDF();
@@ -80,19 +210,19 @@ export default function Reports() {
     switch (selectedReport) {
       case "sales":
         headers = ["Ticket", "Cantidad", "Fecha", "Forma de Pago", "Total"];
-        tableData = mockSalesData.map(sale => [sale.ticket, sale.quantity, sale.date, sale.payment, `$${sale.total.toFixed(2)}`]);
+        tableData = salesData.map(sale => [sale.ticket, sale.quantity, sale.date, sale.payment, `$${sale.total.toFixed(2)}`]);
         break;
       case "products":
         headers = ["Producto", "Unidades Vendidas", "Ingresos"];
-        tableData = mockTopProducts.map(product => [product.name, product.sales, `$${product.revenue.toFixed(2)}`]);
+        tableData = topProducts.map(product => [product.name, product.sales, `$${product.revenue.toFixed(2)}`]);
         break;
       case "income":
         headers = ["N° Ticket", "Total de Venta"];
-        tableData = mockIncomeData.map(income => [income.ticket, `$${income.total.toFixed(2)}`]);
+        tableData = incomeData.map(income => [income.ticket, `$${income.total.toFixed(2)}`]);
         break;
       case "cash-register":
         headers = ["Apertura", "Cierre", "Dinero en Caja", "Usuario"];
-        tableData = mockCashRegister.map(register => [register.openingDate, register.closingDate, `$${register.closingAmount.toFixed(2)}`, register.user]);
+        tableData = cashRegisterData.map(register => [register.openingDate, register.closingDate, `$${register.closingAmount.toFixed(2)}`, register.user]);
         break;
     }
 
@@ -116,9 +246,9 @@ export default function Reports() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 p-8 space-y-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+      <Sidebar activeItem="reportes" />
+      <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8 space-y-6">
         <div>
           <h2 className="text-2xl font-bold mb-1">Reportes Personalizados</h2>
           <p className="text-muted-foreground">Filtre información y genere su archivo PDF</p>
@@ -176,30 +306,22 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedReport === "sales" && mockSalesData.map((s, i) => (
-                    <tr key={`sale-${i}`} className="border-b">
-                      <td className="p-3">Ticket {s.ticket} - {s.payment}</td>
-                      <td className="p-3 text-right font-medium">${s.total.toFixed(2)}</td>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={2} className="p-4 text-sm text-gray-500 text-center">Cargando datos...</td>
                     </tr>
-                  ))}
-                  {selectedReport === "products" && mockTopProducts.map((p, i) => (
-                    <tr key={`prod-${i}`} className="border-b">
-                      <td className="p-3">{p.name}</td>
-                      <td className="p-3 text-right font-medium">{p.sales} unidades</td>
+                  ) : previewRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} className="p-4 text-sm text-gray-500 text-center">Sin datos para el rango seleccionado</td>
                     </tr>
-                  ))}
-                  {selectedReport === "income" && mockIncomeData.map((inc, i) => (
-                    <tr key={`inc-${i}`} className="border-b">
-                      <td className="p-3">Ingreso Ticket {inc.ticket}</td>
-                      <td className="p-3 text-right font-medium">${inc.total.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                  {selectedReport === "cash-register" && mockCashRegister.map((c, i) => (
-                    <tr key={`cash-${i}`} className="border-b">
-                      <td className="p-3">{c.user} ({c.openingDate})</td>
-                      <td className="p-3 text-right font-medium">${c.closingAmount.toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  ) : (
+                    previewRows.map((row, i) => (
+                      <tr key={`row-${i}`} className="border-b">
+                        <td className="p-3">{row.label}</td>
+                        <td className="p-3 text-right font-medium">{row.value}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -20,6 +20,7 @@ import {
   Lock,
   AlertTriangle,
 } from 'lucide-react'
+import { toast } from 'react-toastify'
  
 import { OrderService } from '../services/OrderService'
 import { useAuth } from '../hooks/useAuth'
@@ -39,8 +40,12 @@ type ProductDB = {
 
 type CartItemLocal = ProductDB & { quantity: number }
 
+const TAX_RATE = 0.13
+
+const roundCurrency = (value: number) => Math.round(value * 100) / 100
+
 export default function POS() {
-  const { user } = useAuth()
+  const { user, authReady } = useAuth()
   const navigate = useNavigate()
 
   const [cart, setCart] = useState<CartItemLocal[]>([])
@@ -55,12 +60,22 @@ export default function POS() {
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
 
   useEffect(() => {
+    if (!authReady) {
+      setCajaOpen(null)
+      return
+    }
+
+    if (!user?.uid) {
+      setCajaOpen(false)
+      return
+    }
+
     let mounted = true
     ;(async () => {
       try {
         const [prods, activeCaja] = await Promise.all([
           InventoryService.getProducts(),
-          CajaService.getActiveCaja(user?.uid),
+          CajaService.getActiveCaja(user.uid),
         ])
         if (!mounted) return
 
@@ -83,7 +98,7 @@ export default function POS() {
       }
     })()
     return () => { mounted = false }
-  }, [])
+  }, [authReady, user?.uid])
 
   const calculateItemTotal = (item: CartItemLocal) => {
     const qty = item.quantity
@@ -97,26 +112,48 @@ export default function POS() {
     )
   }
 
+  const getAvailableStock = (productId: string) => {
+    return products.find((p) => p.id === productId)?.stock ?? 0
+  }
+
   const addToCart = (product: ProductDB) => {
     setCart((prev) => {
       const existing = prev.find((p) => p.id === product.id)
-      if (existing) return prev.map((p) => (p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p))
+      const nextQty = (existing?.quantity ?? 0) + 1
+      if (nextQty > product.stock) {
+        toast.warning('Stock insuficiente para este producto')
+        return prev
+      }
+      if (existing) return prev.map((p) => (p.id === product.id ? { ...p, quantity: nextQty } : p))
       return [...prev, { ...product, quantity: 1 }]
     })
   }
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart((prev) =>
-      prev
+    setCart((prev) => {
+      const current = prev.find((item) => item.id === id)
+      if (!current) return prev
+
+      if (delta > 0) {
+        const available = getAvailableStock(id)
+        if (current.quantity + delta > available) {
+          toast.warning('Stock insuficiente para este producto')
+          return prev
+        }
+      }
+
+      return prev
         .map((item) => (item.id === id ? { ...item, quantity: item.quantity + delta } : item))
         .filter((i) => i.quantity > 0)
-    )
+    })
   }
 
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id))
   const clearCart = () => setCart([])
 
   const cartTotal = useMemo(() => cart.reduce((sum, it) => sum + calculateItemTotal(it), 0), [cart])
+  const taxAmount = useMemo(() => roundCurrency(cartTotal * TAX_RATE), [cartTotal])
+  const totalWithTax = useMemo(() => roundCurrency(cartTotal + taxAmount), [cartTotal, taxAmount])
   const cartItemCount = useMemo(() => cart.reduce((sum, it) => sum + it.quantity, 0), [cart])
 
   const filteredProducts = products.filter((p) => p.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -130,7 +167,7 @@ export default function POS() {
       setBarcodeScan('')
     } else {
       setBarcodeScan(trimmed)
-      alert('Producto no encontrado')
+      toast.error('Producto no encontrado')
     }
   }
 
@@ -141,13 +178,29 @@ export default function POS() {
 
   const handleCheckout = () => {
     if (cart.length === 0) return
+    const invalidItem = cart.find((item) => item.quantity > getAvailableStock(item.id))
+    if (invalidItem) {
+      toast.warning(`Stock insuficiente para ${invalidItem.nombre}`)
+      return
+    }
     setIsPaymentModalOpen(true)
   }
 
   const processPayment = async () => {
     if (!selectedPaymentMethod) return
+    if (!authReady || !user?.uid) {
+      toast.error('Sesion invalida. Inicia sesion nuevamente.')
+      return
+    }
+
+    const orderId = OrderService.reserveOrderId()
+    if (!orderId) {
+      toast.error('No se pudo generar el ID de la orden.')
+      return
+    }
 
     const order = {
+      id: orderId,
       date: new Date().toISOString(),
       items: cart.map((i) => ({
         id: i.id,
@@ -157,57 +210,61 @@ export default function POS() {
         unitPrice: i.precioUnitario || 0,
         lineTotal: calculateItemTotal(i),
       })),
-      total: cartTotal,
+      subtotal: cartTotal,
+      taxRate: TAX_RATE,
+      tax: taxAmount,
+      total: totalWithTax,
       method: selectedPaymentMethod,
-      createdBy: user?.uid || null,
+      createdBy: user.uid,
     }
 
+    const inventoryUpdates: Array<{ inventarioId: string; quantity: number }> = []
+
     try {
-      const created = await OrderService.createOrder(order)
-      const orderId = created?.id || `ORD-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`
+      const activeCaja = await CajaService.getActiveCaja(user.uid)
+      if (!activeCaja || !activeCaja.id || activeCaja.status === 'closed') {
+        throw new Error('No hay una caja abierta para el usuario actual')
+      }
+
+      // Decrement inventory for each sold item (rollback if any fail)
+      for (const it of order.items) {
+        const inv = await InventoryService.getInventarioByProductoId(it.id)
+        if (!inv || !inv.id) {
+          throw new Error(`Inventario no encontrado para ${it.name}`)
+        }
+        await InventoryService.descontarStock(inv.id, it.quantity, `venta ${orderId}`)
+        inventoryUpdates.push({ inventarioId: inv.id, quantity: it.quantity })
+      }
+
+      await OrderService.createOrder(order, orderId)
+      await CajaService.addSaleToCaja(activeCaja.id, {
+        orderId,
+        method: selectedPaymentMethod || 'efectivo',
+        amount: order.total,
+        items: order.items,
+        createdBy: user.uid,
+      })
+
       setLastOrderInfo({ ...order, orderId, date: new Date().toLocaleString('es-SV') })
-
-      // Update caja totals and add movimiento record to the active caja (if present)
-      try {
-        const activeCaja = await CajaService.getActiveCaja(user?.uid)
-        if (activeCaja && activeCaja.id) {
-          await CajaService.addSaleToCaja(activeCaja.id, {
-            orderId,
-            method: selectedPaymentMethod || 'efectivo',
-            amount: order.total,
-            items: order.items,
-            createdBy: user?.uid,
-          })
-        }
-      } catch (e) {
-        console.error('Error updating caja totals', e)
-      }
-
-      // Decrement inventory for each sold item
-      try {
-        for (const it of order.items) {
-          try {
-            const inv = await InventoryService.getInventarioByProductoId(it.id)
-            if (inv && inv.id) {
-              await InventoryService.descontarStock(inv.id, it.quantity, `venta ${orderId}`)
-            } else {
-              console.warn('Inventario not found for product', it.id)
-            }
-          } catch (err) {
-            console.error('Error descontando stock for item', it, err)
-          }
-        }
-      } catch (err) {
-        console.error('Error processing inventory decrements', err)
-      }
 
       setIsPaymentModalOpen(false)
       setIsTicketModalOpen(true)
       setCart([])
       setSelectedPaymentMethod(null)
     } catch (err) {
-      console.error('Error saving order', err)
-      alert('Error al guardar la venta. Intente nuevamente.')
+      await Promise.allSettled(
+        inventoryUpdates.map((it) =>
+          InventoryService.agregarStock(it.inventarioId, it.quantity, `rollback ${orderId}`)
+        )
+      )
+      try {
+        await OrderService.deleteOrder(orderId)
+      } catch (cleanupError) {
+        console.warn('Error cleaning up order after failure', cleanupError)
+      }
+      console.error('Error processing payment', err)
+      const message = err instanceof Error ? err.message : 'Error al procesar la venta.'
+      toast.error(`${message} No se realizaron cambios.`)
     }
   }
 
@@ -378,16 +435,16 @@ export default function POS() {
             </div>
             <div className="flex justify-between text-gray-500 text-sm">
               <span>IVA (13%)</span>
-              <span>${(cartTotal * 0.13).toFixed(2)}</span>
+              <span>${taxAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-xl font-bold text-gray-900 pt-3 border-t mt-2">
               <span>Total</span>
-              <span className="text-[#8CC63F]">${(cartTotal * 1.13).toFixed(2)}</span>
+              <span className="text-[#8CC63F]">${totalWithTax.toFixed(2)}</span>
             </div>
           </div>
 
           <button onClick={handleCheckout} className="w-full py-3.5 rounded-xl bg-[#8CC63F] text-white font-bold flex items-center justify-center gap-2">
-            Cobrar ${(cartTotal * 1.13).toFixed(2)} <ChevronRight size={18} />
+            Cobrar ${totalWithTax.toFixed(2)} <ChevronRight size={18} />
           </button>
         </div>
       </div>
@@ -448,15 +505,15 @@ export default function POS() {
               <div className="mt-4">
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>Subtotal</span>
-                  <span>${lastOrderInfo.total.toFixed(2)}</span>
+                  <span>${lastOrderInfo.subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>IVA (13%)</span>
-                  <span>${(lastOrderInfo.total * 0.13).toFixed(2)}</span>
+                  <span>${lastOrderInfo.tax.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
                   <span>TOTAL</span>
-                  <span>${(lastOrderInfo.total * 1.13).toFixed(2)}</span>
+                  <span>${lastOrderInfo.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>

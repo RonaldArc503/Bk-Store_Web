@@ -9,11 +9,15 @@ import {
   Package,
   Printer,
   RotateCcw,
+  Database,
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
 import { useSettings, type StoreSettings } from '../context/SettingsContext'
 import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { MaintenanceService } from '../services/MaintenanceService'
 
 /* ─── Toggle switch reutilizable ─── */
 
@@ -279,15 +283,61 @@ function PrintingSection() {
   )
 }
 
+function DataSection({
+  onReset,
+  loading,
+}: {
+  onReset: () => void
+  loading: boolean
+}) {
+  return (
+    <div>
+      <SectionTitle icon={<Database className="w-4 h-4 text-red-500 dark:text-red-400" />} title="Datos" />
+      <SettingCard>
+        <SettingRow
+          icon={<Database className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />}
+          title="Borrar datos de prueba"
+          description="Elimina ventas, cajas, cortes, inventario y movimientos. Conserva usuarios."
+          border={false}
+        >
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={loading}
+            className="px-3 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition disabled:opacity-50"
+          >
+            {loading ? 'Borrando...' : 'Borrar datos'}
+          </button>
+        </SettingRow>
+      </SettingCard>
+    </div>
+  )
+}
+
 /* ─── Página principal ─── */
 
 export default function ConfiguracionPage() {
   const { resetSettings } = useSettings()
   const [showReset, setShowReset] = useState(false)
+  const [isDataResetOpen, setIsDataResetOpen] = useState(false)
+  const [isDataResetLoading, setIsDataResetLoading] = useState(false)
 
   const handleReset = () => {
     resetSettings()
     setShowReset(false)
+  }
+
+  const handleClearData = async () => {
+    if (isDataResetLoading) return
+    setIsDataResetLoading(true)
+    try {
+      await MaintenanceService.clearDataExceptUsers()
+      toast.success('Datos eliminados correctamente')
+    } catch (err) {
+      toast.error('Error al borrar datos')
+    } finally {
+      setIsDataResetLoading(false)
+    }
   }
 
   return (
@@ -312,6 +362,7 @@ export default function ConfiguracionPage() {
             <NotificationsSection />
             <InventorySection />
             <PrintingSection />
+            <DataSection onReset={() => setIsDataResetOpen(true)} loading={isDataResetLoading} />
           </div>
 
           <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
@@ -339,6 +390,20 @@ export default function ConfiguracionPage() {
             )}
           </div>
         </div>
+
+        <ConfirmDialog
+          isOpen={isDataResetOpen}
+          title="Borrar datos de prueba"
+          description="Se eliminaran ventas, cajas, cortes, inventario y movimientos. Los usuarios se conservaran."
+          confirmLabel="Borrar datos"
+          cancelLabel="Cancelar"
+          danger
+          onCancel={() => setIsDataResetOpen(false)}
+          onConfirm={() => {
+            setIsDataResetOpen(false)
+            void handleClearData()
+          }}
+        />
       </main>
     </div>
   )

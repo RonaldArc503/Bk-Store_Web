@@ -117,6 +117,7 @@ export interface CreateProductInput {
   material: string
   genero: string
   stock: number
+  stockMinimo?: number
   costo: number
   precioUnitario: number
   precioMediaDocena: number

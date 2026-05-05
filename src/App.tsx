@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Suspense, useEffect } from 'react'
 import { AuthProvider } from './auth/AuthContext'
-import { CartProvider } from './context/CartContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Loader } from './components/Loader'
 import { routes } from './app/routes'
@@ -9,21 +8,22 @@ import { useAuth } from './hooks/useAuth'
 import { initializeDemoData, ensureDemoAuthAccounts } from './utils/initDemo'
 
 function AppContent() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, authReady } = useAuth()
 
   // Demo en RTDB + cuentas en Firebase Auth (el login usa Auth)
   useEffect(() => {
     void (async () => {
+      const env = import.meta.env as { DEV?: boolean; VITE_ENABLE_DEMO?: string; VITE_ENABLE_DEMO_AUTH?: string }
+      const enableDemo = Boolean(env.DEV) && env.VITE_ENABLE_DEMO === 'true'
+
+      if (!enableDemo) return
+
       await initializeDemoData()
 
       // Crear cuentas en Firebase Auth solo si la variable Vite VITE_ENABLE_DEMO_AUTH está activada.
       // Esto evita intentos automáticos de signup en entornos donde la API Key/Auth no está configurada.
       try {
-        // import.meta.env.VITE_ENABLE_DEMO_AUTH se inyecta por Vite (cadena 'true' para activar)
-        // También solo en modo desarrollo
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const enableDemoAuth = import.meta.env?.VITE_ENABLE_DEMO_AUTH === 'true' && import.meta.env?.DEV
+        const enableDemoAuth = env.VITE_ENABLE_DEMO_AUTH === 'true'
         if (enableDemoAuth) {
           await ensureDemoAuthAccounts()
         }
@@ -46,6 +46,7 @@ function AppContent() {
                   <ProtectedRoute
                     isPrivate={route.private}
                     isAuthenticated={isAuthenticated}
+                    authReady={authReady}
                     element={<route.component />}
                   />
                 ) : (
@@ -64,9 +65,7 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <CartProvider>
-          <AppContent />
-        </CartProvider>
+        <AppContent />
       </AuthProvider>
     </Router>
   )

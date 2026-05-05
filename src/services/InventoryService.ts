@@ -167,14 +167,13 @@ export const InventoryService = {
   },
 
   /** Obtener estadísticas de inventario */
-  async getInventarioStats(): Promise<InventoryStats> {
+  async getInventarioStats(lowStockThreshold: number = 24): Promise<InventoryStats> {
     try {
       const inventario = await this.getInventario()
-      const MIN_STOCK = 24
       return {
         totalProductos: inventario.length,
         stockTotal: inventario.reduce((sum, i) => sum + i.stock, 0),
-        alertasStock: inventario.filter((i) => i.stock < i.stockMinimo || i.stock < MIN_STOCK).length,
+        alertasStock: inventario.filter((i) => i.stock < i.stockMinimo || i.stock < lowStockThreshold).length,
       }
     } catch (error) {
       console.error('Error fetching stats:', error)
@@ -224,7 +223,7 @@ export const InventoryService = {
       const inventario = await this.createInventario({
         productoId: producto.id,
         stock: input.stock,
-        stockMinimo: 24,
+        stockMinimo: input.stockMinimo ?? 24,
         costo: input.costo,
         precioUnitario: input.precioUnitario,
         precioMediaDocena: input.precioMediaDocena,
@@ -283,8 +282,8 @@ export const InventoryService = {
     }
   },
 
-  async getInventoryStats(): Promise<InventoryStats> {
-    return this.getInventarioStats()
+  async getInventoryStats(lowStockThreshold?: number): Promise<InventoryStats> {
+    return this.getInventarioStats(lowStockThreshold ?? 24)
   },
 
   generateBarcode(): string {
@@ -307,11 +306,12 @@ export const InventoryService = {
       })
 
       // Update or create inventario (stock/precios)
-      const inventario = await this.getInventarioByProductoId(input.id)
+      let inventario = await this.getInventarioByProductoId(input.id)
       if (inventario) {
-        await this.updateInventario({
+        inventario = await this.updateInventario({
           id: inventario.id,
           stock: (input as any).stock ?? inventario.stock,
+          stockMinimo: (input as any).stockMinimo ?? inventario.stockMinimo,
           costo: (input as any).costo ?? inventario.costo,
           precioUnitario: (input as any).precioUnitario ?? inventario.precioUnitario,
           precioMediaDocena: (input as any).precioMediaDocena ?? inventario.precioMediaDocena,
@@ -321,10 +321,10 @@ export const InventoryService = {
         // create inventory record if stock/costo/prices provided
         const shouldCreate = typeof (input as any).stock !== 'undefined' || typeof (input as any).costo !== 'undefined' || typeof (input as any).precioUnitario !== 'undefined'
         if (shouldCreate) {
-          await this.createInventario({
+          inventario = await this.createInventario({
             productoId: producto.id,
             stock: (input as any).stock ?? 0,
-            stockMinimo: 24,
+            stockMinimo: (input as any).stockMinimo ?? 24,
             costo: (input as any).costo ?? 0,
             precioUnitario: (input as any).precioUnitario ?? 0,
             precioMediaDocena: (input as any).precioMediaDocena ?? 0,
