@@ -1,5 +1,3 @@
-import React from 'react'
-
 interface ConfirmDialogProps {
   isOpen: boolean
   title: string

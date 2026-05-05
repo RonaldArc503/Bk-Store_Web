@@ -34,7 +34,7 @@ type StatCard = {
 export default function Dashboard() {
   const { settings } = useSettings()
   const lowStockThreshold = settings.inventory.lowStockThreshold
-  const currency = settings.currency
+  const currency = 'MXN'
 
   const [orders, setOrders] = useState<OrderRecord[]>([])
   const [inventoryStats, setInventoryStats] = useState<InventoryStats>({

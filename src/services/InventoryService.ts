@@ -10,6 +10,10 @@ import {
   get,
   remove,
   onValue,
+  query,
+  orderByChild,
+  equalTo,
+  limitToFirst,
 } from "firebase/database"
 import { database } from "../app/firebase"
 import type { Producto, Inventario, CreateInventarioInput, UpdateInventarioInput, Product, CreateProductInput, UpdateProductInput, InventoryStats } from '../types/product'
@@ -53,8 +57,29 @@ export const InventoryService = {
   /** Obtener inventario por producto ID */
   async getInventarioByProductoId(productoId: string): Promise<Inventario | null> {
     try {
-      const inventario = await this.getInventario()
-      return inventario.find((i: Inventario) => i.productoId === productoId) || null
+      const inventarioRef = ref(database, INVENTARIO_PATH)
+      try {
+        const inventarioQuery = query(
+          inventarioRef,
+          orderByChild('productoId'),
+          equalTo(productoId),
+          limitToFirst(1)
+        )
+        const snapshot = await get(inventarioQuery)
+        if (snapshot.exists()) {
+          const data = snapshot.val() as Record<string, Inventario>
+          const [firstKey] = Object.keys(data)
+          if (!firstKey) return null
+          const entry = data[firstKey]
+          return { ...entry, id: entry.id || firstKey }
+        }
+      } catch (queryError) {
+        console.warn('Indexed inventario query failed, falling back to full scan', queryError)
+      }
+
+      const allInventario = await this.getInventario()
+      const entry = allInventario.find((item) => item.productoId === productoId)
+      return entry ?? null
     } catch (error) {
       console.error('Error fetching inventario by producto:', error)
       throw new Error('Error al obtener inventario')
@@ -125,19 +150,28 @@ export const InventoryService = {
   /** Descontar stock (para ventas) */
   async descontarStock(inventarioId: string, cantidad: number, motivo: string = 'venta'): Promise<Inventario> {
     try {
+      if (cantidad <= 0) throw new Error('Cantidad invalida para descuento de stock')
+
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${inventarioId}`)
       const snapshot = await get(inventarioRef)
       if (!snapshot.exists()) throw new Error('Inventario no encontrado')
 
       const currentInventario = snapshot.val() as Inventario
-      const newStock = currentInventario.stock - cantidad
-      if (newStock < 0) throw new Error('Stock insuficiente')
+      const currentStock = Number(currentInventario.stock || 0)
+      if (currentStock < cantidad) {
+        throw new Error('Stock insuficiente')
+      }
 
+      const newStock = currentStock - cantidad
       const now = new Date().toISOString().split('T')[0]
-      const updatedInventario: Inventario = { ...currentInventario, stock: newStock, updatedAt: now }
+      const updatedInventario: Inventario = {
+        ...currentInventario,
+        stock: newStock,
+        updatedAt: now,
+      }
 
       await set(inventarioRef, updatedInventario)
-      await MovimientosService.registrarSalida(currentInventario.productoId, cantidad, motivo)
+      await MovimientosService.registrarSalida(updatedInventario.productoId, cantidad, motivo)
       return updatedInventario
     } catch (error) {
       console.error('Error descontando stock:', error)

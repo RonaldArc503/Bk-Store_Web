@@ -21,12 +21,14 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'react-toastify'
+import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
 import { BarcodeImageScanButton } from '../components/BarcodeImageScanButton'
+import { useSettings } from '../context/SettingsContext'
 
 type ProductDB = {
   id: string
@@ -46,6 +48,7 @@ const roundCurrency = (value: number) => Math.round(value * 100) / 100
 
 export default function POS() {
   const { user, authReady } = useAuth()
+  const { settings } = useSettings()
   const navigate = useNavigate()
 
   const [cart, setCart] = useState<CartItemLocal[]>([])
@@ -58,6 +61,22 @@ export default function POS() {
   const [lastOrderInfo, setLastOrderInfo] = useState<any>(null)
 
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const styleId = 'print-paper-size-style'
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
+    if (!styleEl) {
+      styleEl = document.createElement('style')
+      styleEl.id = styleId
+      document.head.appendChild(styleEl)
+    }
+
+    const paperSize = settings.printing.paperSize
+    const width = paperSize === '58mm' ? '58mm' : paperSize === '80mm' ? '80mm' : '216mm'
+    const pageSize = paperSize === 'letter' ? 'letter' : `${width} 200mm`
+
+    styleEl.textContent = `@media print { @page { size: ${pageSize}; margin: 10mm; } #print-area { width: ${width} !important; max-width: none !important; margin: 0 auto; } }`
+  }, [settings.printing.paperSize])
 
   useEffect(() => {
     if (!authReady) {
@@ -245,12 +264,40 @@ export default function POS() {
         createdBy: user.uid,
       })
 
-      setLastOrderInfo({ ...order, orderId, date: new Date().toLocaleString('es-SV') })
+      try {
+        const updatedProducts = await InventoryService.getProducts()
+        setProducts(
+          updatedProducts.map((p) => ({
+            id: p.id,
+            codigo: p.codigo,
+            nombre: p.nombre,
+            stock: p.stock,
+            precioUnitario: p.precioUnitario || 0,
+            precioMediaDocena: p.precioMediaDocena || 0,
+            precioDocena: p.precioDocena || 0,
+          }))
+        )
+      } catch (refreshError) {
+        console.warn('No se pudo refrescar inventario del POS tras la venta', refreshError)
+      }
+
+      const completedOrder = { ...order, orderId, date: new Date().toLocaleString('es-SV') }
+      setLastOrderInfo(completedOrder)
 
       setIsPaymentModalOpen(false)
       setIsTicketModalOpen(true)
       setCart([])
       setSelectedPaymentMethod(null)
+
+      if (settings.notifications.sales) {
+        toast.success('Venta registrada correctamente')
+      }
+
+      if (settings.printing.autoPrint) {
+        setTimeout(() => {
+          downloadTicketPdf(completedOrder, true)
+        }, 200)
+      }
     } catch (err) {
       await Promise.allSettled(
         inventoryUpdates.map((it) =>
@@ -268,9 +315,66 @@ export default function POS() {
     }
   }
 
-  const printTicket = () => {
-    window.print()
-    setIsTicketModalOpen(false)
+  const downloadTicketPdf = (orderInfo: any, closeAfter: boolean) => {
+    if (!orderInfo) return
+
+    const paperSize = settings.printing.paperSize
+    const width = paperSize === '58mm' ? 58 : paperSize === '80mm' ? 80 : 216
+    const isLetter = paperSize === 'letter'
+    const baseHeight = 90
+    const lineHeight = 5
+    const itemsCount = Array.isArray(orderInfo.items) ? orderInfo.items.length : 0
+    const height = isLetter ? 279 : Math.max(baseHeight, 55 + itemsCount * lineHeight + 30)
+
+    const doc = new jsPDF({
+      unit: 'mm',
+      format: isLetter ? 'letter' : [width, height],
+    })
+
+    const left = 6
+    const right = isLetter ? 200 : width - 6
+    let y = 10
+
+    doc.setFontSize(12)
+    doc.text('Bikini Store', (left + right) / 2, y, { align: 'center' })
+    y += 5
+    doc.setFontSize(8)
+    doc.text(`Ticket: ${orderInfo.orderId || orderInfo.id || ''}`, left, y)
+    y += 4
+    doc.text(`Fecha: ${orderInfo.date || ''}`, left, y)
+    y += 4
+    doc.line(left, y, right, y)
+    y += 4
+
+    doc.setFontSize(8)
+    const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
+    items.forEach((item: any) => {
+      const name = item.name || 'Producto'
+      const qty = item.quantity || 0
+      const lineTotal = Number(item.lineTotal || 0)
+      doc.text(`${qty} x ${name}`, left, y)
+      doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: 'right' })
+      y += lineHeight
+    })
+
+    y += 2
+    doc.line(left, y, right, y)
+    y += 4
+    doc.text(`Subtotal: $${Number(orderInfo.subtotal || 0).toFixed(2)}`, left, y)
+    y += 4
+    doc.text(`IVA (13%): $${Number(orderInfo.tax || 0).toFixed(2)}`, left, y)
+    y += 5
+    doc.setFontSize(10)
+    doc.text(`TOTAL: $${Number(orderInfo.total || 0).toFixed(2)}`, left, y)
+
+    const rawId = String(orderInfo.orderId || orderInfo.id || 'ticket')
+    const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '')
+    const fileName = `ticket-${safeId || 'venta'}.pdf`
+    doc.save(fileName)
+
+    if (closeAfter) {
+      setIsTicketModalOpen(false)
+    }
   }
 
   if (cajaOpen === null) {
@@ -520,7 +624,7 @@ export default function POS() {
 
             <div className="mt-4 flex gap-2">
               <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2 bg-white border rounded-xl">Cerrar</button>
-              <button onClick={printTicket} className="flex-1 py-2 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2"><Receipt size={16} />Imprimir</button>
+              <button onClick={() => downloadTicketPdf(lastOrderInfo, true)} className="flex-1 py-2 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2"><Receipt size={16} />Descargar PDF</button>
             </div>
           </div>
         </div>

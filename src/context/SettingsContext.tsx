@@ -8,7 +8,6 @@ import {
 
 export interface StoreSettings {
   language: 'es' | 'en'
-  currency: 'MXN' | 'USD' | 'EUR'
   notifications: {
     lowStock: boolean
     sales: boolean
@@ -27,7 +26,6 @@ const STORAGE_KEY = 'bk-store-settings'
 
 const defaultSettings: StoreSettings = {
   language: 'es',
-  currency: 'MXN',
   notifications: {
     lowStock: true,
     sales: false,

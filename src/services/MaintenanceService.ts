@@ -5,6 +5,7 @@ const RESET_PATHS = [
   'orders',
   'cajas',
   'cortes',
+  'cortesByDate',
   'inventario',
   'productos',
   'movimientos',

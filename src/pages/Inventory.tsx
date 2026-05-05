@@ -3,17 +3,19 @@
  * CRUD completo de productos e inventario
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Package, AlertTriangle, Search, Edit2, Trash2 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { InventoryModal } from '../components/InventoryModal'
 import { InventoryService } from '../services/InventoryService'
 import { useSettings } from '../context/SettingsContext'
 import type { Product, InventoryStats } from '../types/product'
+import { toast } from 'react-toastify'
 
 export default function InventoryPage() {
   const { settings } = useSettings()
   const lowStockThreshold = settings.inventory.lowStockThreshold
+  const lastLowStockNotice = useRef<number | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [stats, setStats] = useState<InventoryStats>({ totalProductos: 0, stockTotal: 0, alertasStock: 0 })
   const [searchQuery, setSearchQuery] = useState('')
@@ -28,6 +30,15 @@ export default function InventoryPage() {
   useEffect(() => {
     loadData()
   }, [lowStockThreshold])
+
+  useEffect(() => {
+    if (!settings.notifications.lowStock) return
+    if (stats.alertasStock <= 0) return
+    if (lastLowStockNotice.current === stats.alertasStock) return
+
+    toast.warning(`Hay ${stats.alertasStock} productos con stock bajo`)
+    lastLowStockNotice.current = stats.alertasStock
+  }, [settings.notifications.lowStock, stats.alertasStock])
 
   const loadData = async () => {
     setLoading(true)

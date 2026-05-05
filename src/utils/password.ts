@@ -50,12 +50,15 @@ export async function hashPassword(
     ['deriveBits']
   )
 
-  const salt = saltHex ? fromHex(saltHex) : crypto.getRandomValues(new Uint8Array(SALT_LENGTH_BYTES))
+  const saltRaw = saltHex ? fromHex(saltHex) : crypto.getRandomValues(new Uint8Array(SALT_LENGTH_BYTES))
+  const saltBuffer = new ArrayBuffer(saltRaw.byteLength)
+  const salt = new Uint8Array(saltBuffer)
+  salt.set(saltRaw)
 
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt,
+      salt: saltBuffer,
       iterations,
       hash: 'SHA-256',
     },

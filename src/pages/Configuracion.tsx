@@ -163,30 +163,15 @@ function LanguageSection() {
 
   return (
     <div>
-      <SectionTitle icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />} title="Regional" />
+      <SectionTitle icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />} title="Idioma" />
       <SettingCard>
         <SettingRow
           icon={<Globe className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400" />}
           title="Idioma"
           description="Idioma de la interfaz"
-        >
-          <Select value={settings.language} onChange={(v) => updateSettings({ language: v })} options={languageOptions} />
-        </SettingRow>
-        <SettingRow
-          icon={<Banknote className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" />}
-          title="Moneda"
-          description="Formato de precios en el sistema"
           border={false}
         >
-          <Select
-            value={settings.currency}
-            onChange={(v) => updateSettings({ currency: v })}
-            options={[
-              { value: 'MXN', label: '$ MXN - Peso Mexicano' },
-              { value: 'USD', label: '$ USD - Dólar' },
-              { value: 'EUR', label: '€ EUR - Euro' },
-            ]}
-          />
+          <Select value={settings.language} onChange={(v) => updateSettings({ language: v })} options={languageOptions} />
         </SettingRow>
       </SettingCard>
     </div>
@@ -264,7 +249,7 @@ function PrintingSection() {
     <div>
       <SectionTitle icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />} title="Impresión" />
       <SettingCard>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Imprimir al finalizar cada venta">
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Descargar PDF al finalizar cada venta">
           <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica" border={false}>

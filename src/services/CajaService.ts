@@ -68,8 +68,20 @@ export const CajaService = {
         const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
         const mappedId = mapSnap.exists() ? mapSnap.val() : null
         if (mappedId) {
-          const snap = await get(ref(database, `${CAJAS_PATH}/${mappedId}`))
-          if (snap.exists()) return snap.val()
+          const mappedCajaRef = ref(database, `${CAJAS_PATH}/${mappedId}`)
+          const snap = await get(mappedCajaRef)
+          if (snap.exists()) {
+            const mappedCaja = snap.val()
+            if (mappedCaja?.status === 'open') {
+              return mappedCaja
+            }
+          }
+
+          try {
+            await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+          } catch (cleanupError) {
+            console.warn('Error removing stale active caja mapping', cleanupError)
+          }
         }
       } catch (err) {
         console.warn('Error reading user active caja mapping', err)
@@ -150,6 +162,40 @@ export const CajaService = {
     } catch (error) {
       console.error('Error closing caja:', error)
       throw error
+    }
+  },
+
+  async addRetiro(cajaId: string, retiro: { id: number; monto: number; motivo: string }) {
+    try {
+      const retiroRef = ref(database, `${CAJAS_PATH}/${cajaId}/remesas/${retiro.id}`)
+      await set(retiroRef, { ...retiro, createdAt: new Date().toISOString() })
+      return retiro
+    } catch (error) {
+      console.error('Error adding retiro:', error)
+      throw error
+    }
+  },
+
+  async removeRetiro(cajaId: string, retiroId: number) {
+    try {
+      await remove(ref(database, `${CAJAS_PATH}/${cajaId}/remesas/${retiroId}`))
+    } catch (error) {
+      console.error('Error removing retiro:', error)
+      throw error
+    }
+  },
+
+  async getRetiros(cajaId: string): Promise<{ id: number; monto: number; motivo: string }[]> {
+    try {
+      const snap = await get(ref(database, `${CAJAS_PATH}/${cajaId}/remesas`))
+      if (!snap.exists()) return []
+      const data = snap.val() as Record<string, any>
+      return Object.values(data).sort((a: any, b: any) =>
+        (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
+      )
+    } catch (error) {
+      console.error('Error getting retiros:', error)
+      return []
     }
   },
 
