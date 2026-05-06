@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import {
   ShoppingCart,
-  Barcode,
   Search,
   Plus,
   Minus,
@@ -15,7 +14,6 @@ import {
   CreditCard as CardIcon,
   QrCode,
   ArrowRightLeft,
-  ChevronLeft,
   Store,
   Lock,
   AlertTriangle,
@@ -28,13 +26,13 @@ import { OrderService } from '../services/OrderService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
-import { BarcodeImageScanButton } from '../components/BarcodeImageScanButton'
 import { useSettings } from '../context/SettingsContext'
 
 type ProductDB = {
   id: string
   codigo?: string
   nombre: string
+  categoria: string
   stock: number
   precioUnitario: number
   precioMediaDocena: number
@@ -55,7 +53,7 @@ export default function POS() {
   const [cart, setCart] = useState<CartItemLocal[]>([])
   const [products, setProducts] = useState<ProductDB[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [barcodeScan, setBarcodeScan] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
@@ -118,6 +116,7 @@ export default function POS() {
             id: p.id,
             codigo: p.codigo,
             nombre: p.nombre,
+            categoria: p.tipo || 'General',
             stock: p.stock,
             precioUnitario: p.precioUnitario || 0,
             precioMediaDocena: p.precioMediaDocena || 0,
@@ -188,25 +187,23 @@ export default function POS() {
   const totalWithTax = useMemo(() => roundCurrency(cartTotal + taxAmount), [cartTotal, taxAmount])
   const cartItemCount = useMemo(() => cart.reduce((sum, it) => sum + it.quantity, 0), [cart])
 
-  const filteredProducts = products.filter((p) => p.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
+  const categories = useMemo(
+    () => ['Todos', ...Array.from(new Set(products.map((p) => p.categoria || 'General')))],
+    [products]
+  )
 
-  const tryAddByBarcode = (code: string) => {
-    const trimmed = code.trim()
-    if (!trimmed) return
-    const product = products.find((p) => (p.codigo || '').trim() === trimmed)
-    if (product) {
-      addToCart(product)
-      setBarcodeScan('')
-    } else {
-      setBarcodeScan(trimmed)
-      toast.error('Producto no encontrado')
-    }
-  }
-
-  const handleBarcodeSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    tryAddByBarcode(barcodeScan)
-  }
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((p) => {
+        const byCategory = selectedCategory === 'Todos' || p.categoria === selectedCategory
+        const query = searchTerm.toLowerCase()
+        const bySearch =
+          p.nombre.toLowerCase().includes(query) ||
+          (p.codigo || '').toLowerCase().includes(query)
+        return byCategory && bySearch
+      }),
+    [products, searchTerm, selectedCategory]
+  )
 
   const handleCheckout = () => {
     if (cart.length === 0) return
@@ -285,6 +282,7 @@ export default function POS() {
             id: p.id,
             codigo: p.codigo,
             nombre: p.nombre,
+            categoria: p.tipo || 'General',
             stock: p.stock,
             precioUnitario: p.precioUnitario || 0,
             precioMediaDocena: p.precioMediaDocena || 0,
@@ -445,67 +443,149 @@ export default function POS() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex">
       <Sidebar activeItem="pos" />
 
-      <main className="flex-1 p-6">
-        <div className="h-[72px] flex items-center gap-4 mb-4">
-          <button className="p-1 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-            <ChevronLeft size={20} />
-          </button>
-          <h1 className="text-2xl font-bold">Punto de Venta</h1>
+      <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 md:p-5 mb-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-[#8CC63F] flex items-center justify-center shadow-sm shrink-0">
+                <Store size={20} className="text-white" />
+              </div>
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white truncate">Punto de Venta</h1>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-lime-50 dark:bg-lime-900/30 border border-lime-200 dark:border-lime-800/60">
+              <span className="w-2 h-2 rounded-full bg-[#8CC63F]" />
+              <span className="text-xs font-semibold text-lime-700 dark:text-lime-300">Caja abierta</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div className="relative min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-lime-700/50 dark:text-lime-300/70" size={17} />
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nombre o código..."
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-lime-200/80 dark:border-lime-800/70 bg-lime-50/40 dark:bg-lime-900/20 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-lime-300 dark:focus:ring-lime-700"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {categories.map((category) => {
+              const active = selectedCategory === category
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setSelectedCategory(category)}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
+                    active
+                      ? 'bg-lime-100 text-lime-800 border border-lime-300 dark:bg-lime-900/35 dark:text-lime-200 dark:border-lime-700'
+                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {category}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <div className="space-y-4">
-          <form
-            onSubmit={handleBarcodeSubmit}
-            className="flex flex-col sm:flex-row gap-3 max-w-3xl sm:items-center"
-          >
-            <div className="relative flex-1 min-w-0">
-              <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                value={barcodeScan}
-                onChange={(e) => setBarcodeScan(e.target.value)}
-                placeholder="Escanear código de barras..."
-                className="w-full pl-12 pr-4 py-3 bg-[#F3F4F6] rounded-xl outline-none"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2 items-center shrink-0">
-              <BarcodeImageScanButton
-                onDecoded={(text) => tryAddByBarcode(text)}
-              />
-              <button
-                type="submit"
-                className="px-6 py-3 bg-[#8CC63F] text-white rounded-xl font-medium"
-              >
-                Agregar
-              </button>
-            </div>
-          </form>
-
-          <div className="relative max-w-3xl">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar productos..."
-              className="w-full pl-12 pr-4 py-3 bg-[#F3F4F6] rounded-xl outline-none"
-            />
-          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProducts.map((product) => (
-              <div
-                key={product.id}
-                onClick={() => addToCart(product)}
-                className="bg-white rounded-xl p-5 border border-gray-200 cursor-pointer"
-              >
-                <h3 className="font-bold">{product.nombre}</h3>
-                <p className="text-2xl font-bold text-[#8CC63F]">${(product.precioUnitario || 0).toFixed(2)}</p>
-                <div className="text-sm text-gray-500">
-                  <p>6 und: ${(product.precioMediaDocena || 0).toFixed(2)}</p>
-                  <p>12 und: ${(product.precioDocena || 0).toFixed(2)}</p>
+            {filteredProducts.map((product) => {
+              const stock = Number(product.stock || 0)
+              const isOutOfStock = stock <= 0
+              const isLowStock = stock > 0 && stock <= 5
+              const stockLabel = isOutOfStock ? 'Sin stock' : isLowStock ? 'Stock bajo' : 'Disponible'
+              const stockTone = isOutOfStock
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : isLowStock
+                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                : 'bg-slate-100 text-slate-700 border border-slate-200'
+              const stockProgress = Math.max(0, Math.min(100, Math.round((stock / 24) * 100)))
+              const stockProgressTone =
+                stockProgress >= 70
+                  ? 'bg-emerald-500'
+                  : stockProgress >= 40
+                  ? 'bg-lime-500'
+                  : stockProgress >= 15
+                  ? 'bg-amber-400'
+                  : 'bg-orange-400'
+
+              return (
+                <div
+                  key={product.id}
+                  onClick={() => {
+                    if (!isOutOfStock) addToCart(product)
+                  }}
+                  className={`group relative overflow-hidden rounded-2xl border p-4 transition-all duration-200 ${
+                    isOutOfStock
+                      ? 'bg-gray-50 border-gray-200 opacity-80 cursor-not-allowed'
+                      : 'bg-white border-gray-200 cursor-pointer hover:-translate-y-0.5 hover:shadow-md'
+                  }`}
+                >
+                  <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-slate-100/80 blur-2xl pointer-events-none" />
+
+                  <div className="relative">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate">{product.nombre}</h3>
+                        <p className="text-[11px] text-gray-500 mt-1 truncate">Cod: {product.codigo || 'N/A'}</p>
+                      </div>
+                      <span className={`shrink-0 px-2 py-1 rounded-full text-[11px] font-semibold ${stockTone}`}>
+                        {stockLabel}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 rounded-xl bg-lime-50 dark:bg-lime-900/20 border border-lime-200 dark:border-lime-800 px-3 py-2.5">
+                      <p className="text-[11px] uppercase tracking-wide text-lime-700/80 dark:text-lime-300">Precio unitario</p>
+                      <p className="text-2xl font-bold leading-tight text-lime-800 dark:text-lime-100">${(product.precioUnitario || 0).toFixed(2)}</p>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2">
+                        <p className="text-[10px] text-gray-500">6 unidades</p>
+                        <p className="text-sm font-semibold text-gray-800">${(product.precioMediaDocena || 0).toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2">
+                        <p className="text-[10px] text-gray-500">12 unidades</p>
+                        <p className="text-sm font-semibold text-gray-800">${(product.precioDocena || 0).toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Stock</span>
+                        <span className={`font-semibold ${isOutOfStock ? 'text-red-600' : 'text-gray-700'}`}>{stock}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${stockProgressTone}`}
+                          style={{ width: `${stockProgress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!isOutOfStock) addToCart(product)
+                      }}
+                      disabled={isOutOfStock}
+                      className={`mt-4 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                        isOutOfStock
+                          ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                          : 'bg-lime-100 hover:bg-lime-200 dark:bg-lime-800/40 dark:hover:bg-lime-700/50 text-lime-900 dark:text-lime-100'
+                      }`}
+                    >
+                      {isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Stock: {product.stock}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </main>

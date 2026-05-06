@@ -25,10 +25,19 @@ type ReportType = "sales" | "products" | "cash-register";
 
 type OrderItem = {
   id?: string;
+  productId?: string;
+  productoId?: string;
   name?: string;
+  nombre?: string;
   quantity?: number;
+  cantidad?: number;
+  qty?: number;
   unitPrice?: number;
+  precio?: number;
+  precioUnitario?: number;
   lineTotal?: number;
+  subtotal?: number;
+  total?: number;
 };
 
 type OrderRecord = {
@@ -100,6 +109,36 @@ const toDate = (value?: string) => {
 
 const toMoney = (n: number) =>
   n.toLocaleString("es-SV", { style: "currency", currency: "USD" });
+
+const toNumber = (value: unknown) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+
+const getItemQuantity = (item: OrderItem) =>
+  toNumber(item.quantity ?? item.cantidad ?? item.qty ?? 0);
+
+const getItemName = (item: OrderItem) => {
+  const raw = String(item.name ?? item.nombre ?? "").trim();
+  return raw || "Producto";
+};
+
+const getItemSubtotal = (item: OrderItem) => {
+  const quantity = getItemQuantity(item);
+  const explicit = toNumber(item.lineTotal ?? item.subtotal ?? item.total);
+  if (explicit > 0) return explicit;
+  const unitPrice = toNumber(item.unitPrice ?? item.precioUnitario ?? item.precio);
+  return quantity * unitPrice;
+};
+
+const getItemKey = (item: OrderItem) => {
+  const id = String(item.id ?? item.productId ?? item.productoId ?? "").trim();
+  if (id) return `id:${id}`;
+  const normalizedName = getItemName(item).toLowerCase();
+  return `name:${normalizedName}`;
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -174,7 +213,7 @@ export default function Reports() {
 
       return {
         ticket: o.id.slice(-8).toUpperCase(),
-        itemsCount: (o.items || []).reduce((s, i) => s + (i.quantity || 0), 0),
+        itemsCount: (o.items || []).reduce((s, i) => s + getItemQuantity(i), 0),
         productNames: productList,
         date: toDateTime(o.date || o.createdAt),
         payment: toPaymentLabel(o.method),
@@ -189,23 +228,33 @@ export default function Reports() {
       { name: string; units: number; revenue: number }
     >();
     filteredOrders.forEach((o) => {
-      (o.items || []).forEach((item) => {
-        const key = item.id || item.name || "unknown";
+      const items = o.items || [];
+      const orderSubtotal = items.reduce((sum, item) => sum + getItemSubtotal(item), 0);
+      const orderTotal = toNumber(o.total || 0);
+      const factor =
+        orderSubtotal > 0 && orderTotal > 0 ? orderTotal / orderSubtotal : 1;
+
+      items.forEach((item) => {
+        const key = getItemKey(item);
         const prev = map.get(key) ?? {
-          name: item.name || "Producto",
+          name: getItemName(item),
           units: 0,
           revenue: 0,
         };
-        const qty = item.quantity || 0;
-        const rev = item.lineTotal ?? qty * (item.unitPrice || 0);
+        const qty = getItemQuantity(item);
+        const itemSubtotal = getItemSubtotal(item);
+        const revenueWithTax = itemSubtotal * factor;
         map.set(key, {
           name: prev.name,
           units: prev.units + qty,
-          revenue: prev.revenue + rev,
+          revenue: prev.revenue + revenueWithTax,
         });
       });
     });
-    return [...map.values()].sort((a, b) => b.units - a.units).slice(0, 10);
+    return [...map.values()]
+      .map((p) => ({ ...p, revenue: roundCurrency(p.revenue) }))
+      .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
+      .slice(0, 10);
   }, [filteredOrders]);
 
   // Desglose por método de pago (para la sección adicional en ventas)
@@ -242,7 +291,7 @@ export default function Reports() {
     );
     const totalUnits = filteredOrders.reduce(
       (s, o) =>
-        s + (o.items || []).reduce((si, i) => si + (i.quantity || 0), 0),
+        s + (o.items || []).reduce((si, i) => si + getItemQuantity(i), 0),
       0,
     );
     return {
