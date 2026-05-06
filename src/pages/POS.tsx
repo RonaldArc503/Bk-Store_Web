@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import {
@@ -19,6 +19,7 @@ import {
   Store,
   Lock,
   AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
@@ -59,6 +60,10 @@ export default function POS() {
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
   const [lastOrderInfo, setLastOrderInfo] = useState<any>(null)
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [showSaleSuccess, setShowSaleSuccess] = useState(false)
+  const [lastSuccessfulOrder, setLastSuccessfulOrder] = useState<{ orderId: string; total: number } | null>(null)
+  const successTimerRef = useRef<number | null>(null)
 
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
 
@@ -77,6 +82,14 @@ export default function POS() {
 
     styleEl.textContent = `@media print { @page { size: ${pageSize}; margin: 10mm; } #print-area { width: ${width} !important; max-width: none !important; margin: 0 auto; } }`
   }, [settings.printing.paperSize])
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current !== null) {
+        window.clearTimeout(successTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!authReady) {
@@ -206,7 +219,7 @@ export default function POS() {
   }
 
   const processPayment = async () => {
-    if (!selectedPaymentMethod) return
+    if (!selectedPaymentMethod || isProcessingPayment) return
     if (!authReady || !user?.uid) {
       toast.error('Sesion invalida. Inicia sesion nuevamente.')
       return
@@ -239,6 +252,7 @@ export default function POS() {
 
     const inventoryUpdates: Array<{ inventarioId: string; quantity: number }> = []
 
+    setIsProcessingPayment(true)
     try {
       const activeCaja = await CajaService.getActiveCaja(user.uid)
       if (!activeCaja || !activeCaja.id || activeCaja.status === 'closed') {
@@ -285,9 +299,18 @@ export default function POS() {
       setLastOrderInfo(completedOrder)
 
       setIsPaymentModalOpen(false)
-      setIsTicketModalOpen(true)
+      setIsTicketModalOpen(settings.printing.autoPrint)
       setCart([])
       setSelectedPaymentMethod(null)
+      setLastSuccessfulOrder({ orderId, total: Number(order.total || 0) })
+      setShowSaleSuccess(true)
+
+      if (successTimerRef.current !== null) {
+        window.clearTimeout(successTimerRef.current)
+      }
+      successTimerRef.current = window.setTimeout(() => {
+        setShowSaleSuccess(false)
+      }, 2200)
 
       if (settings.notifications.sales) {
         toast.success('Venta registrada correctamente')
@@ -312,6 +335,8 @@ export default function POS() {
       console.error('Error processing payment', err)
       const message = err instanceof Error ? err.message : 'Error al procesar la venta.'
       toast.error(`${message} No se realizaron cambios.`)
+    } finally {
+      setIsProcessingPayment(false)
     }
   }
 
@@ -574,8 +599,37 @@ export default function POS() {
 
             <div className="flex gap-3">
               <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-3 bg-gray-100 rounded-xl">Cancelar</button>
-              <button onClick={processPayment} disabled={!selectedPaymentMethod} className={`flex-1 py-3 rounded-xl text-white ${selectedPaymentMethod ? 'bg-[#8CC63F]' : 'bg-gray-300'}`}>
+              <button onClick={processPayment} disabled={!selectedPaymentMethod || isProcessingPayment} className={`flex-1 py-3 rounded-xl text-white ${selectedPaymentMethod && !isProcessingPayment ? 'bg-[#8CC63F]' : 'bg-gray-300'}`}>
                 Confirmar Pago
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSaleSuccess && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/35 backdrop-blur-sm px-4">
+          <div className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 border border-lime-200 dark:border-lime-700 shadow-2xl p-6 text-center">
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+              <div className="absolute -top-8 -left-8 w-24 h-24 bg-lime-200/50 rounded-full animate-ping" />
+              <div className="absolute -bottom-6 -right-8 w-20 h-20 bg-lime-300/40 rounded-full animate-ping [animation-delay:250ms]" />
+            </div>
+            <div className="relative">
+              <div className="mx-auto w-16 h-16 rounded-full bg-lime-100 dark:bg-lime-900/40 flex items-center justify-center mb-4">
+                <CheckCircle2 className="w-10 h-10 text-lime-600 dark:text-lime-400 animate-bounce" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Venta exitosa</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                Orden {lastSuccessfulOrder?.orderId || ''} registrada correctamente.
+              </p>
+              <p className="mt-1 text-lg font-bold text-lime-600 dark:text-lime-400">
+                Total: ${Number(lastSuccessfulOrder?.total || 0).toFixed(2)}
+              </p>
+              <button
+                onClick={() => setShowSaleSuccess(false)}
+                className="mt-5 px-5 py-2 rounded-lg bg-lime-500 hover:bg-lime-600 text-white font-semibold transition-colors"
+              >
+                Entendido
               </button>
             </div>
           </div>

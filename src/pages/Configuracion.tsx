@@ -10,6 +10,7 @@ import {
   Printer,
   RotateCcw,
   Database,
+  Menu,
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
@@ -268,6 +269,31 @@ function PrintingSection() {
   )
 }
 
+function InterfaceSection() {
+  const { settings, updateUI } = useSettings()
+  const { ui } = settings
+
+  return (
+    <div>
+      <SectionTitle icon={<Menu className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />} title="Interfaz" />
+      <SettingCard>
+        <SettingRow
+          icon={<Menu className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" />}
+          title="Menu compactado"
+          description="Colapsa el menu lateral en escritorio"
+          border={false}
+        >
+          <Toggle
+            checked={ui.sidebarCollapsed}
+            onChange={(v) => updateUI({ sidebarCollapsed: v })}
+            label="Menu compactado"
+          />
+        </SettingRow>
+      </SettingCard>
+    </div>
+  )
+}
+
 function DataSection({
   onReset,
   loading,
@@ -345,6 +371,7 @@ export default function ConfiguracionPage() {
             <ThemeSection />
             <LanguageSection />
             <NotificationsSection />
+            <InterfaceSection />
             <InventorySection />
             <PrintingSection />
             <DataSection onReset={() => setIsDataResetOpen(true)} loading={isDataResetLoading} />

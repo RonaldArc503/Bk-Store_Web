@@ -20,6 +20,9 @@ export interface StoreSettings {
     autoPrint: boolean
     paperSize: '58mm' | '80mm' | 'letter'
   }
+  ui: {
+    sidebarCollapsed: boolean
+  }
 }
 
 const STORAGE_KEY = 'bk-store-settings'
@@ -38,6 +41,9 @@ const defaultSettings: StoreSettings = {
     autoPrint: false,
     paperSize: '80mm',
   },
+  ui: {
+    sidebarCollapsed: false,
+  },
 }
 
 function loadSettings(): StoreSettings {
@@ -45,7 +51,15 @@ function loadSettings(): StoreSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultSettings
-    return { ...defaultSettings, ...JSON.parse(raw) }
+    const parsed = JSON.parse(raw) as Partial<StoreSettings>
+    return {
+      ...defaultSettings,
+      ...parsed,
+      notifications: { ...defaultSettings.notifications, ...(parsed.notifications || {}) },
+      inventory: { ...defaultSettings.inventory, ...(parsed.inventory || {}) },
+      printing: { ...defaultSettings.printing, ...(parsed.printing || {}) },
+      ui: { ...defaultSettings.ui, ...(parsed.ui || {}) },
+    }
   } catch {
     return defaultSettings
   }
@@ -61,6 +75,7 @@ interface SettingsContextValue {
   updateNotifications: (patch: Partial<StoreSettings['notifications']>) => void
   updateInventory: (patch: Partial<StoreSettings['inventory']>) => void
   updatePrinting: (patch: Partial<StoreSettings['printing']>) => void
+  updateUI: (patch: Partial<StoreSettings['ui']>) => void
   resetSettings: () => void
 }
 
@@ -110,6 +125,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const updateUI = useCallback(
+    (patch: Partial<StoreSettings['ui']>) => {
+      setSettings((prev) => {
+        const next = { ...prev, ui: { ...prev.ui, ...patch } }
+        persist(next)
+        return next
+      })
+    },
+    [],
+  )
+
   const resetSettings = useCallback(() => {
     setSettings(defaultSettings)
     persist(defaultSettings)
@@ -123,6 +149,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateNotifications,
         updateInventory,
         updatePrinting,
+        updateUI,
         resetSettings,
       }}
     >
