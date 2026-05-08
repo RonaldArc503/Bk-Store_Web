@@ -69,6 +69,10 @@ export function UserModal({ isOpen, onClose, onSuccess, editingUser }: UserModal
       setError('El nombre completo es requerido')
       return false
     }
+    if (!editingUser && !formData.email?.trim()) {
+      setError('El correo electrónico es requerido')
+      return false
+    }
     if (!editingUser && !formData.contraseña) {
       setError('La contraseña es requerida para nuevos usuarios')
       return false
@@ -170,7 +174,7 @@ export function UserModal({ isOpen, onClose, onSuccess, editingUser }: UserModal
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Correo electrónico (opcional)
+              Correo electrónico
             </label>
             <input
               type="email"

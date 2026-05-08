@@ -8,6 +8,7 @@ import { X, Copy } from 'lucide-react'
 import { BarcodeImageScanButton } from './BarcodeImageScanButton'
 import type { Product } from '../types/product'
 import { InventoryService } from '../services/InventoryService'
+import { useSettings } from '../context/SettingsContext'
 
 interface InventoryModalProps {
   isOpen: boolean
@@ -21,6 +22,8 @@ const materials = ['Lycra', 'Poliéster', 'Lycra Sport', 'Algodón', 'Nylon', 'M
 const genders = ['Femenino', 'Masculino', 'Unisex']
 
 export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: InventoryModalProps) {
+  const { settings } = useSettings()
+  const lowStockThreshold = settings.inventory.lowStockThreshold
   type FormState = {
     codigo: string
     nombre: string
@@ -46,8 +49,6 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [stockWarning, setStockWarning] = useState(false)
-
-  const MIN_STOCK_WARNING = 24
 
   useEffect(() => {
     if (editingProduct) {
@@ -90,7 +91,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     }))
 
     if (name === 'stock') {
-      setStockWarning(Number(value) < MIN_STOCK_WARNING)
+      setStockWarning(Number(value) < lowStockThreshold)
     }
   }
 
@@ -158,6 +159,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         material: formData.material,
         genero: formData.genero,
         stock: Number(formData.stock) || 0,
+        stockMinimo: lowStockThreshold,
         costo,
         precioUnitario: unitario,
         precioMediaDocena: mediaDocena,

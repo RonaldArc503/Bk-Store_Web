@@ -12,6 +12,7 @@ import {
 } from "firebase/database"
 import { database } from "../app/firebase"
 import type { SystemUser, CreateUserInput, UpdateUserInput } from '../types/index'
+import { hashPassword, verifyPassword } from '../utils/password'
 
 const USERS_PATH = 'users'
 
@@ -69,6 +70,46 @@ export const UserService = {
   },
 
   /**
+   * Obtener usuario por email
+   */
+  async getUserByEmail(email: string): Promise<SystemUser | null> {
+    try {
+      const users = await this.getUsers()
+      const normalized = email.trim().toLowerCase()
+      return users.find(u => (u.email || '').trim().toLowerCase() === normalized) || null
+    } catch (error) {
+      console.error('Error fetching user by email:', error)
+      throw new Error('Error al obtener usuario')
+    }
+  },
+
+  /**
+   * Verificar credenciales contra RTDB (hash + salt)
+   */
+  async verifyUserCredentials(email: string, password: string): Promise<SystemUser | null> {
+    try {
+      const user = await this.getUserByEmail(email)
+      if (!user) return null
+
+      const userRef = ref(database, `${USERS_PATH}/${user.id}`)
+      const snapshot = await get(userRef)
+      if (!snapshot.exists()) return null
+
+      const data = snapshot.val() as Record<string, any>
+      const hash = data?.passwordHash
+      const salt = data?.passwordSalt
+      const iterations = Number(data?.passwordIterations || 0)
+      if (!hash || !salt || !iterations) return null
+
+      const ok = await verifyPassword(password, hash, salt, iterations)
+      return ok ? user : null
+    } catch (error) {
+      console.error('Error verifying user credentials:', error)
+      return null
+    }
+  },
+
+  /**
    * Crear nuevo usuario
    */
   async createUser(input: CreateUserInput): Promise<SystemUser> {
@@ -94,11 +135,13 @@ export const UserService = {
       }
 
       const userRef = ref(database, `${USERS_PATH}/${id}`)
-      // En una aplicación real, deberías hash la contraseña
-      // Por ahora, la guardamos directamente (NO RECOMENDADO EN PRODUCCIÓN)
+      const password = await hashPassword(input.contraseña)
       await set(userRef, {
         ...newUser,
-        contraseña: input.contraseña, // IMPORTANTE: Hash esta en producción
+        passwordHash: password.hash,
+        passwordSalt: password.salt,
+        passwordAlgo: password.algorithm,
+        passwordIterations: password.iterations,
       })
 
       return newUser
