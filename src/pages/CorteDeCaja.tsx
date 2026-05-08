@@ -1,4 +1,4 @@
-import React, {
+import {
   useEffect,
   useRef,
   useState,
@@ -22,9 +22,6 @@ import {
   AlertTriangle,
   History,
   X,
-  Download,
-  Search,
-  Printer,
   FileSpreadsheet,
 } from "lucide-react";
 import { CorteService, type CorteRecord } from "../services/CorteService";
@@ -269,7 +266,7 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
 /* Componentes secundarios                                                   */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function AperturaForm({ state, dispatch, onSave, disabled }: any) {
+function AperturaForm({ state, dispatch, onSave }: any) {
   return (
     <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
       <h3 className="font-bold mb-4 text-lg">Información de Apertura</h3>
@@ -358,7 +355,7 @@ function VentasResumen({ ventasDia }: { ventasDia: { efectivo: number; transfere
   );
 }
 
-function RetirosForm({ state, dispatch, totalRetiros, onAddRetiro, onRemoveRetiro }: any) {
+function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) {
   const [newRetiro, setNewRetiro] = useState({ monto: "", motivo: "" });
 
   const handleAdd = () => {
@@ -424,7 +421,7 @@ function RetirosForm({ state, dispatch, totalRetiros, onAddRetiro, onRemoveRetir
   );
 }
 
-function CierreForm({ state, dispatch, ventasDia, aperturaMonto, totalRetiros, efectivoEsperado, diferenciaEfectivo }: any) {
+function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEfectivo }: any) {
   const handleQuickFill = () => {
     dispatch({ type: "SET_EFECTIVO_CONTADO", payload: efectivoEsperado.toFixed(2) });
     dispatch({ type: "SET_TRANSFERENCIAS_CONTADO", payload: ventasDia.transferencia.toFixed(2) });

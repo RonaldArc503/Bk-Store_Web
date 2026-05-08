@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react'
+
 interface ConfirmDialogProps {
   isOpen: boolean
   title: string
-  description?: string
+  description?: ReactNode
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
