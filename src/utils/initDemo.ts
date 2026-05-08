@@ -8,6 +8,7 @@ import { ref, set, get } from 'firebase/database'
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { auth, database } from '../app/firebase'
 import type { SystemUser } from '../types/index'
+import { hashPassword } from './password'
 
 const DEMO_PASSWORD = 'demo123456'
 
@@ -74,9 +75,13 @@ export async function initializeDemoData() {
     // Crear usuarios de demo
     for (const user of DEMO_USERS) {
       const userRef = ref(database, `users/${user.id}`)
+      const password = await hashPassword(DEMO_PASSWORD)
       await set(userRef, {
         ...user,
-        contraseña: DEMO_PASSWORD, // Contraseña de demo (en producción, hashear)
+        passwordHash: password.hash,
+        passwordSalt: password.salt,
+        passwordAlgo: password.algorithm,
+        passwordIterations: password.iterations,
       })
     }
 

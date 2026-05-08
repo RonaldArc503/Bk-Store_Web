@@ -1,7 +1,8 @@
-import { ref, push, set, get } from 'firebase/database'
+import { ref, push, set, get, runTransaction, remove } from 'firebase/database'
 import { database } from '../app/firebase'
 
 const CORTES_PATH = 'cortes'
+const CORTES_BY_DATE_PATH = 'cortesByDate'
 
 export interface CorteRecord {
   id: string
@@ -14,6 +15,7 @@ export interface CorteRecord {
     efectivo: number
     transferencia: number
     qr: number
+    tarjeta: number
   }
   totalVentas: number
   remesas: { id: number; monto: number; motivo?: string }[]
@@ -21,11 +23,14 @@ export interface CorteRecord {
   efectivoContado: number
   transferenciasContado: number
   qrContado: number
+  tarjetaContado: number
   esperadoEfectivo: number
   notas: string
   createdBy: string | null
   createdAt: string
 }
+
+type SaveCorteInput = Omit<CorteRecord, 'id'>
 
 function toDateKey(date: Date): string {
   const y = date.getFullYear()
@@ -35,13 +40,42 @@ function toDateKey(date: Date): string {
 }
 
 export const CorteService = {
-  async saveCorte(corte: any) {
+  async saveCorte(corte: SaveCorteInput) {
     const cortesRef = ref(database, CORTES_PATH)
     const newRef = push(cortesRef)
-    const id = newRef.key!
-    const record = { ...corte, id, dateKey: toDateKey(new Date()) }
-    await set(newRef, record)
-    return { id, corte: record }
+    const id = newRef.key
+    if (!id) {
+      throw new Error('No se pudo generar el identificador del corte')
+    }
+
+    const createdAt = corte.createdAt || new Date().toISOString()
+    const dateKey = toDateKey(new Date(createdAt))
+    const dayLockRef = ref(database, `${CORTES_BY_DATE_PATH}/${dateKey}`)
+
+    const txResult = await runTransaction(dayLockRef, (current) => {
+      if (current) return
+      return { id, createdAt }
+    })
+
+    if (!txResult.committed) {
+      const duplicateError = new Error('Ya existe un cierre de caja para este dia')
+      ;(duplicateError as Error & { code?: string }).code = 'CLOSE_ALREADY_EXISTS'
+      throw duplicateError
+    }
+
+    const record = { ...corte, id, dateKey, createdAt }
+
+    try {
+      await set(newRef, record)
+      return { id, corte: record }
+    } catch (error) {
+      const lockSnap = await get(dayLockRef)
+      const lock = lockSnap.exists() ? lockSnap.val() as { id?: string } : null
+      if (lock?.id === id) {
+        await remove(dayLockRef)
+      }
+      throw error
+    }
   },
 
   async getCorteById(id: string) {
@@ -52,15 +86,29 @@ export const CorteService = {
 
   async getTodayCorte(): Promise<CorteRecord | null> {
     const today = toDateKey(new Date())
+
+    const dayLockSnap = await get(ref(database, `${CORTES_BY_DATE_PATH}/${today}`))
+    if (dayLockSnap.exists()) {
+      const dayLock = dayLockSnap.val() as { id?: string }
+      if (dayLock.id) {
+        const current = await this.getCorteById(dayLock.id)
+        if (current) return current
+      }
+    }
+
     const snap = await get(ref(database, CORTES_PATH))
     if (!snap.exists()) return null
     const data = snap.val() as Record<string, any>
-    for (const key of Object.keys(data)) {
-      const c = data[key]
+    const matches: CorteRecord[] = []
+    for (const [key, c] of Object.entries(data)) {
       const cDateKey = c.dateKey || (c.createdAt ? toDateKey(new Date(c.createdAt)) : null)
-      if (cDateKey === today) return { ...c, id: c.id || key } as CorteRecord
+      if (cDateKey === today) {
+        matches.push({ ...c, id: c.id || key } as CorteRecord)
+      }
     }
-    return null
+    if (matches.length === 0) return null
+    matches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    return matches[0]
   },
 
   async hasTodayCorte(): Promise<boolean> {

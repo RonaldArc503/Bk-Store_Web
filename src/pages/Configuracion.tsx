@@ -9,11 +9,16 @@ import {
   Package,
   Printer,
   RotateCcw,
+  Database,
+  Menu,
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
 import { useSettings, type StoreSettings } from '../context/SettingsContext'
 import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { MaintenanceService } from '../services/MaintenanceService'
 
 /* ─── Toggle switch reutilizable ─── */
 
@@ -159,30 +164,15 @@ function LanguageSection() {
 
   return (
     <div>
-      <SectionTitle icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />} title="Regional" />
+      <SectionTitle icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />} title="Idioma" />
       <SettingCard>
         <SettingRow
           icon={<Globe className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400" />}
           title="Idioma"
           description="Idioma de la interfaz"
-        >
-          <Select value={settings.language} onChange={(v) => updateSettings({ language: v })} options={languageOptions} />
-        </SettingRow>
-        <SettingRow
-          icon={<Banknote className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" />}
-          title="Moneda"
-          description="Formato de precios en el sistema"
           border={false}
         >
-          <Select
-            value={settings.currency}
-            onChange={(v) => updateSettings({ currency: v })}
-            options={[
-              { value: 'MXN', label: '$ MXN - Peso Mexicano' },
-              { value: 'USD', label: '$ USD - Dólar' },
-              { value: 'EUR', label: '€ EUR - Euro' },
-            ]}
-          />
+          <Select value={settings.language} onChange={(v) => updateSettings({ language: v })} options={languageOptions} />
         </SettingRow>
       </SettingCard>
     </div>
@@ -260,7 +250,7 @@ function PrintingSection() {
     <div>
       <SectionTitle icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />} title="Impresión" />
       <SettingCard>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Imprimir al finalizar cada venta">
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Descargar PDF al finalizar cada venta">
           <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica" border={false}>
@@ -279,15 +269,86 @@ function PrintingSection() {
   )
 }
 
+function InterfaceSection() {
+  const { settings, updateUI } = useSettings()
+  const { ui } = settings
+
+  return (
+    <div>
+      <SectionTitle icon={<Menu className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />} title="Interfaz" />
+      <SettingCard>
+        <SettingRow
+          icon={<Menu className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" />}
+          title="Menu compactado"
+          description="Colapsa el menu lateral en escritorio"
+          border={false}
+        >
+          <Toggle
+            checked={ui.sidebarCollapsed}
+            onChange={(v) => updateUI({ sidebarCollapsed: v })}
+            label="Menu compactado"
+          />
+        </SettingRow>
+      </SettingCard>
+    </div>
+  )
+}
+
+function DataSection({
+  onReset,
+  loading,
+}: {
+  onReset: () => void
+  loading: boolean
+}) {
+  return (
+    <div>
+      <SectionTitle icon={<Database className="w-4 h-4 text-red-500 dark:text-red-400" />} title="Datos" />
+      <SettingCard>
+        <SettingRow
+          icon={<Database className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />}
+          title="Borrar datos de prueba"
+          description="Elimina ventas, cajas, cortes, inventario y movimientos. Conserva usuarios."
+          border={false}
+        >
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={loading}
+            className="px-3 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition disabled:opacity-50"
+          >
+            {loading ? 'Borrando...' : 'Borrar datos'}
+          </button>
+        </SettingRow>
+      </SettingCard>
+    </div>
+  )
+}
+
 /* ─── Página principal ─── */
 
 export default function ConfiguracionPage() {
   const { resetSettings } = useSettings()
   const [showReset, setShowReset] = useState(false)
+  const [isDataResetOpen, setIsDataResetOpen] = useState(false)
+  const [isDataResetLoading, setIsDataResetLoading] = useState(false)
 
   const handleReset = () => {
     resetSettings()
     setShowReset(false)
+  }
+
+  const handleClearData = async () => {
+    if (isDataResetLoading) return
+    setIsDataResetLoading(true)
+    try {
+      await MaintenanceService.clearDataExceptUsers()
+      toast.success('Datos eliminados correctamente')
+    } catch (err) {
+      toast.error('Error al borrar datos')
+    } finally {
+      setIsDataResetLoading(false)
+    }
   }
 
   return (
@@ -310,8 +371,10 @@ export default function ConfiguracionPage() {
             <ThemeSection />
             <LanguageSection />
             <NotificationsSection />
+            <InterfaceSection />
             <InventorySection />
             <PrintingSection />
+            <DataSection onReset={() => setIsDataResetOpen(true)} loading={isDataResetLoading} />
           </div>
 
           <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
@@ -339,6 +402,20 @@ export default function ConfiguracionPage() {
             )}
           </div>
         </div>
+
+        <ConfirmDialog
+          isOpen={isDataResetOpen}
+          title="Borrar datos de prueba"
+          description="Se eliminaran ventas, cajas, cortes, inventario y movimientos. Los usuarios se conservaran."
+          confirmLabel="Borrar datos"
+          cancelLabel="Cancelar"
+          danger
+          onCancel={() => setIsDataResetOpen(false)}
+          onConfirm={() => {
+            setIsDataResetOpen(false)
+            void handleClearData()
+          }}
+        />
       </main>
     </div>
   )

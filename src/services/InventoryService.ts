@@ -10,6 +10,10 @@ import {
   get,
   remove,
   onValue,
+  query,
+  orderByChild,
+  equalTo,
+  limitToFirst,
 } from "firebase/database"
 import { database } from "../app/firebase"
 import type { Producto, Inventario, CreateInventarioInput, UpdateInventarioInput, Product, CreateProductInput, UpdateProductInput, InventoryStats } from '../types/product'
@@ -53,8 +57,29 @@ export const InventoryService = {
   /** Obtener inventario por producto ID */
   async getInventarioByProductoId(productoId: string): Promise<Inventario | null> {
     try {
-      const inventario = await this.getInventario()
-      return inventario.find((i: Inventario) => i.productoId === productoId) || null
+      const inventarioRef = ref(database, INVENTARIO_PATH)
+      try {
+        const inventarioQuery = query(
+          inventarioRef,
+          orderByChild('productoId'),
+          equalTo(productoId),
+          limitToFirst(1)
+        )
+        const snapshot = await get(inventarioQuery)
+        if (snapshot.exists()) {
+          const data = snapshot.val() as Record<string, Inventario>
+          const [firstKey] = Object.keys(data)
+          if (!firstKey) return null
+          const entry = data[firstKey]
+          return { ...entry, id: entry.id || firstKey }
+        }
+      } catch (queryError) {
+        console.warn('Indexed inventario query failed, falling back to full scan', queryError)
+      }
+
+      const allInventario = await this.getInventario()
+      const entry = allInventario.find((item) => item.productoId === productoId)
+      return entry ?? null
     } catch (error) {
       console.error('Error fetching inventario by producto:', error)
       throw new Error('Error al obtener inventario')
@@ -125,19 +150,28 @@ export const InventoryService = {
   /** Descontar stock (para ventas) */
   async descontarStock(inventarioId: string, cantidad: number, motivo: string = 'venta'): Promise<Inventario> {
     try {
+      if (cantidad <= 0) throw new Error('Cantidad invalida para descuento de stock')
+
       const inventarioRef = ref(database, `${INVENTARIO_PATH}/${inventarioId}`)
       const snapshot = await get(inventarioRef)
       if (!snapshot.exists()) throw new Error('Inventario no encontrado')
 
       const currentInventario = snapshot.val() as Inventario
-      const newStock = currentInventario.stock - cantidad
-      if (newStock < 0) throw new Error('Stock insuficiente')
+      const currentStock = Number(currentInventario.stock || 0)
+      if (currentStock < cantidad) {
+        throw new Error('Stock insuficiente')
+      }
 
+      const newStock = currentStock - cantidad
       const now = new Date().toISOString().split('T')[0]
-      const updatedInventario: Inventario = { ...currentInventario, stock: newStock, updatedAt: now }
+      const updatedInventario: Inventario = {
+        ...currentInventario,
+        stock: newStock,
+        updatedAt: now,
+      }
 
       await set(inventarioRef, updatedInventario)
-      await MovimientosService.registrarSalida(currentInventario.productoId, cantidad, motivo)
+      await MovimientosService.registrarSalida(updatedInventario.productoId, cantidad, motivo)
       return updatedInventario
     } catch (error) {
       console.error('Error descontando stock:', error)
@@ -167,14 +201,13 @@ export const InventoryService = {
   },
 
   /** Obtener estadísticas de inventario */
-  async getInventarioStats(): Promise<InventoryStats> {
+  async getInventarioStats(lowStockThreshold: number = 24): Promise<InventoryStats> {
     try {
       const inventario = await this.getInventario()
-      const MIN_STOCK = 24
       return {
         totalProductos: inventario.length,
         stockTotal: inventario.reduce((sum, i) => sum + i.stock, 0),
-        alertasStock: inventario.filter((i) => i.stock < i.stockMinimo || i.stock < MIN_STOCK).length,
+        alertasStock: inventario.filter((i) => i.stock < i.stockMinimo || i.stock < lowStockThreshold).length,
       }
     } catch (error) {
       console.error('Error fetching stats:', error)
@@ -224,7 +257,7 @@ export const InventoryService = {
       const inventario = await this.createInventario({
         productoId: producto.id,
         stock: input.stock,
-        stockMinimo: 24,
+        stockMinimo: input.stockMinimo ?? 24,
         costo: input.costo,
         precioUnitario: input.precioUnitario,
         precioMediaDocena: input.precioMediaDocena,
@@ -283,8 +316,8 @@ export const InventoryService = {
     }
   },
 
-  async getInventoryStats(): Promise<InventoryStats> {
-    return this.getInventarioStats()
+  async getInventoryStats(lowStockThreshold?: number): Promise<InventoryStats> {
+    return this.getInventarioStats(lowStockThreshold ?? 24)
   },
 
   generateBarcode(): string {
@@ -307,11 +340,12 @@ export const InventoryService = {
       })
 
       // Update or create inventario (stock/precios)
-      const inventario = await this.getInventarioByProductoId(input.id)
+      let inventario = await this.getInventarioByProductoId(input.id)
       if (inventario) {
-        await this.updateInventario({
+        inventario = await this.updateInventario({
           id: inventario.id,
           stock: (input as any).stock ?? inventario.stock,
+          stockMinimo: (input as any).stockMinimo ?? inventario.stockMinimo,
           costo: (input as any).costo ?? inventario.costo,
           precioUnitario: (input as any).precioUnitario ?? inventario.precioUnitario,
           precioMediaDocena: (input as any).precioMediaDocena ?? inventario.precioMediaDocena,
@@ -321,10 +355,10 @@ export const InventoryService = {
         // create inventory record if stock/costo/prices provided
         const shouldCreate = typeof (input as any).stock !== 'undefined' || typeof (input as any).costo !== 'undefined' || typeof (input as any).precioUnitario !== 'undefined'
         if (shouldCreate) {
-          await this.createInventario({
+          inventario = await this.createInventario({
             productoId: producto.id,
             stock: (input as any).stock ?? 0,
-            stockMinimo: 24,
+            stockMinimo: (input as any).stockMinimo ?? 24,
             costo: (input as any).costo ?? 0,
             precioUnitario: (input as any).precioUnitario ?? 0,
             precioMediaDocena: (input as any).precioMediaDocena ?? 0,

@@ -1,4 +1,4 @@
-import { ref, push, set, get, runTransaction, update, remove } from 'firebase/database'
+import { ref, push, set, get, update, remove, increment } from 'firebase/database'
 import { database } from '../app/firebase'
 
 const CAJAS_PATH = 'cajas'
@@ -26,6 +26,7 @@ export const CajaService = {
         apertura,
         totals: {
           efectivo: 0,
+          tarjeta: 0,
           transferencia: 0,
           qr: 0,
           totalVentas: 0,
@@ -60,18 +61,30 @@ export const CajaService = {
    */
   async getActiveCaja(userId?: string) {
     try {
+      if (!userId) return null
+
       // If we have a userId, try to read mapping first
-      if (userId) {
-        try {
-          const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
-          const mappedId = mapSnap.exists() ? mapSnap.val() : null
-          if (mappedId) {
-            const snap = await get(ref(database, `${CAJAS_PATH}/${mappedId}`))
-            if (snap.exists()) return snap.val()
+      try {
+        const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+        const mappedId = mapSnap.exists() ? mapSnap.val() : null
+        if (mappedId) {
+          const mappedCajaRef = ref(database, `${CAJAS_PATH}/${mappedId}`)
+          const snap = await get(mappedCajaRef)
+          if (snap.exists()) {
+            const mappedCaja = snap.val()
+            if (mappedCaja?.status === 'open') {
+              return mappedCaja
+            }
           }
-        } catch (err) {
-          console.warn('Error reading user active caja mapping', err)
+
+          try {
+            await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+          } catch (cleanupError) {
+            console.warn('Error removing stale active caja mapping', cleanupError)
+          }
         }
+      } catch (err) {
+        console.warn('Error reading user active caja mapping', err)
       }
 
       // Fallback: scan for any open caja (optionally created by userId)
@@ -80,13 +93,10 @@ export const CajaService = {
       const data = snapAll.val()
       const cajas = Object.values(data) as any[]
 
-      if (userId) {
-        const found = cajas.find((c) => c.status === 'open' && c.apertura?.createdBy === userId)
-        if (found) return found
-      }
+      const found = cajas.find((c) => c.status === 'open' && c.apertura?.createdBy === userId)
+      if (found) return found
 
-      // Generic fallback: return first open caja
-      return cajas.find((c) => c.status === 'open') || null
+      return null
     } catch (error) {
       console.error('Error getting active caja:', error)
       return null
@@ -101,21 +111,7 @@ export const CajaService = {
 
   async addSaleToCaja(cajaId: string, sale: { orderId?: string; method: string; amount: number; items?: any[]; createdBy?: string }) {
     try {
-      const totalsRef = ref(database, `${CAJAS_PATH}/${cajaId}/totals`)
-
-      await runTransaction(totalsRef, (current) => {
-        if (!current) {
-          current = { efectivo: 0, transferencia: 0, qr: 0, totalVentas: 0 }
-        }
-
-        const amt = Number(sale.amount || 0)
-        const method = sale.method || 'efectivo'
-        current[method] = (current[method] || 0) + amt
-        current.totalVentas = (current.totalVentas || 0) + amt
-
-        return current
-      })
-
+      const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
       const movRef = ref(database, `${CAJAS_PATH}/${cajaId}/movimientos`)
       const newMovRef = push(movRef)
       const movimiento = {
@@ -128,7 +124,15 @@ export const CajaService = {
         createdAt: new Date().toISOString(),
       }
 
-      await set(newMovRef, movimiento)
+      const amt = Number(sale.amount || 0)
+      const method = sale.method || 'efectivo'
+      const updates: Record<string, any> = {
+        [`totals/${method}`]: increment(amt),
+        'totals/totalVentas': increment(amt),
+        [`movimientos/${movimiento.id}`]: movimiento,
+      }
+
+      await update(cajaRef, updates)
       return movimiento
     } catch (error) {
       console.error('Error adding sale to caja:', error)
@@ -158,6 +162,40 @@ export const CajaService = {
     } catch (error) {
       console.error('Error closing caja:', error)
       throw error
+    }
+  },
+
+  async addRetiro(cajaId: string, retiro: { id: number; monto: number; motivo: string }) {
+    try {
+      const retiroRef = ref(database, `${CAJAS_PATH}/${cajaId}/remesas/${retiro.id}`)
+      await set(retiroRef, { ...retiro, createdAt: new Date().toISOString() })
+      return retiro
+    } catch (error) {
+      console.error('Error adding retiro:', error)
+      throw error
+    }
+  },
+
+  async removeRetiro(cajaId: string, retiroId: number) {
+    try {
+      await remove(ref(database, `${CAJAS_PATH}/${cajaId}/remesas/${retiroId}`))
+    } catch (error) {
+      console.error('Error removing retiro:', error)
+      throw error
+    }
+  },
+
+  async getRetiros(cajaId: string): Promise<{ id: number; monto: number; motivo: string }[]> {
+    try {
+      const snap = await get(ref(database, `${CAJAS_PATH}/${cajaId}/remesas`))
+      if (!snap.exists()) return []
+      const data = snap.val() as Record<string, any>
+      return Object.values(data).sort((a: any, b: any) =>
+        (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
+      )
+    } catch (error) {
+      console.error('Error getting retiros:', error)
+      return []
     }
   },
 
