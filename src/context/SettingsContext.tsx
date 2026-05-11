@@ -15,6 +15,9 @@ export interface StoreSettings {
   }
   inventory: {
     lowStockThreshold: number
+    // Admin-configured catalog metadata used in InventoryModal dropdowns.
+    productTypes: string[]
+    materials: string[]
   }
   printing: {
     autoPrint: boolean
@@ -36,6 +39,9 @@ const defaultSettings: StoreSettings = {
   },
   inventory: {
     lowStockThreshold: 5,
+    // Start empty so the admin defines their own catalog options in Configuracion.
+    productTypes: [],
+    materials: [],
   },
   printing: {
     autoPrint: false,

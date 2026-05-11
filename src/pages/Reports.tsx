@@ -8,7 +8,7 @@ import {
   DollarSign,
   Archive,
 } from "lucide-react";
-import { format } from "date-fns";
+import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -22,6 +22,7 @@ import { CorteService, type CorteRecord } from "../services/CorteService";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ReportType = "sales" | "products" | "cash-register";
+type DatePreset = "all" | "month" | "week" | "custom";
 
 type OrderItem = {
   id?: string;
@@ -144,6 +145,7 @@ const getItemKey = (item: OrderItem) => {
 
 export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<ReportType>("sales");
+  const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [startDate, setStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -183,7 +185,23 @@ export default function Reports() {
   );
   const endRange = useMemo(() => new Date(`${endDate}T23:59:59`), [endDate]);
 
+  useEffect(() => {
+    const today = new Date();
+    if (datePreset === "month") {
+      setStartDate(format(startOfMonth(today), "yyyy-MM-dd"));
+      setEndDate(format(endOfMonth(today), "yyyy-MM-dd"));
+      return;
+    }
+    if (datePreset === "week") {
+      const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+      setStartDate(format(weekStart, "yyyy-MM-dd"));
+      setEndDate(format(weekEnd, "yyyy-MM-dd"));
+    }
+  }, [datePreset]);
+
   const inRange = (value?: string) => {
+    if (datePreset === "all") return true;
     if (!value) return false;
     const d = new Date(value);
     return !isNaN(d.getTime()) && d >= startRange && d <= endRange;
@@ -191,13 +209,20 @@ export default function Reports() {
 
   const filteredOrders = useMemo(
     () => orders.filter((o) => inRange(o.date || o.createdAt)),
-    [orders, startRange, endRange],
+    [orders, startRange, endRange, datePreset],
   );
 
   const filteredCortes = useMemo(
     () => cortes.filter((c) => inRange(c.createdAt || c.aperturaInfo?.fecha)),
-    [cortes, startRange, endRange],
+    [cortes, startRange, endRange, datePreset],
   );
+
+  const periodLabel = useMemo(() => {
+    if (datePreset === "all") return "Todas";
+    if (datePreset === "month") return "Este Mes";
+    if (datePreset === "week") return "Esta Semana";
+    return `${toDate(startDate)} - ${toDate(endDate)}`;
+  }, [datePreset, startDate, endDate]);
 
   // ── Report data ─────────────────────────────────────────────────────────────
 
@@ -306,7 +331,6 @@ export default function Reports() {
 
   const generatePDF = () => {
     const doc = new jsPDF();
-    const periodLabel = `${toDate(startDate)} – ${toDate(endDate)}`;
     const generatedLabel = format(new Date(), "dd/MM/yyyy HH:mm", {
       locale: es,
     });
@@ -478,7 +502,15 @@ export default function Reports() {
       }
     }
 
-    doc.save(`reporte_${selectedReport}_${startDate}_${endDate}.pdf`);
+    const periodFileToken =
+      datePreset === "all"
+        ? "todas"
+        : datePreset === "month"
+          ? "este-mes"
+          : datePreset === "week"
+            ? "esta-semana"
+            : `${startDate}_${endDate}`;
+    doc.save(`reporte_${selectedReport}_${periodFileToken}.pdf`);
   };
 
   // ── Render helpers ──────────────────────────────────────────────────────────
@@ -835,36 +867,85 @@ export default function Reports() {
         <Card className="shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl">
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-300">
-              <Calendar className="w-4 h-4 text-gray-400" /> Rango de fechas
+              <Calendar className="w-4 h-4 text-gray-400" /> Período
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
-                Desde
-              </label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setStartDate(e.target.value)
-                }
-                className="w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+          <CardContent className="px-4 pb-4 space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <Button
+                onClick={() => setDatePreset("all")}
+                className={`${
+                  datePreset === "all"
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-white dark:bg-gray-900 !text-gray-900 dark:!text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                Todas
+              </Button>
+              <Button
+                onClick={() => setDatePreset("month")}
+                className={`${
+                  datePreset === "month"
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-white dark:bg-gray-900 !text-gray-900 dark:!text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                Este Mes
+              </Button>
+              <Button
+                onClick={() => setDatePreset("week")}
+                className={`${
+                  datePreset === "week"
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-white dark:bg-gray-900 !text-gray-900 dark:!text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                Esta Semana
+              </Button>
+              <Button
+                onClick={() => setDatePreset("custom")}
+                className={`${
+                  datePreset === "custom"
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-white dark:bg-gray-900 !text-gray-900 dark:!text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                Rango
+              </Button>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
-                Hasta
-              </label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setEndDate(e.target.value)
-                }
-                className="w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
+            {datePreset === "custom" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                    Desde
+                  </label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setStartDate(e.target.value)
+                    }
+                    className="w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                    Hasta
+                  </label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setEndDate(e.target.value)
+                    }
+                    className="w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Filtro activo: <span className="font-medium">{periodLabel}</span>
+            </p>
           </CardContent>
         </Card>
 

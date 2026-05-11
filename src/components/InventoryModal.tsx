@@ -17,13 +17,16 @@ interface InventoryModalProps {
   editingProduct?: Product | null
 }
 
-const productTypes = ['Bikini', 'Short', 'Bikini Deportivo', 'Entero', 'Cover Up']
-const materials = ['Lycra', 'Poliéster', 'Lycra Sport', 'Algodón', 'Nylon', 'Mezcla']
 const genders = ['Femenino', 'Masculino', 'Unisex']
 
 export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: InventoryModalProps) {
   const { settings } = useSettings()
   const lowStockThreshold = settings.inventory.lowStockThreshold
+
+  // Admin-configured options (Configuracion -> Inventario). These shadow the legacy hardcoded lists above.
+  const productTypes = settings.inventory.productTypes || []
+  const materials = settings.inventory.materials || []
+  const uniq = (items: string[]) => Array.from(new Set(items.filter(Boolean)))
   type FormState = {
     codigo: string
     nombre: string
@@ -45,6 +48,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     costo: '',
     precioUnitario: '',
   })
+
+  const productTypeOptions = uniq([...productTypes, ...(formData.tipo ? [formData.tipo] : [])])
+  const materialOptions = uniq([...materials, ...(formData.material ? [formData.material] : [])])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -289,12 +295,17 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   disabled={loading}
                 >
                   <option value="">Seleccionar...</option>
-                  {productTypes.map((type) => (
+                  {productTypeOptions.map((type) => (
                     <option key={type} value={type}>
                       {type}
                     </option>
                   ))}
                 </select>
+                {productTypes.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    No hay tipos configurados. Ve a Configuracion {'>'} Inventario para agregarlos.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -309,12 +320,17 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   disabled={loading}
                 >
                   <option value="">Seleccionar...</option>
-                  {materials.map((material) => (
+                  {materialOptions.map((material) => (
                     <option key={material} value={material}>
                       {material}
                     </option>
                   ))}
                 </select>
+                {materials.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    No hay materiales configurados. Ve a Configuracion {'>'} Inventario para agregarlos.
+                  </p>
+                )}
               </div>
 
               <div className="sm:col-span-2">

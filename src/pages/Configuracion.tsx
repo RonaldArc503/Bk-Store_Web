@@ -1,8 +1,7 @@
-import {
+﻿import {
   Settings,
   Sun,
   Moon,
-  Globe,
   Banknote,
   Bell,
   BellOff,
@@ -14,13 +13,13 @@ import {
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
-import { useSettings, type StoreSettings } from '../context/SettingsContext'
+import { useSettings } from '../context/SettingsContext'
 import { useState } from 'react'
 import { toast } from 'react-toastify'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 
-/* ─── Toggle switch reutilizable ─── */
+/* --- Toggle switch reutilizable --- */
 
 function Toggle({
   checked,
@@ -51,7 +50,7 @@ function Toggle({
   )
 }
 
-/* ─── Select reutilizable ─── */
+/* --- Select reutilizable --- */
 
 function Select<T extends string>({
   value,
@@ -77,7 +76,7 @@ function Select<T extends string>({
   )
 }
 
-/* ─── Card wrapper ─── */
+/* --- Card wrapper --- */
 
 function SettingCard({ children }: { children: React.ReactNode }) {
   return (
@@ -129,7 +128,7 @@ function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string })
   )
 }
 
-/* ─── Secciones ─── */
+/* --- Secciones --- */
 
 function ThemeSection() {
   const { theme, toggleTheme } = useTheme()
@@ -150,30 +149,7 @@ function ThemeSection() {
         >
           <Toggle checked={isDark} onChange={toggleTheme} label="Cambiar tema" />
         </SettingRow>
-      </SettingCard>
-    </div>
-  )
-}
 
-function LanguageSection() {
-  const { settings, updateSettings } = useSettings()
-  const languageOptions: { value: StoreSettings['language']; label: string }[] = [
-    { value: 'es', label: 'Español' },
-    { value: 'en', label: 'English' },
-  ]
-
-  return (
-    <div>
-      <SectionTitle icon={<Globe className="w-4 h-4 text-blue-500 dark:text-blue-400" />} title="Idioma" />
-      <SettingCard>
-        <SettingRow
-          icon={<Globe className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400" />}
-          title="Idioma"
-          description="Idioma de la interfaz"
-          border={false}
-        >
-          <Select value={settings.language} onChange={(v) => updateSettings({ language: v })} options={languageOptions} />
-        </SettingRow>
       </SettingCard>
     </div>
   )
@@ -200,6 +176,7 @@ function NotificationsSection() {
         <SettingRow icon={<Bell className="w-5 h-5 shrink-0 text-orange-500 dark:text-orange-400" />} title="Recordatorio de corte" description="Recordar hacer el corte de caja al final del día" border={false}>
           <Toggle checked={notifications.cashRegister} onChange={(v) => updateNotifications({ cashRegister: v })} label="Recordatorio de corte de caja" />
         </SettingRow>
+
       </SettingCard>
     </div>
   )
@@ -208,6 +185,29 @@ function NotificationsSection() {
 function InventorySection() {
   const { settings, updateInventory } = useSettings()
   const [localThreshold, setLocalThreshold] = useState(String(settings.inventory.lowStockThreshold))
+  const [newProductType, setNewProductType] = useState('')
+  const [newMaterial, setNewMaterial] = useState('')
+
+  const productTypes = settings.inventory.productTypes || []
+  const materials = settings.inventory.materials || []
+
+  const normalizeListValue = (v: string) => v.trim().replace(/\s+/g, ' ')
+
+  const addToList = (key: 'productTypes' | 'materials', raw: string) => {
+    const value = normalizeListValue(raw)
+    if (!value) return
+
+    const current = (settings.inventory[key] || []) as string[]
+    const exists = current.some((x) => x.toLowerCase() === value.toLowerCase())
+    if (exists) return
+
+    updateInventory({ [key]: [...current, value] } as any)
+  }
+
+  const removeFromList = (key: 'productTypes' | 'materials', value: string) => {
+    const current = (settings.inventory[key] || []) as string[]
+    updateInventory({ [key]: current.filter((x) => x !== value) } as any)
+  }
 
   const handleBlur = () => {
     const n = parseInt(localThreshold, 10)
@@ -237,6 +237,120 @@ function InventorySection() {
             <span className="text-xs text-gray-500 dark:text-gray-400">unidades</span>
           </div>
         </SettingRow>
+
+        <div className="border-t border-gray-50 dark:border-gray-800 p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-violet-500 dark:text-violet-400" />
+            <p className="text-sm font-medium text-gray-900 dark:text-white">Catálogo: Tipo de prenda y material</p>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Estas opciones se usan al crear/editar productos en Inventario.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                Tipos de prenda
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={newProductType}
+                  onChange={(e) => setNewProductType(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addToList('productTypes', newProductType)
+                      setNewProductType('')
+                    }
+                  }}
+                  placeholder="Ej: Bikini, Short..."
+                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToList('productTypes', newProductType)
+                    setNewProductType('')
+                  }}
+                  className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors"
+                >
+                  Agregar
+                </button>
+              </div>
+              {productTypes.length === 0 ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  No hay tipos configurados. Agrega al menos 1 para poder seleccionar en Inventario.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {productTypes.map((t: string) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => removeFromList('productTypes', t)}
+                      className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 hover:border-red-300 dark:hover:border-red-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      title="Quitar"
+                    >
+                      <span className="truncate max-w-[220px]">{t}</span>
+                      <span className="opacity-60 group-hover:opacity-100">x</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                Materiales
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={newMaterial}
+                  onChange={(e) => setNewMaterial(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addToList('materials', newMaterial)
+                      setNewMaterial('')
+                    }
+                  }}
+                  placeholder="Ej: Algodón, Poliéster..."
+                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToList('materials', newMaterial)
+                    setNewMaterial('')
+                  }}
+                  className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors"
+                >
+                  Agregar
+                </button>
+              </div>
+              {materials.length === 0 ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  No hay materiales configurados. Agrega al menos 1 para poder seleccionar en Inventario.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {materials.map((m: string) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => removeFromList('materials', m)}
+                      className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 hover:border-red-300 dark:hover:border-red-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      title="Quitar"
+                    >
+                      <span className="truncate max-w-[220px]">{m}</span>
+                      <span className="opacity-60 group-hover:opacity-100">x</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </SettingCard>
     </div>
   )
@@ -325,7 +439,7 @@ function DataSection({
   )
 }
 
-/* ─── Página principal ─── */
+/* --- Pagina principal --- */
 
 export default function ConfiguracionPage() {
   const { resetSettings } = useSettings()
@@ -369,7 +483,6 @@ export default function ConfiguracionPage() {
 
           <div className="space-y-8">
             <ThemeSection />
-            <LanguageSection />
             <NotificationsSection />
             <InterfaceSection />
             <InventorySection />
@@ -406,7 +519,7 @@ export default function ConfiguracionPage() {
         <ConfirmDialog
           isOpen={isDataResetOpen}
           title="Borrar datos de prueba"
-          description="Se eliminaran ventas, cajas, cortes, inventario y movimientos. Los usuarios se conservaran."
+          description="Se eliminarán ventas, cajas, cortes, inventario y movimientos. Los usuarios se conservarán."
           confirmLabel="Borrar datos"
           cancelLabel="Cancelar"
           danger
@@ -420,3 +533,5 @@ export default function ConfiguracionPage() {
     </div>
   )
 }
+
+
