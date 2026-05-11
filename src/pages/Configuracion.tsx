@@ -19,12 +19,13 @@
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
 import { useSettings, type InventoryCatalogItem } from '../context/SettingsContext'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import type { Producto } from '../types/product'
+import * as XLSX from 'xlsx'
 
 /* --- Toggle switch reutilizable --- */
 
@@ -752,14 +753,77 @@ function InterfaceSection() {
 
 function DataSection({
   onReset,
+  onDownloadBackupJson,
+  onDownloadBackupExcel,
+  onImportBackupJson,
   loading,
+  backupLoading,
+  importLoading,
 }: {
   onReset: () => void
+  onDownloadBackupJson: () => void
+  onDownloadBackupExcel: () => void
+  onImportBackupJson: (file: File) => void
   loading: boolean
+  backupLoading: boolean
+  importLoading: boolean
 }) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
   return (
     <SettingsSection icon={<Database className="w-4 h-4 text-red-500 dark:text-red-400" />} title="Datos">
       <SettingCard>
+        <SettingRow
+          icon={<Database className="w-5 h-5 shrink-0 text-emerald-500 dark:text-emerald-400" />}
+          title="Descargar backup completo"
+          description="Exporta todos los datos del sistema en JSON o Excel."
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onDownloadBackupJson}
+              disabled={backupLoading || importLoading}
+              className="px-3 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition disabled:opacity-50"
+            >
+              {backupLoading ? 'Generando...' : 'JSON'}
+            </button>
+            <button
+              type="button"
+              onClick={onDownloadBackupExcel}
+              disabled={backupLoading || importLoading}
+              className="px-3 py-2 text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition disabled:opacity-50"
+            >
+              {backupLoading ? 'Generando...' : 'Excel'}
+            </button>
+          </div>
+        </SettingRow>
+        <SettingRow
+          icon={<Database className="w-5 h-5 shrink-0 text-sky-500 dark:text-sky-400" />}
+          title="Importar backup JSON"
+          description="Restaura toda la base de datos y configuraciones locales desde un respaldo."
+        >
+          <div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) onImportBackupJson(file)
+                e.currentTarget.value = ''
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              disabled={backupLoading || importLoading}
+              className="px-3 py-2 text-sm font-medium text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition disabled:opacity-50"
+            >
+              {importLoading ? 'Importando...' : 'Importar JSON'}
+            </button>
+          </div>
+        </SettingRow>
         <SettingRow
           icon={<Database className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />}
           title="Borrar datos de prueba"
@@ -783,10 +847,14 @@ function DataSection({
 /* --- Pagina principal --- */
 
 export default function ConfiguracionPage() {
-  const { resetSettings, lastSavedAt, canUndo, undoLastChange } = useSettings()
+  const { settings, resetSettings, lastSavedAt, canUndo, undoLastChange } = useSettings()
   const [showReset, setShowReset] = useState(false)
   const [isDataResetOpen, setIsDataResetOpen] = useState(false)
+  const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false)
   const [isDataResetLoading, setIsDataResetLoading] = useState(false)
+  const [isBackupLoading, setIsBackupLoading] = useState(false)
+  const [isImportLoading, setIsImportLoading] = useState(false)
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
   const [savedPulse, setSavedPulse] = useState(false)
 
   useEffect(() => {
@@ -810,6 +878,116 @@ export default function ConfiguracionPage() {
       toast.error('Error al borrar datos')
     } finally {
       setIsDataResetLoading(false)
+    }
+  }
+
+  const triggerDownload = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const buildBackupFileName = (ext: 'json' | 'xlsx') => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    return `bk-store-backup-${stamp}.${ext}`
+  }
+
+  const handleDownloadBackupJson = async () => {
+    if (isBackupLoading || isImportLoading) return
+    setIsBackupLoading(true)
+    try {
+      const backup = await MaintenanceService.createFullBackup(settings)
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      })
+      triggerDownload(blob, buildBackupFileName('json'))
+      toast.success('Backup JSON descargado')
+    } catch (error) {
+      console.error(error)
+      toast.error('No se pudo descargar el backup JSON')
+    } finally {
+      setIsBackupLoading(false)
+    }
+  }
+
+  const flattenForSheet = (value: unknown): Record<string, unknown>[] => {
+    if (Array.isArray(value)) {
+      return value.map((item, idx) => ({
+        index: idx + 1,
+        ...(typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : { value: item }),
+      }))
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.entries(value as Record<string, unknown>).map(([key, item]) => ({
+        key,
+        ...(typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : { value: item }),
+      }))
+    }
+
+    return [{ value }]
+  }
+
+  const handleDownloadBackupExcel = async () => {
+    if (isBackupLoading || isImportLoading) return
+    setIsBackupLoading(true)
+    try {
+      const backup = await MaintenanceService.createFullBackup(settings)
+      const wb = XLSX.utils.book_new()
+      const orderedKeys = Object.keys(backup.database || {}).sort((a, b) => a.localeCompare(b))
+
+      const resumen = [
+        { campo: 'fuente', valor: backup.meta.source },
+        { campo: 'version', valor: backup.meta.version },
+        { campo: 'exportado_en', valor: backup.meta.exportedAt },
+        { campo: 'modulos', valor: orderedKeys.length },
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen')
+
+      for (const key of orderedKeys) {
+        const rows = flattenForSheet((backup.database as Record<string, unknown>)[key])
+        const sheetName = key.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 31) || 'data'
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName)
+      }
+
+      const localRows = flattenForSheet(backup.local?.settings || {})
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localRows), 'config_local')
+      XLSX.writeFile(wb, buildBackupFileName('xlsx'))
+      toast.success('Backup Excel descargado')
+    } catch (error) {
+      console.error(error)
+      toast.error('No se pudo descargar el backup Excel')
+    } finally {
+      setIsBackupLoading(false)
+    }
+  }
+
+  const handleImportBackupJson = async (file: File) => {
+    if (isBackupLoading || isImportLoading) return
+    setIsImportLoading(true)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text) as any
+      if (!parsed?.database || typeof parsed.database !== 'object') {
+        throw new Error('Formato inválido: falta el bloque database')
+      }
+
+      await MaintenanceService.restoreFullBackup(parsed)
+
+      if (parsed?.local?.settings) {
+        localStorage.setItem('bk-store-settings', JSON.stringify(parsed.local.settings))
+      }
+
+      toast.success('Backup importado correctamente. Recargando...')
+      setTimeout(() => window.location.reload(), 700)
+    } catch (error) {
+      console.error(error)
+      toast.error('No se pudo importar el backup JSON')
+    } finally {
+      setIsImportLoading(false)
     }
   }
 
@@ -849,7 +1027,22 @@ export default function ConfiguracionPage() {
             <InterfaceSection />
             <InventorySection />
             <PrintingSection />
-            <DataSection onReset={() => setIsDataResetOpen(true)} loading={isDataResetLoading} />
+            <DataSection
+              onReset={() => setIsDataResetOpen(true)}
+              onDownloadBackupJson={() => {
+                void handleDownloadBackupJson()
+              }}
+              onDownloadBackupExcel={() => {
+                void handleDownloadBackupExcel()
+              }}
+              onImportBackupJson={(file) => {
+                setPendingImportFile(file)
+                setIsImportConfirmOpen(true)
+              }}
+              loading={isDataResetLoading}
+              backupLoading={isBackupLoading}
+              importLoading={isImportLoading}
+            />
           </div>
 
           <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
@@ -889,6 +1082,26 @@ export default function ConfiguracionPage() {
           onConfirm={() => {
             setIsDataResetOpen(false)
             void handleClearData()
+          }}
+        />
+        <ConfirmDialog
+          isOpen={isImportConfirmOpen}
+          title="Importar backup JSON"
+          description="Esta acción sobrescribirá todos los datos actuales del sistema. ¿Deseas continuar?"
+          confirmLabel="Sí, importar backup"
+          cancelLabel="Cancelar"
+          danger
+          onCancel={() => {
+            setIsImportConfirmOpen(false)
+            setPendingImportFile(null)
+          }}
+          onConfirm={() => {
+            const file = pendingImportFile
+            setIsImportConfirmOpen(false)
+            setPendingImportFile(null)
+            if (file) {
+              void handleImportBackupJson(file)
+            }
           }}
         />
       </main>
