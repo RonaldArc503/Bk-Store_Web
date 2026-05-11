@@ -46,6 +46,9 @@ type OrderRecord = {
   date?: string;
   createdAt?: string;
   items?: OrderItem[];
+  subtotal?: number;
+  tax?: number;
+  taxRate?: number;
   method?: string;
   total?: number;
 };
@@ -141,6 +144,19 @@ const getItemKey = (item: OrderItem) => {
   return `name:${normalizedName}`;
 };
 
+const getTicket = (orderId: string) => orderId.slice(-8).toUpperCase();
+const getOrderSubtotal = (order: OrderRecord) =>
+  toNumber(order.subtotal) ||
+  (order.items || []).reduce((sum, item) => sum + getItemSubtotal(item), 0);
+const getOrderTotal = (order: OrderRecord) => toNumber(order.total);
+const getOrderTax = (order: OrderRecord) => {
+  const subtotal = getOrderSubtotal(order);
+  const total = getOrderTotal(order);
+  const taxFromRecord = toNumber(order.tax);
+  if (taxFromRecord > 0) return taxFromRecord;
+  return Math.max(0, subtotal > 0 ? total - subtotal : 0);
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Reports() {
@@ -151,6 +167,7 @@ export default function Reports() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [cortes, setCortes] = useState<CorteRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -513,6 +530,65 @@ export default function Reports() {
     doc.save(`reporte_${selectedReport}_${periodFileToken}.pdf`);
   };
 
+  const downloadOrderReceiptPdf = (order: OrderRecord) => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    const width = 80;
+    const baseHeight = 95;
+    const lineHeight = 5;
+    const height = Math.max(baseHeight, 55 + items.length * lineHeight + 35);
+
+    const subtotal = getOrderSubtotal(order);
+    const total = getOrderTotal(order);
+    const tax = getOrderTax(order);
+    const method = toPaymentLabel(order.method);
+    const date = toDateTime(order.date || order.createdAt);
+    const ticket = getTicket(order.id);
+
+    const doc = new jsPDF({
+      unit: "mm",
+      format: [width, height],
+    });
+
+    const left = 6;
+    const right = width - 6;
+    let y = 10;
+    const receiptFontSize = 8;
+
+    doc.setFontSize(12);
+    doc.text("Bikini Store", width / 2, y, { align: "center" });
+    y += 5;
+    doc.setFontSize(receiptFontSize);
+    doc.text(`Ticket: ${ticket}`, left, y);
+    y += 4;
+    doc.text(`Fecha: ${date}`, left, y);
+    y += 4;
+    doc.text(`Pago: ${method}`, left, y);
+    y += 3;
+    doc.line(left, y, right, y);
+    y += 4;
+
+    items.forEach((item) => {
+      const name = getItemName(item);
+      const qty = getItemQuantity(item);
+      const lineTotal = getItemSubtotal(item);
+      doc.text(`${qty} x ${name}`, left, y);
+      doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: "right" });
+      y += lineHeight;
+    });
+
+    y += 2;
+    doc.line(left, y, right, y);
+    y += 4;
+    doc.text(`Total sin IVA: $${subtotal.toFixed(2)}`, left, y);
+    y += 4;
+    doc.text(`IVA: $${tax.toFixed(2)}`, left, y);
+    y += 5;
+    doc.text(`Total con IVA: $${total.toFixed(2)}`, left, y);
+
+    const safeId = String(order.id).replace(/[^a-zA-Z0-9_-]/g, "");
+    doc.save(`comprobante-${safeId || "venta"}.pdf`);
+  };
+
   // ── Render helpers ──────────────────────────────────────────────────────────
 
   const summaryCards = [
@@ -576,9 +652,13 @@ export default function Reports() {
         ) : (
           <>
             {salesData.map((r, i) => (
+              (() => {
+                const order = filteredOrders[i];
+                return (
               <tr
                 key={i}
-                className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
+                onClick={() => setSelectedOrder(order)}
               >
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">
                   {r.ticket}
@@ -604,6 +684,8 @@ export default function Reports() {
                   {toMoney(r.total)}
                 </td>
               </tr>
+                );
+              })()
             ))}
             <tr className="bg-blue-50 dark:bg-blue-950/30 font-medium border-t border-blue-200 dark:border-blue-800">
               <td
@@ -992,6 +1074,88 @@ export default function Reports() {
           </CardContent>
         </Card>
       </main>
+
+      {selectedOrder && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setSelectedOrder(null)}
+        >
+          <div
+            className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                  Detalle de venta
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Ticket: {getTicket(selectedOrder.id)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="px-2 py-1 text-sm rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Fecha</p>
+                  <p className="font-medium">{toDateTime(selectedOrder.date || selectedOrder.createdAt)}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Tipo de pago</p>
+                  <p className="font-medium">{toPaymentLabel(selectedOrder.method)}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total sin IVA</p>
+                  <p className="font-medium">{toMoney(getOrderSubtotal(selectedOrder))}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total con IVA</p>
+                  <p className="font-semibold">{toMoney(getOrderTotal(selectedOrder))}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-800/60">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs uppercase text-gray-500">Producto</th>
+                      <th className="px-3 py-2 text-center text-xs uppercase text-gray-500">Cant.</th>
+                      <th className="px-3 py-2 text-right text-xs uppercase text-gray-500">Precio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selectedOrder.items || []).map((item, idx) => (
+                      <tr key={`${getItemKey(item)}-${idx}`} className="border-t border-gray-100 dark:border-gray-800">
+                        <td className="px-3 py-2">{getItemName(item)}</td>
+                        <td className="px-3 py-2 text-center">{getItemQuantity(item)}</td>
+                        <td className="px-3 py-2 text-right font-medium">{toMoney(getItemSubtotal(item))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => downloadOrderReceiptPdf(selectedOrder)}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Download className="w-4 h-4" />
+                  Descargar comprobante PDF
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -250,7 +250,9 @@ export const InventoryService = {
         codigo: input.codigo,
         nombre: input.nombre,
         tipo: input.tipo,
+        tipoId: (input as any).tipoId,
         material: input.material,
+        materialId: (input as any).materialId,
         genero: input.genero,
       })
 
@@ -283,7 +285,9 @@ export const InventoryService = {
           codigo: p.codigo,
           nombre: p.nombre,
           tipo: p.tipo,
+          tipoId: (p as any).tipoId,
           material: p.material,
+          materialId: (p as any).materialId,
           genero: p.genero,
           stock: inv?.stock || 0,
           costo: inv?.costo || 0,
@@ -333,7 +337,9 @@ export const InventoryService = {
         // pass through other optional product fields if provided
         codigo: (input as any).codigo,
         tipo: (input as any).tipo,
+        tipoId: (input as any).tipoId,
         material: (input as any).material,
+        materialId: (input as any).materialId,
         genero: (input as any).genero,
         descripcion: (input as any).descripcion,
         estado: (input as any).estado,

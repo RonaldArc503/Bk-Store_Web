@@ -2,11 +2,20 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
 } from 'react'
 
+export interface InventoryCatalogItem {
+  id: string
+  label: string
+}
+
 export interface StoreSettings {
+  // Stable IDs for catalog-driven dropdowns (tipo/material) to avoid casing/accents drift.
+  // Products still store the human label for display, but can also store the ID for consistency.
+  inventoryCatalogVersion?: 1
   language: 'es' | 'en'
   notifications: {
     lowStock: boolean
@@ -16,8 +25,8 @@ export interface StoreSettings {
   inventory: {
     lowStockThreshold: number
     // Admin-configured catalog metadata used in InventoryModal dropdowns.
-    productTypes: string[]
-    materials: string[]
+    productTypes: InventoryCatalogItem[]
+    materials: InventoryCatalogItem[]
   }
   printing: {
     autoPrint: boolean
@@ -31,6 +40,7 @@ export interface StoreSettings {
 const STORAGE_KEY = 'bk-store-settings'
 
 const defaultSettings: StoreSettings = {
+  inventoryCatalogVersion: 1,
   language: 'es',
   notifications: {
     lowStock: true,
@@ -52,17 +62,74 @@ const defaultSettings: StoreSettings = {
   },
 }
 
+function normalizeCatalogLabel(v: string): string {
+  return v.trim().replace(/\s+/g, ' ')
+}
+
+function slugifyCatalogId(label: string): string {
+  // Basic, stable-ish slug for IDs. Keeps ASCII so it's safe in keys/URLs.
+  const base = normalizeCatalogLabel(label)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return base || 'item'
+}
+
+function toCatalogItems(input: unknown): InventoryCatalogItem[] {
+  if (!Array.isArray(input)) return []
+  if (input.length === 0) return []
+
+  const first = input[0] as unknown
+  if (typeof first === 'string') {
+    const seen = new Set<string>()
+    const out: InventoryCatalogItem[] = []
+    for (const raw of input as string[]) {
+      const label = normalizeCatalogLabel(raw)
+      if (!label) continue
+      const key = label.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ id: slugifyCatalogId(label), label })
+    }
+    return out
+  }
+
+  if (typeof first === 'object' && first !== null) {
+    const seen = new Set<string>()
+    const out: InventoryCatalogItem[] = []
+    for (const it of input as any[]) {
+      const id = typeof it?.id === 'string' ? it.id : ''
+      const label = typeof it?.label === 'string' ? normalizeCatalogLabel(it.label) : ''
+      if (!label) continue
+      const key = (id || label).toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ id: id || slugifyCatalogId(label), label })
+    }
+    return out
+  }
+
+  return []
+}
+
 function loadSettings(): StoreSettings {
   if (typeof window === 'undefined') return defaultSettings
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultSettings
     const parsed = JSON.parse(raw) as Partial<StoreSettings>
+    const parsedInventory = (parsed.inventory || {}) as any
+    const mergedInventory = { ...defaultSettings.inventory, ...parsedInventory } as any
+    const productTypes = toCatalogItems(mergedInventory.productTypes)
+    const materials = toCatalogItems(mergedInventory.materials)
     return {
       ...defaultSettings,
       ...parsed,
       notifications: { ...defaultSettings.notifications, ...(parsed.notifications || {}) },
-      inventory: { ...defaultSettings.inventory, ...(parsed.inventory || {}) },
+      inventoryCatalogVersion: 1,
+      inventory: { ...mergedInventory, productTypes, materials },
       printing: { ...defaultSettings.printing, ...(parsed.printing || {}) },
       ui: { ...defaultSettings.ui, ...(parsed.ui || {}) },
     }
@@ -77,11 +144,15 @@ function persist(s: StoreSettings) {
 
 interface SettingsContextValue {
   settings: StoreSettings
+  lastSavedAt: number
+  canUndo: boolean
   updateSettings: (patch: Partial<StoreSettings>) => void
   updateNotifications: (patch: Partial<StoreSettings['notifications']>) => void
   updateInventory: (patch: Partial<StoreSettings['inventory']>) => void
+  updateInventoryCatalog: (key: 'productTypes' | 'materials', next: InventoryCatalogItem[]) => void
   updatePrinting: (patch: Partial<StoreSettings['printing']>) => void
   updateUI: (patch: Partial<StoreSettings['ui']>) => void
+  undoLastChange: () => void
   resetSettings: () => void
 }
 
@@ -89,11 +160,21 @@ const SettingsContext = createContext<SettingsContextValue | null>(null)
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<StoreSettings>(loadSettings)
+  const [lastSavedAt, setLastSavedAt] = useState<number>(() => Date.now())
+  const [undoSnapshot, setUndoSnapshot] = useState<StoreSettings | null>(null)
+  const canUndo = undoSnapshot !== null
+
+  useEffect(() => {
+    // Keep lastSavedAt reasonably current on first mount/load.
+    setLastSavedAt(Date.now())
+  }, [])
 
   const updateSettings = useCallback((patch: Partial<StoreSettings>) => {
     setSettings((prev) => {
+      setUndoSnapshot(prev)
       const next = { ...prev, ...patch }
       persist(next)
+      setLastSavedAt(Date.now())
       return next
     })
   }, [])
@@ -101,8 +182,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateNotifications = useCallback(
     (patch: Partial<StoreSettings['notifications']>) => {
       setSettings((prev) => {
+        setUndoSnapshot(prev)
         const next = { ...prev, notifications: { ...prev.notifications, ...patch } }
         persist(next)
+        setLastSavedAt(Date.now())
         return next
       })
     },
@@ -112,8 +195,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateInventory = useCallback(
     (patch: Partial<StoreSettings['inventory']>) => {
       setSettings((prev) => {
+        setUndoSnapshot(prev)
         const next = { ...prev, inventory: { ...prev.inventory, ...patch } }
         persist(next)
+        setLastSavedAt(Date.now())
+        return next
+      })
+    },
+    [],
+  )
+
+  const updateInventoryCatalog = useCallback(
+    (key: 'productTypes' | 'materials', nextList: InventoryCatalogItem[]) => {
+      setSettings((prev) => {
+        setUndoSnapshot(prev)
+        const next = { ...prev, inventory: { ...prev.inventory, [key]: nextList } }
+        persist(next)
+        setLastSavedAt(Date.now())
         return next
       })
     },
@@ -123,8 +221,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updatePrinting = useCallback(
     (patch: Partial<StoreSettings['printing']>) => {
       setSettings((prev) => {
+        setUndoSnapshot(prev)
         const next = { ...prev, printing: { ...prev.printing, ...patch } }
         persist(next)
+        setLastSavedAt(Date.now())
         return next
       })
     },
@@ -134,28 +234,47 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateUI = useCallback(
     (patch: Partial<StoreSettings['ui']>) => {
       setSettings((prev) => {
+        setUndoSnapshot(prev)
         const next = { ...prev, ui: { ...prev.ui, ...patch } }
         persist(next)
+        setLastSavedAt(Date.now())
         return next
       })
     },
     [],
   )
 
+  const undoLastChange = useCallback(() => {
+    setSettings((prev) => {
+      if (!undoSnapshot) return prev
+      const next = undoSnapshot
+      setUndoSnapshot(null)
+      persist(next)
+      setLastSavedAt(Date.now())
+      return next
+    })
+  }, [undoSnapshot])
+
   const resetSettings = useCallback(() => {
     setSettings(defaultSettings)
+    setUndoSnapshot(null)
     persist(defaultSettings)
+    setLastSavedAt(Date.now())
   }, [])
 
   return (
     <SettingsContext.Provider
       value={{
         settings,
+        lastSavedAt,
+        canUndo,
         updateSettings,
         updateNotifications,
         updateInventory,
+        updateInventoryCatalog,
         updatePrinting,
         updateUI,
+        undoLastChange,
         resetSettings,
       }}
     >

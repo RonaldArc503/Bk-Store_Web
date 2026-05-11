@@ -3,12 +3,12 @@
  * Modal para crear y editar productos
  */
 
-import { useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { X, Copy } from 'lucide-react'
 import { BarcodeImageScanButton } from './BarcodeImageScanButton'
 import type { Product } from '../types/product'
 import { InventoryService } from '../services/InventoryService'
-import { useSettings } from '../context/SettingsContext'
+import { useSettings, type InventoryCatalogItem } from '../context/SettingsContext'
 
 interface InventoryModalProps {
   isOpen: boolean
@@ -23,15 +23,36 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
   const { settings } = useSettings()
   const lowStockThreshold = settings.inventory.lowStockThreshold
 
-  // Admin-configured options (Configuracion -> Inventario). These shadow the legacy hardcoded lists above.
-  const productTypes = settings.inventory.productTypes || []
-  const materials = settings.inventory.materials || []
-  const uniq = (items: string[]) => Array.from(new Set(items.filter(Boolean)))
+  // Admin-configured options (Configuracion > Inventario).
+  const productTypes = (settings.inventory.productTypes || []) as InventoryCatalogItem[]
+  const materials = (settings.inventory.materials || []) as InventoryCatalogItem[]
+
+  const normalizeKey = (v: string) =>
+    v
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+  const isLegacyId = (id: string) => id.startsWith('legacy:')
+  const legacyLabelFromId = (id: string) => (isLegacyId(id) ? id.slice('legacy:'.length) : '')
+
+  const resolveCatalogLabel = (items: InventoryCatalogItem[], id: string) => {
+    if (!id) return ''
+    if (isLegacyId(id)) return legacyLabelFromId(id)
+    return items.find((x) => x.id === id)?.label || ''
+  }
+
+  const findIdByLabel = (items: InventoryCatalogItem[], label: string) => {
+    const key = normalizeKey(label)
+    return items.find((x) => normalizeKey(x.label) === key)?.id || ''
+  }
   type FormState = {
     codigo: string
     nombre: string
-    tipo: string
-    material: string
+    tipoId: string
+    materialId: string
     genero: string
     stock: number | ''
     costo: number | ''
@@ -41,16 +62,31 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
   const [formData, setFormData] = useState<FormState>({
     codigo: '',
     nombre: '',
-    tipo: '',
-    material: '',
+    tipoId: '',
+    materialId: '',
     genero: 'Femenino',
     stock: '',
     costo: '',
     precioUnitario: '',
   })
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({})
 
-  const productTypeOptions = uniq([...productTypes, ...(formData.tipo ? [formData.tipo] : [])])
-  const materialOptions = uniq([...materials, ...(formData.material ? [formData.material] : [])])
+  const productTypeOptions = useMemo(() => {
+    const opts = [...productTypes]
+    if (isLegacyId(formData.tipoId)) {
+      opts.push({ id: formData.tipoId, label: legacyLabelFromId(formData.tipoId) })
+    }
+    return opts
+  }, [productTypes, formData.tipoId])
+
+  const materialOptions = useMemo(() => {
+    const opts = [...materials]
+    if (isLegacyId(formData.materialId)) {
+      opts.push({ id: formData.materialId, label: legacyLabelFromId(formData.materialId) })
+    }
+    return opts
+  }, [materials, formData.materialId])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -58,11 +94,19 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
   useEffect(() => {
     if (editingProduct) {
+      const tipoId =
+        editingProduct.tipoId ||
+        findIdByLabel(productTypes, editingProduct.tipo) ||
+        (editingProduct.tipo ? `legacy:${editingProduct.tipo}` : '')
+      const materialId =
+        editingProduct.materialId ||
+        findIdByLabel(materials, editingProduct.material) ||
+        (editingProduct.material ? `legacy:${editingProduct.material}` : '')
       setFormData({
         codigo: editingProduct.codigo,
         nombre: editingProduct.nombre,
-        tipo: editingProduct.tipo,
-        material: editingProduct.material,
+        tipoId,
+        materialId,
         genero: editingProduct.genero,
         stock: editingProduct.stock === 0 ? '' : editingProduct.stock,
         costo: editingProduct.costo === 0 ? '' : editingProduct.costo,
@@ -72,8 +116,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
       setFormData({
         codigo: '',
         nombre: '',
-        tipo: '',
-        material: '',
+        tipoId: '',
+        materialId: '',
         genero: 'Femenino',
         stock: '',
         costo: '',
@@ -81,6 +125,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
       })
     }
     setError('')
+    setFieldErrors({})
     setStockWarning(false)
   }, [editingProduct, isOpen])
 
@@ -95,6 +140,15 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         ? (value === '' ? '' : Number(value))
         : value,
     }))
+
+    // Clear per-field errors as the user fixes inputs.
+    setFieldErrors((prev) => {
+      const key = name as keyof FormState
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete (next as any)[key]
+      return next
+    })
 
     if (name === 'stock') {
       setStockWarning(Number(value) < lowStockThreshold)
@@ -124,27 +178,37 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault()
   }
 
+  const focusFirstInvalid = (orderedFields: (keyof FormState)[]) => {
+    const root = formRef.current
+    if (!root) return
+    for (const f of orderedFields) {
+      const el = root.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${String(f)}"]`)
+      if (el) {
+        el.focus()
+        return
+      }
+    }
+  }
+
   const validateForm = (): boolean => {
-    if (!formData.nombre.trim()) {
-      setError('El nombre del producto es requerido')
+    const errs: Partial<Record<keyof FormState, string>> = {}
+
+    if (!formData.nombre.trim()) errs.nombre = 'El nombre del producto es requerido'
+    if (!formData.tipoId) errs.tipoId = 'Selecciona un tipo de prenda'
+    if (!formData.materialId) errs.materialId = 'Selecciona un material'
+    if (!unitario || unitario <= 0) errs.precioUnitario = 'El precio unitario debe ser mayor a 0'
+    if (costo > 0 && unitario > 0 && costo >= unitario) {
+      errs.costo = `El costo ($${costo.toFixed(2)}) debe ser menor al precio unitario ($${unitario.toFixed(2)})`
+    }
+
+    setFieldErrors(errs)
+
+    if (Object.keys(errs).length > 0) {
+      setError('Revisa los campos marcados en rojo')
+      focusFirstInvalid(['nombre', 'tipoId', 'materialId', 'precioUnitario', 'costo'])
       return false
     }
-    if (!formData.tipo) {
-      setError('Selecciona un tipo de prenda')
-      return false
-    }
-    if (!formData.material) {
-      setError('Selecciona un material')
-      return false
-    }
-    if (!unitario || unitario <= 0) {
-      setError('El precio unitario debe ser mayor a 0')
-      return false
-    }
-    if (costo > 0 && costo >= unitario) {
-      setError(`El costo ($${costo.toFixed(2)}) debe ser menor al precio unitario ($${unitario.toFixed(2)})`)
-      return false
-    }
+
     return true
   }
 
@@ -161,8 +225,10 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
       const payload = {
         nombre: formData.nombre,
         codigo: formData.codigo,
-        tipo: formData.tipo,
-        material: formData.material,
+        tipo: resolveCatalogLabel(productTypes, formData.tipoId),
+        tipoId: isLegacyId(formData.tipoId) ? undefined : formData.tipoId,
+        material: resolveCatalogLabel(materials, formData.materialId),
+        materialId: isLegacyId(formData.materialId) ? undefined : formData.materialId,
         genero: formData.genero,
         stock: Number(formData.stock) || 0,
         stockMinimo: lowStockThreshold,
@@ -208,9 +274,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 md:p-6 space-y-4 md:space-y-6 max-h-[70vh] overflow-y-auto">
+        <form ref={formRef} onSubmit={handleSubmit} className="p-4 md:p-6 space-y-4 md:space-y-6 max-h-[70vh] overflow-y-auto">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 md:px-4 py-2 md:py-3 text-sm text-red-700">
+            <div role="alert" aria-live="polite" className="bg-red-50 border border-red-200 rounded-lg px-3 md:px-4 py-2 md:py-3 text-sm text-red-700">
               {error}
             </div>
           )}
@@ -220,18 +286,28 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
             <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Información Básica</h3>
             <div className="space-y-3 md:space-y-4">
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-nombre" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Nombre del Producto *
                 </label>
                 <input
+                  id="inv-nombre"
                   type="text"
                   name="nombre"
                   value={formData.nombre}
                   onChange={handleInputChange}
                   placeholder="Ej: Bikini Floral Rojo"
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                  aria-invalid={!!fieldErrors.nombre}
+                  aria-describedby={fieldErrors.nombre ? 'inv-err-nombre' : undefined}
+                  className={`w-full px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                    fieldErrors.nombre ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                  }`}
                   disabled={loading}
                 />
+                {fieldErrors.nombre && (
+                  <p id="inv-err-nombre" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.nombre}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -284,23 +360,33 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
             <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Atributos del Producto</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-tipo" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Tipo de Prenda *
                 </label>
                 <select
-                  name="tipo"
-                  value={formData.tipo}
+                  id="inv-tipo"
+                  name="tipoId"
+                  value={formData.tipoId}
                   onChange={handleInputChange}
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                  aria-invalid={!!fieldErrors.tipoId}
+                  aria-describedby={fieldErrors.tipoId ? 'inv-err-tipo' : undefined}
+                  className={`w-full px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                    fieldErrors.tipoId ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                  }`}
                   disabled={loading}
                 >
                   <option value="">Seleccionar...</option>
                   {productTypeOptions.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
+                    <option key={type.id} value={type.id}>
+                      {type.label}
                     </option>
                   ))}
                 </select>
+                {fieldErrors.tipoId && (
+                  <p id="inv-err-tipo" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.tipoId}
+                  </p>
+                )}
                 {productTypes.length === 0 && (
                   <p className="mt-1 text-xs text-amber-600">
                     No hay tipos configurados. Ve a Configuracion {'>'} Inventario para agregarlos.
@@ -309,23 +395,33 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-material" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Material *
                 </label>
                 <select
-                  name="material"
-                  value={formData.material}
+                  id="inv-material"
+                  name="materialId"
+                  value={formData.materialId}
                   onChange={handleInputChange}
-                  className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                  aria-invalid={!!fieldErrors.materialId}
+                  aria-describedby={fieldErrors.materialId ? 'inv-err-material' : undefined}
+                  className={`w-full px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                    fieldErrors.materialId ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                  }`}
                   disabled={loading}
                 >
                   <option value="">Seleccionar...</option>
                   {materialOptions.map((material) => (
-                    <option key={material} value={material}>
-                      {material}
+                    <option key={material.id} value={material.id}>
+                      {material.label}
                     </option>
                   ))}
                 </select>
+                {fieldErrors.materialId && (
+                  <p id="inv-err-material" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.materialId}
+                  </p>
+                )}
                 {materials.length === 0 && (
                   <p className="mt-1 text-xs text-amber-600">
                     No hay materiales configurados. Ve a Configuracion {'>'} Inventario para agregarlos.
@@ -385,12 +481,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
             <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Precios</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-costo" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Costo de Adquisición
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
                   <input
+                    id="inv-costo"
                     type="number"
                     name="costo"
                     value={formData.costo}
@@ -399,22 +496,34 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     min="0.01"
                     step="0.01"
                     placeholder="0.00"
-                    className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm ${costoInvalido ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                    aria-invalid={!!fieldErrors.costo || costoInvalido}
+                    aria-describedby={fieldErrors.costo ? 'inv-err-costo' : undefined}
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                      fieldErrors.costo || costoInvalido
+                        ? 'border-red-400 bg-red-50 focus:ring-red-500'
+                        : 'border-gray-300 focus:ring-lime-500'
+                    }`}
                     disabled={loading}
                   />
                 </div>
+                {fieldErrors.costo && (
+                  <p id="inv-err-costo" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.costo}
+                  </p>
+                )}
                 {costoInvalido && (
                   <p className="mt-1 text-xs text-red-600">El costo debe ser menor al precio unitario</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-precio-unitario" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
                   Precio por Unidad *
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
                   <input
+                    id="inv-precio-unitario"
                     type="number"
                     name="precioUnitario"
                     value={formData.precioUnitario}
@@ -423,10 +532,19 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     min="0.01"
                     step="0.01"
                     placeholder="0.00"
-                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                    aria-invalid={!!fieldErrors.precioUnitario}
+                    aria-describedby={fieldErrors.precioUnitario ? 'inv-err-precioUnitario' : undefined}
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
+                      fieldErrors.precioUnitario ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                    }`}
                     disabled={loading}
                   />
                 </div>
+                {fieldErrors.precioUnitario && (
+                  <p id="inv-err-precioUnitario" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.precioUnitario}
+                  </p>
+                )}
               </div>
 
               {/* Campos calculados automáticamente */}
