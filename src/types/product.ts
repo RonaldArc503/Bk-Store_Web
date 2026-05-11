@@ -3,13 +3,15 @@
  * Arquitectura escalable: Productos + Inventario separados
  */
 
-// 🟢 TABLA: productos (catálogo)
+// TABLA: productos (catalogo)
 export interface Producto {
   id: string
   codigo: string
   nombre: string
   tipo: string
+  tipoId?: string
   material: string
+  materialId?: string
   genero: string
   descripcion?: string
   estado: 'Activo' | 'Inactivo'
@@ -21,7 +23,9 @@ export interface CreateProductoInput {
   codigo: string
   nombre: string
   tipo: string
+  tipoId?: string
   material: string
+  materialId?: string
   genero: string
   descripcion?: string
 }
@@ -33,11 +37,13 @@ export interface UpdateProductoInput {
   estado?: 'Activo' | 'Inactivo'
   codigo?: string
   tipo?: string
+  tipoId?: string
   material?: string
+  materialId?: string
   genero?: string
 }
 
-// 🟡 TABLA: inventario (stock y precios)
+// TABLA: inventario (stock y precios)
 export interface Inventario {
   id: string
   productoId: string // FK a productos
@@ -70,7 +76,7 @@ export interface UpdateInventarioInput {
   precioDocena?: number
 }
 
-// 🔄 TABLA: movimientos (historial de cambios de stock)
+// TABLA: movimientos (historial de cambios de stock)
 export interface Movimiento {
   id: string
   productoId: string
@@ -87,7 +93,7 @@ export interface CreateMovimientoInput {
   motivo: string
 }
 
-// 📦 VISTA UNIFICADA (para mostrar en UI)
+// VISTA UNIFICADA (para mostrar en UI)
 export interface ProductoConInventario {
   producto: Producto
   inventario: Inventario
@@ -99,7 +105,9 @@ export interface Product {
   codigo: string
   nombre: string
   tipo: string
+  tipoId?: string
   material: string
+  materialId?: string
   genero: string
   stock: number
   costo: number
@@ -114,7 +122,9 @@ export interface CreateProductInput {
   codigo: string
   nombre: string
   tipo: string
+  tipoId?: string
   material: string
+  materialId?: string
   genero: string
   stock: number
   stockMinimo?: number

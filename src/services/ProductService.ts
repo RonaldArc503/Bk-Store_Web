@@ -103,7 +103,9 @@ export const ProductService = {
         estado: input.estado ?? currentProducto.estado,
         codigo: (input as any).codigo ?? currentProducto.codigo,
         tipo: (input as any).tipo ?? currentProducto.tipo,
+        tipoId: (input as any).tipoId ?? (currentProducto as any).tipoId,
         material: (input as any).material ?? currentProducto.material,
+        materialId: (input as any).materialId ?? (currentProducto as any).materialId,
         genero: (input as any).genero ?? currentProducto.genero,
         updatedAt: now,
       }
