@@ -67,6 +67,13 @@ export default function POS() {
   const [isCartOpen, setIsCartOpen] = useState(false)
 
   useEffect(() => {
+    if (cart.length === 0 && isCartOpen) {
+      const isMobile = window.innerWidth < 768
+      if (isMobile) setIsCartOpen(false)
+    }
+  }, [cart.length])
+
+  useEffect(() => {
     const styleId = 'print-paper-size-style'
     let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
     if (!styleEl) {
