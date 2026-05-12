@@ -140,19 +140,21 @@ export default function Dashboard() {
 
   /* ─── Last 7 days for mini chart ─── */
   const last7Days = useMemo(() => {
-    const days: { label: string; value: number }[] = []
+    const days: { label: string; value: number; count: number; dateKey: string }[] = []
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now); d.setDate(now.getDate() - i)
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
       const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
       const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
       const dayOrders = orders.filter((o) => isInRange(parseDate(o.date || o.createdAt), start, end))
       days.push({
         label: d.toLocaleDateString('es-MX', { weekday: 'short' }),
         value: sumTotals(dayOrders),
+        count: dayOrders.length,
+        dateKey: `${d.getDate()}/${d.getMonth() + 1}`,
       })
     }
     return days
-  }, [orders])
+  }, [orders, now.toDateString()])
   const maxDayValue = Math.max(...last7Days.map((d) => d.value), 1)
 
   /* ─── Payment methods breakdown ─── */
@@ -302,19 +304,30 @@ export default function Dashboard() {
                 Ver reportes <ArrowRight className="w-3 h-3" />
               </button>
             </div>
-            <div className="flex items-end gap-2 h-32 md:h-40">
-              {last7Days.map((day, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full relative flex-1 flex items-end">
-                    <div
-                      className={`w-full rounded-t-md transition-all duration-500 ${i === 6 ? 'bg-[#8CC63F]' : 'bg-gray-200 dark:bg-gray-700 hover:bg-[#8CC63F]/60 dark:hover:bg-[#8CC63F]/40'}`}
-                      style={{ height: `${Math.max(4, (day.value / maxDayValue) * 100)}%` }}
-                      title={formatCurrency(day.value)}
-                    />
+            <div className="flex items-end gap-2 h-40 md:h-48">
+              {last7Days.map((day, i) => {
+                const isToday = i === 6
+                const pct = day.value > 0 ? Math.max(8, (day.value / maxDayValue) * 100) : 3
+                const shortAmount = day.value >= 1000 ? `$${(day.value / 1000).toFixed(1)}k` : day.value > 0 ? `$${day.value.toFixed(0)}` : ''
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                    <span className={`text-[9px] md:text-[10px] font-medium transition-opacity ${day.value > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'} ${isToday ? 'text-[#8CC63F]' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {shortAmount}
+                    </span>
+                    <div className="w-full relative flex-1 flex items-end">
+                      <div
+                        className={`w-full rounded-t-lg transition-all duration-500 cursor-default ${isToday ? 'bg-[#8CC63F] shadow-sm shadow-[#8CC63F]/30' : day.value > 0 ? 'bg-gray-300 dark:bg-gray-600 group-hover:bg-[#8CC63F]/50' : 'bg-gray-100 dark:bg-gray-800'}`}
+                        style={{ height: `${pct}%` }}
+                        title={`${day.dateKey}: ${formatCurrency(day.value)} (${day.count} ventas)`}
+                      />
+                    </div>
+                    <div className="text-center">
+                      <span className={`text-[10px] capitalize ${isToday ? 'text-[#8CC63F] font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>{day.label}</span>
+                      <span className={`block text-[9px] ${isToday ? 'text-[#8CC63F]/70' : 'text-gray-400 dark:text-gray-500'}`}>{day.dateKey}</span>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-gray-500 dark:text-gray-400 capitalize">{day.label}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
