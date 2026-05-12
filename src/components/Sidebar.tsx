@@ -169,8 +169,8 @@ export function Sidebar({ activeItem }: SidebarProps) {
         </div>
       </aside>
 
-      {/* MOBILE */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800 z-50">
+      {/* MOBILE HEADER */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-50">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-lime-500 to-lime-600 rounded-lg flex items-center justify-center shadow-md">
@@ -180,62 +180,66 @@ export function Sidebar({ activeItem }: SidebarProps) {
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors active:scale-95"
+            aria-expanded={isMobileMenuOpen}
+            aria-label="Menú de navegación"
           >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
+      </div>
 
-        <div
-          className={`
-            fixed inset-x-0 top-[57px] bottom-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800
-            transform transition-transform duration-300 ease-in-out z-40
-            ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
-          `}
-        >
-          <div className="h-full overflow-y-auto">
-            <div className="p-4 space-y-1">
-              {menuItems.map((item) => {
-                const Icon = item.icon
-                const active = isActive(item)
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavigate(item.path)}
-                    className={`
-                      w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
-                      ${active
-                        ? 'bg-gradient-to-r from-lime-50 to-lime-100/50 text-lime-700 dark:from-lime-950/50 dark:to-transparent dark:text-lime-400'
-                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
-                      }
-                    `}
-                  >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
-                    {active && (
-                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-lime-500 dark:bg-lime-400" />
-                    )}
-                  </button>
-                )
-              })}
-              
-              <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
+      {/* MOBILE DRAWER - outside header to avoid backdrop-filter containing block */}
+      <div
+        className={`
+          md:hidden fixed inset-x-0 top-[57px] bottom-0 bg-white dark:bg-gray-900
+          transform transition-transform duration-300 ease-in-out z-40
+          ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'}
+        `}
+      >
+        <div className="h-full overflow-y-auto overscroll-contain">
+          <div className="p-4 space-y-1">
+            {menuItems.map((item) => {
+              const Icon = item.icon
+              const active = isActive(item)
+              return (
                 <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 transition-colors"
+                  key={item.id}
+                  onClick={() => handleNavigate(item.path)}
+                  className={`
+                    w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium transition-all active:scale-[0.98]
+                    ${active
+                      ? 'bg-gradient-to-r from-lime-50 to-lime-100/50 text-lime-700 dark:from-lime-950/50 dark:to-transparent dark:text-lime-400'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                    }
+                  `}
                 >
-                  <LogOut className="w-5 h-5" />
-                  Cerrar Sesión
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {item.label}
+                  {active && (
+                    <div className="ml-auto w-2 h-2 rounded-full bg-lime-500 dark:bg-lime-400" />
+                  )}
                 </button>
-              </div>
+              )
+            })}
+            
+            <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 transition-colors active:scale-[0.98]"
+              >
+                <LogOut className="w-5 h-5" />
+                Cerrar Sesión
+              </button>
             </div>
           </div>
         </div>
       </div>
 
+      {/* MOBILE BACKDROP */}
       {isMobileMenuOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-30"
+          className="md:hidden fixed inset-0 bg-black/30 z-30"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}

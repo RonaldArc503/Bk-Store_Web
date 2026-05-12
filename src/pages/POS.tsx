@@ -402,9 +402,9 @@ export default function POS() {
 
   if (cajaOpen === null) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="pos" />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex-1 flex items-center justify-center pt-20 md:pt-0">
           <p className="text-gray-500 dark:text-gray-400 animate-pulse">Verificando estado de caja…</p>
         </main>
       </div>
@@ -415,7 +415,7 @@ export default function POS() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="pos" />
-        <main className="flex-1 flex items-center justify-center p-6">
+        <main className="flex-1 flex items-center justify-center p-6 pt-20 md:pt-6">
           <div className="max-w-md text-center">
             <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-950/40 flex items-center justify-center mx-auto mb-4">
               <Lock className="w-8 h-8 text-red-500 dark:text-red-400" />
@@ -440,10 +440,10 @@ export default function POS() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="pos" />
 
-      <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+      <main className="flex-1 p-4 pt-20 md:pt-6 md:p-6 overflow-y-auto">
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 md:p-5 mb-4 shadow-sm">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-3 min-w-0">
@@ -591,7 +591,7 @@ export default function POS() {
       </main>
 
       {/* Cart panel */}
-      <div className={`fixed top-0 right-0 h-full w-[380px] flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 z-20 transition-transform ${cart.length > 0 ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed top-0 right-0 h-full w-full sm:w-[380px] flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 z-40 transition-transform ${cart.length > 0 ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="h-[72px] px-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-950">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg">
@@ -622,12 +622,12 @@ export default function POS() {
 
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 border border-gray-200 dark:border-gray-600">
-                  <button onClick={() => updateQuantity(item.id, -1)} className="w-7 h-7 flex items-center justify-center text-gray-700 dark:text-gray-300">
-                    <Minus size={14} />
+                  <button onClick={() => updateQuantity(item.id, -1)} className="w-9 h-9 flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-gray-200 dark:active:bg-gray-600 rounded-md transition-colors">
+                    <Minus size={16} />
                   </button>
-                  <span className="font-bold text-sm w-6 text-center text-gray-900 dark:text-gray-100">{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)} className="w-7 h-7 flex items-center justify-center text-gray-700 dark:text-gray-300">
-                    <Plus size={14} />
+                  <span className="font-bold text-sm w-8 text-center text-gray-900 dark:text-gray-100">{item.quantity}</span>
+                  <button onClick={() => updateQuantity(item.id, 1)} className="w-9 h-9 flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-gray-200 dark:active:bg-gray-600 rounded-md transition-colors">
+                    <Plus size={16} />
                   </button>
                 </div>
                 <span className="font-bold text-gray-900 dark:text-gray-100 text-base">${calculateItemTotal(item).toFixed(2)}</span>
