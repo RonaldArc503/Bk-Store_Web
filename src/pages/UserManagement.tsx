@@ -136,58 +136,58 @@ export default function UserManagementPage() {
       <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8 overflow-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-gray-500 mt-1">Administre los usuarios del sistema y sus permisos</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gestión de Usuarios</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Administre los usuarios del sistema y sus permisos</p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {/* Total Usuarios */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-blue-600" />
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-950/40 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Total de Usuarios</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.totalUsuarios}</p>
-            <p className="text-xs text-gray-400 mt-2">En el sistema</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total de Usuarios</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalUsuarios}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">En el sistema</p>
           </div>
 
           {/* Activos */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-green-600" />
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-950/40 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Usuarios Activos</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.usuariosActivos}</p>
-            <p className="text-xs text-gray-400 mt-2">Disponibles</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Usuarios Activos</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.usuariosActivos}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Disponibles</p>
           </div>
 
           {/* Inactivos */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-yellow-600" />
+              <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-950/40 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Usuarios Inactivos</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.usuariosInactivos}</p>
-            <p className="text-xs text-gray-400 mt-2">Deshabilitados</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Usuarios Inactivos</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.usuariosInactivos}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Deshabilitados</p>
           </div>
 
           {/* Administradores */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600" />
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-950/40 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
-            <p className="text-gray-500 text-sm font-medium">Administradores</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.usersByRole.administrador}</p>
-            <p className="text-xs text-gray-400 mt-2">Con permisos</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Administradores</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.usersByRole.administrador}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Con permisos</p>
           </div>
         </div>
 
@@ -200,7 +200,7 @@ export default function UserManagementPage() {
               placeholder="Buscar usuario..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600"
             />
           </div>
           <button
@@ -216,70 +216,70 @@ export default function UserManagementPage() {
         </div>
 
         {/* Users Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-800">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               Usuarios Registrados
             </h2>
-            <p className="text-gray-500 text-sm mt-1">
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
               Total de {stats.totalUsuarios} usuario(s) en el sistema
             </p>
           </div>
 
           {loading ? (
-            <div className="p-8 text-center text-gray-500">Cargando usuarios...</div>
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">Cargando usuarios...</div>
           ) : filteredUsers.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">
               {searchQuery ? 'No se encontraron usuarios' : 'No hay usuarios registrados'}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wider">
                       Usuario
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wider">
                       Nombre Completo
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wider">
                       Rol
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wider">
                       Fecha de Creación
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wider">
                       Estado
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wider">
                       Acciones
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                   {filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50 transition">
+                    <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-medium text-gray-900">{user.usuario}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{user.usuario}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                         {user.nombreCompleto}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300">
                           {user.rol}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-600 text-sm">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400 text-sm">
                         {user.fechaCreacion}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
                             user.estado === 'Activo'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
+                              ? 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300'
+                              : 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300'
                           }`}
                         >
                           {user.estado}
@@ -289,7 +289,7 @@ export default function UserManagementPage() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleEditClick(user)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
                             title="Editar"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -300,43 +300,33 @@ export default function UserManagementPage() {
                                 onClick={() => handleToggleStatus(user.id)}
                                 className={`p-2 rounded-lg transition ${
                                   user.estado === 'Activo'
-                                    ? 'text-orange-600 hover:bg-orange-50'
-                                    : 'text-green-600 hover:bg-green-50'
+                                    ? 'text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/40'
+                                    : 'text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40'
                                 }`}
-                                title={
-                                  user.estado === 'Activo'
-                                    ? 'Desactivar'
-                                    : 'Activar'
-                                }
+                                title={user.estado === 'Activo' ? 'Desactivar' : 'Activar'}
                               >
                                 <Power className="w-4 h-4" />
                               </button>
                               {deleteConfirm === user.id ? (
                                 <div className="flex gap-1">
                                   <button
-                                    onClick={() =>
-                                      handleDeleteUser(user.id)
-                                    }
+                                    onClick={() => handleDeleteUser(user.id)}
                                     disabled={deleteLoading}
-                                    className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:opacity-50"
+                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded disabled:opacity-50"
                                   >
                                     {deleteLoading ? 'Eliminando...' : 'Sí'}
                                   </button>
                                   <button
-                                    onClick={() =>
-                                      setDeleteConfirm(null)
-                                    }
-                                    className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+                                    onClick={() => setDeleteConfirm(null)}
+                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded hover:bg-gray-300 dark:hover:bg-gray-600"
                                   >
                                     No
                                   </button>
                                 </div>
                               ) : (
                                 <button
-                                  onClick={() =>
-                                    setDeleteConfirm(user.id)
-                                  }
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  onClick={() => setDeleteConfirm(user.id)}
+                                  className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
                                   title="Eliminar"
                                 >
                                   <Trash2 className="w-4 h-4" />

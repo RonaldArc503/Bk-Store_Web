@@ -293,21 +293,29 @@ function AperturaForm({ state, dispatch, onSave }: any) {
           />
         </div>
         <div>
-          <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Usuario Responsable</label>
+          <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Usuario Responsable *</label>
           <input
             type="text"
-            className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800"
+            placeholder="Nombre del responsable"
+            className={`w-full p-2 md:p-3 border rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800 ${
+              !state.isAperturaSaved && !state.aperturaUsuario.trim()
+                ? 'border-red-400 dark:border-red-600 focus:ring-red-300 dark:focus:ring-red-700'
+                : 'border-gray-200 dark:border-gray-700'
+            }`}
             value={state.aperturaUsuario}
             onChange={(e) => dispatch({ type: "SET_APERTURA_USUARIO", payload: e.target.value })}
             disabled={state.isAperturaSaved}
           />
+          {!state.isAperturaSaved && !state.aperturaUsuario.trim() && (
+            <p className="text-[11px] text-red-500 mt-1">Este campo es obligatorio</p>
+          )}
         </div>
       </div>
       <div className="mt-4 flex gap-3">
         {!state.isAperturaSaved ? (
           <button
             onClick={onSave}
-            disabled={!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0}
+            disabled={!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0 || !state.aperturaUsuario.trim()}
             className="px-4 py-2 bg-lime-500 text-white rounded-lg hover:bg-lime-600 transition disabled:opacity-50"
           >
             Guardar Apertura
@@ -658,7 +666,7 @@ function HistoryTimeline({ loading, entries, onOpenDay, filterMonth, onFilterCha
               )}
               <button
                 type="button" onClick={() => onOpenDay(day.key)}
-                className="mt-3 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                className="mt-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 Ver detalle del día
               </button>
@@ -937,12 +945,13 @@ export default function CorteDeCaja() {
     if (state.isAperturaSaved) { toast.info("Apertura ya guardada"); return; }
     if (state.todayClosed) { toast.warning("Ya se realizó un cierre hoy."); return; }
     if (!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0) { toast.warning("Ingrese un monto de apertura válido"); return; }
+    if (!state.aperturaUsuario.trim()) { toast.warning("El nombre del usuario responsable es obligatorio"); return; }
     try {
       const now = new Date();
       const aperturaInfo = {
         monto: parseFloat(state.aperturaMonto),
         fecha: state.aperturaFecha ? new Date(state.aperturaFecha).toISOString() : now.toISOString(),
-        usuario: state.aperturaUsuario || "Usuario de Caja",
+        usuario: state.aperturaUsuario.trim(),
         createdBy: user?.uid,
       };
       const createdCaja = await CajaService.openCaja(aperturaInfo);

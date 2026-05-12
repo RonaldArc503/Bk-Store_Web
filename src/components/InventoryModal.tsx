@@ -260,13 +260,13 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4 pt-20 md:pt-4 overflow-y-auto">
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-transparent dark:border-gray-800 max-w-4xl w-full my-8 md:my-0">
         {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between p-4 md:p-6 border-b border-gray-200 bg-white rounded-t-lg">
-          <h2 className="text-lg md:text-xl font-semibold text-gray-900">
+        <div className="sticky top-0 flex items-center justify-between p-4 md:p-6 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 rounded-t-lg">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white">
             {editingProduct ? 'Editar Producto' : 'Agregar Producto'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 p-1"
             disabled={loading}
           >
             <X className="w-5 h-5 md:w-6 md:h-6" />
@@ -276,17 +276,17 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         {/* Form */}
         <form ref={formRef} onSubmit={handleSubmit} className="p-4 md:p-6 space-y-4 md:space-y-6 max-h-[70vh] overflow-y-auto">
           {error && (
-            <div role="alert" aria-live="polite" className="bg-red-50 border border-red-200 rounded-lg px-3 md:px-4 py-2 md:py-3 text-sm text-red-700">
+            <div role="alert" aria-live="polite" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg px-3 md:px-4 py-2 md:py-3 text-sm text-red-700 dark:text-red-400">
               {error}
             </div>
           )}
 
           {/* Información Básica */}
           <div>
-            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Información Básica</h3>
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white mb-3 md:mb-4">Información Básica</h3>
             <div className="space-y-3 md:space-y-4">
               <div>
-                <label htmlFor="inv-nombre" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-nombre" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                   Nombre del Producto *
                 </label>
                 <input
@@ -298,8 +298,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   placeholder="Ej: Bikini Floral Rojo"
                   aria-invalid={!!fieldErrors.nombre}
                   aria-describedby={fieldErrors.nombre ? 'inv-err-nombre' : undefined}
-                  className={`w-full px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
-                    fieldErrors.nombre ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                  className={`w-full px-3 md:px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:border-transparent text-sm ${
+                    fieldErrors.nombre ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
                   }`}
                   disabled={loading}
                 />
@@ -311,7 +311,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                   Código de Barras
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-start">
@@ -321,14 +321,14 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     value={formData.codigo}
                     onChange={handleInputChange}
                     placeholder="Escanear o generar"
-                    className="flex-1 min-w-0 px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                    className="flex-1 min-w-0 px-3 md:px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-lime-500 dark:focus:ring-lime-600 focus:border-transparent text-sm"
                     disabled={loading}
                   />
                   <div className="flex flex-wrap gap-2 items-start">
                     <button
                       type="button"
                       onClick={generateBarcode}
-                      className="px-2 md:px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700 transition text-sm whitespace-nowrap"
+                      className="px-2 md:px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-300 transition text-sm whitespace-nowrap"
                       disabled={loading}
                     >
                       Generar
@@ -343,7 +343,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                       <button
                         type="button"
                         onClick={copyBarcode}
-                        className="px-2 md:px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                        className="px-2 md:px-3 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg transition"
                         disabled={loading}
                       >
                         <Copy className="w-4 h-4 md:w-5 md:h-5" />
@@ -357,10 +357,10 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
           {/* Atributos */}
           <div>
-            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Atributos del Producto</h3>
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white mb-3 md:mb-4">Atributos del Producto</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label htmlFor="inv-tipo" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-tipo" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                   Tipo de Prenda *
                 </label>
                 <select
@@ -370,8 +370,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   onChange={handleInputChange}
                   aria-invalid={!!fieldErrors.tipoId}
                   aria-describedby={fieldErrors.tipoId ? 'inv-err-tipo' : undefined}
-                  className={`w-full px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
-                    fieldErrors.tipoId ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                  className={`w-full px-3 md:px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent text-sm ${
+                    fieldErrors.tipoId ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
                   }`}
                   disabled={loading}
                 >
@@ -395,7 +395,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
               </div>
 
               <div>
-                <label htmlFor="inv-material" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-material" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                   Material *
                 </label>
                 <select
@@ -405,8 +405,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                   onChange={handleInputChange}
                   aria-invalid={!!fieldErrors.materialId}
                   aria-describedby={fieldErrors.materialId ? 'inv-err-material' : undefined}
-                  className={`w-full px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
-                    fieldErrors.materialId ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                  className={`w-full px-3 md:px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent text-sm ${
+                    fieldErrors.materialId ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
                   }`}
                   disabled={loading}
                 >
@@ -430,7 +430,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">Género *</label>
+                <label className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Género *</label>
                 <div className="grid grid-cols-3 gap-2">
                   {genders.map((gender) => (
                     <label key={gender} className="flex items-center gap-2 cursor-pointer">
@@ -441,9 +441,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                         checked={formData.genero === gender}
                         onChange={handleInputChange}
                         disabled={loading}
-                        className="w-4 h-4"
+                        className="w-4 h-4 accent-lime-500"
                       />
-                      <span className="text-xs md:text-sm text-gray-700">{gender}</span>
+                      <span className="text-xs md:text-sm text-gray-700 dark:text-gray-300">{gender}</span>
                     </label>
                   ))}
                 </div>
@@ -453,9 +453,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
           {/* Inventario */}
           <div>
-            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Inventario</h3>
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white mb-3 md:mb-4">Inventario</h3>
             <div>
-              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+              <label className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                 Cantidad en Stock *
               </label>
               <input
@@ -465,7 +465,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 onChange={handleInputChange}
                 onKeyDown={blockInvalidNumericKeys}
                 min="0"
-                className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                className="w-full px-3 md:px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-lime-500 dark:focus:ring-lime-600 focus:border-transparent text-sm"
                 disabled={loading}
               />
               {stockWarning && (
@@ -478,14 +478,14 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
           {/* Precios */}
           <div>
-            <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">Precios</h3>
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white mb-3 md:mb-4">Precios</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div>
-                <label htmlFor="inv-costo" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-costo" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                   Costo de Adquisición
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">$</span>
                   <input
                     id="inv-costo"
                     type="number"
@@ -500,8 +500,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     aria-describedby={fieldErrors.costo ? 'inv-err-costo' : undefined}
                     className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
                       fieldErrors.costo || costoInvalido
-                        ? 'border-red-400 bg-red-50 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-lime-500'
+                        ? 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30 text-gray-900 dark:text-gray-100 focus:ring-red-500'
+                        : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-lime-500 dark:focus:ring-lime-600'
                     }`}
                     disabled={loading}
                   />
@@ -517,11 +517,11 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
               </div>
 
               <div>
-                <label htmlFor="inv-precio-unitario" className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                <label htmlFor="inv-precio-unitario" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                   Precio por Unidad *
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">$</span>
                   <input
                     id="inv-precio-unitario"
                     type="number"
@@ -534,8 +534,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                     placeholder="0.00"
                     aria-invalid={!!fieldErrors.precioUnitario}
                     aria-describedby={fieldErrors.precioUnitario ? 'inv-err-precioUnitario' : undefined}
-                    className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent text-sm ${
-                      fieldErrors.precioUnitario ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-lime-500'
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent text-sm ${
+                      fieldErrors.precioUnitario ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
                     }`}
                     disabled={loading}
                   />
@@ -549,19 +549,19 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
               {/* Campos calculados automáticamente */}
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 md:mb-2">
                   Precio Media Docena (6 u.) — calculado
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
+                <div className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 font-medium">
                   {unitario > 0 ? `$${mediaDocena.toFixed(2)}` : '—'}
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 md:mb-2">
                   Precio Docena (12 u.) — calculado
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
+                <div className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 font-medium">
                   {unitario > 0 ? `$${docena.toFixed(2)}` : '—'}
                 </div>
               </div>
@@ -569,27 +569,27 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
             {/* Resumen de precios en tiempo real */}
             {unitario > 0 && (
-              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Resumen</p>
+              <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 space-y-2">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Resumen</p>
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-white rounded-lg p-2 border border-gray-200">
-                    <p className="text-xs text-gray-400 mb-1">1 unidad</p>
-                    <p className="text-sm font-bold text-gray-900">${unitario.toFixed(2)}</p>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">1 unidad</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">${unitario.toFixed(2)}</p>
                   </div>
-                  <div className="bg-white rounded-lg p-2 border border-gray-200">
-                    <p className="text-xs text-gray-400 mb-1">½ docena (×6)</p>
-                    <p className="text-sm font-bold text-gray-900">${mediaDocena.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">${unitario.toFixed(2)}/u.</p>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">½ docena (×6)</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">${mediaDocena.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${unitario.toFixed(2)}/u.</p>
                   </div>
-                  <div className="bg-white rounded-lg p-2 border border-gray-200">
-                    <p className="text-xs text-gray-400 mb-1">docena (×12)</p>
-                    <p className="text-sm font-bold text-gray-900">${docena.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">${unitario.toFixed(2)}/u.</p>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">docena (×12)</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">${docena.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${unitario.toFixed(2)}/u.</p>
                   </div>
                 </div>
                 {margenUnitario !== null && (
-                  <div className="flex items-center justify-between pt-1 border-t border-gray-200">
-                    <span className="text-xs text-gray-500">Margen bruto:</span>
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-700">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Margen bruto:</span>
                     <span className={`text-xs font-semibold ${margenUnitario < 0 ? 'text-red-600' : margenUnitario < 20 ? 'text-orange-500' : 'text-green-600'}`}>
                       {margenUnitario.toFixed(1)}%
                     </span>
@@ -600,11 +600,11 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
           </div>
 
           {/* Buttons */}
-          <div className="flex flex-col-reverse sm:flex-row gap-3 md:gap-4 justify-end pt-4 md:pt-6 border-t border-gray-200">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 md:gap-4 justify-end pt-4 md:pt-6 border-t border-gray-200 dark:border-gray-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 md:px-6 py-2 md:py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm"
+              className="px-4 md:px-6 py-2 md:py-2 border border-gray-300 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition text-sm"
               disabled={loading}
             >
               Cancelar
