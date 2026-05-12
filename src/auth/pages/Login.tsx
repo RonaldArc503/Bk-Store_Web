@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ShoppingCart, Loader } from 'lucide-react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { loginEmail } from '../auth.service'
 
@@ -90,15 +90,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Register Link */}
-        <div className="mt-6 text-center">
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            ¿No tienes cuenta?{' '}
-            <Link to="/register" className="text-lime-500 hover:text-lime-600 font-medium">
-              Regístrate aquí
-            </Link>
-          </p>
-        </div>
       </div>
     </div>
   )
