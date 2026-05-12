@@ -523,20 +523,9 @@ export default function POS() {
                 </div>
                 <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white truncate">Punto de Venta</h1>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-lime-50 dark:bg-lime-900/30 border border-lime-200 dark:border-lime-800/60">
-                  <span className="w-2 h-2 rounded-full bg-[#8CC63F]" />
-                  <span className="text-xs font-semibold text-lime-700 dark:text-lime-300">Caja abierta</span>
-                </div>
-                {/* Desktop cart toggle */}
-                <button
-                  onClick={() => setIsCartOpen(!isCartOpen)}
-                  className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative"
-                >
-                  <ShoppingCart size={16} />
-                  <span className="text-xs font-medium">{cartItemCount}</span>
-                  {cart.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#8CC63F] rounded-full" />}
-                </button>
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-lime-50 dark:bg-lime-900/30 border border-lime-200 dark:border-lime-800/60">
+                <span className="w-2 h-2 rounded-full bg-[#8CC63F]" />
+                <span className="text-xs font-semibold text-lime-700 dark:text-lime-300">Caja abierta</span>
               </div>
             </div>
 
@@ -573,7 +562,7 @@ export default function POS() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-24 md:pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 pb-24 md:pb-4">
             {filteredProducts.map((product) => {
               const stock = Number(product.stock || 0)
               const isOutOfStock = stock <= 0
@@ -656,9 +645,9 @@ export default function POS() {
           </div>
         </main>
 
-        {/* ═══ DESKTOP CART SIDEBAR (static, not fixed) ═══ */}
-        <aside className={`hidden md:flex flex-col w-[380px] shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-all duration-300 ${isCartOpen ? 'translate-x-0' : 'translate-x-full w-0 overflow-hidden border-l-0'}`}>
-          <div className="h-[72px] px-5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-950 shrink-0">
+        {/* ═══ DESKTOP CART SIDEBAR (always visible, fixed to right) ═══ */}
+        <aside className="hidden md:flex flex-col w-[380px] shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-screen sticky top-0">
+          <div className="h-[72px] px-5 border-b border-gray-200 dark:border-gray-800 flex items-center bg-gray-50 dark:bg-gray-950 shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[#8CC63F]/10 text-[#8CC63F] rounded-lg">
                 <ShoppingCart size={20} />
@@ -668,9 +657,6 @@ export default function POS() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">{cartItemCount} artículos</p>
               </div>
             </div>
-            <button onClick={() => setIsCartOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <X size={18} />
-            </button>
           </div>
           {cartContent}
         </aside>
