@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ShoppingCart, Loader } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { loginEmail, loginGoogle } from '../auth.service'
+import { loginEmail } from '../auth.service'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -25,22 +25,6 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const error = err as { message?: string }
       setError(error.message || 'Error al iniciar sesión')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleGoogleLogin = async () => {
-    setError('')
-    setLoading(true)
-
-    try {
-      const data = await loginGoogle()
-      login(data as { user: { uid: string; email: string | null; displayName: string | null }; token: string })
-      navigate('/dashboard')
-    } catch (err: unknown) {
-      const error = err as { message?: string }
-      setError(error.message || 'Error al iniciar sesión con Google')
     } finally {
       setLoading(false)
     }
@@ -105,27 +89,6 @@ export default function LoginPage() {
             Iniciar Sesión
           </button>
         </form>
-
-        {/* Google Login */}
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">O</span>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={loading}
-          className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 font-medium py-2.5 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
-        >
-          {loading && <Loader className="w-4 h-4 animate-spin" />}
-          <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-          Iniciar con Google
-        </button>
 
         {/* Register Link */}
         <div className="mt-6 text-center">
