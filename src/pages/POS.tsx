@@ -184,7 +184,7 @@ export default function POS() {
   }
 
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id))
-  const clearCart = () => setCart([])
+  const clearCart = () => { setCart([]); setIsCartOpen(false) }
 
   const cartTotal = useMemo(() => cart.reduce((sum, it) => sum + calculateItemTotal(it), 0), [cart])
   const taxAmount = useMemo(() => roundCurrency(cartTotal * TAX_RATE), [cartTotal])
@@ -303,6 +303,7 @@ export default function POS() {
       setIsPaymentModalOpen(false)
       setIsTicketModalOpen(settings.printing.autoPrint)
       setCart([])
+      setIsCartOpen(false)
       setSelectedPaymentMethod(null)
       setLastSuccessfulOrder({ orderId, total: Number(order.total || 0) })
       setShowSaleSuccess(true)
