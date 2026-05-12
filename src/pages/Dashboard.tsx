@@ -304,27 +304,20 @@ export default function Dashboard() {
                 Ver reportes <ArrowRight className="w-3 h-3" />
               </button>
             </div>
-            <div className="flex items-end gap-2 h-40 md:h-48">
+            <div className="flex items-end gap-3 md:gap-4 h-44 md:h-52">
               {last7Days.map((day, i) => {
                 const isToday = i === 6
-                const pct = day.value > 0 ? Math.max(8, (day.value / maxDayValue) * 100) : 3
-                const shortAmount = day.value >= 1000 ? `$${(day.value / 1000).toFixed(1)}k` : day.value > 0 ? `$${day.value.toFixed(0)}` : ''
+                const pct = day.value > 0 ? Math.max(10, (day.value / maxDayValue) * 100) : 4
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                    <span className={`text-[9px] md:text-[10px] font-medium transition-opacity ${day.value > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'} ${isToday ? 'text-[#8CC63F]' : 'text-gray-500 dark:text-gray-400'}`}>
-                      {shortAmount}
-                    </span>
-                    <div className="w-full relative flex-1 flex items-end">
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group">
+                    <div className="w-full relative flex-1 flex items-end rounded-lg bg-gray-100 dark:bg-gray-800/60 overflow-hidden">
                       <div
-                        className={`w-full rounded-t-lg transition-all duration-500 cursor-default ${isToday ? 'bg-[#8CC63F] shadow-sm shadow-[#8CC63F]/30' : day.value > 0 ? 'bg-gray-300 dark:bg-gray-600 group-hover:bg-[#8CC63F]/50' : 'bg-gray-100 dark:bg-gray-800'}`}
+                        className={`w-full rounded-lg transition-all duration-700 ease-out ${isToday ? 'bg-gradient-to-t from-[#6ba52e] to-[#8CC63F]' : day.value > 0 ? 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-500 dark:to-gray-400 group-hover:from-[#6ba52e]/70 group-hover:to-[#8CC63F]/70' : 'bg-gray-200 dark:bg-gray-700'}`}
                         style={{ height: `${pct}%` }}
                         title={`${day.dateKey}: ${formatCurrency(day.value)} (${day.count} ventas)`}
                       />
                     </div>
-                    <div className="text-center">
-                      <span className={`text-[10px] capitalize ${isToday ? 'text-[#8CC63F] font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>{day.label}</span>
-                      <span className={`block text-[9px] ${isToday ? 'text-[#8CC63F]/70' : 'text-gray-400 dark:text-gray-500'}`}>{day.dateKey}</span>
-                    </div>
+                    <span className={`text-[10px] md:text-xs capitalize leading-none ${isToday ? 'text-[#8CC63F] font-bold' : 'text-gray-500 dark:text-gray-400'}`}>{day.label}</span>
                   </div>
                 )
               })}
