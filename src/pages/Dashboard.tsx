@@ -304,16 +304,21 @@ export default function Dashboard() {
                 Ver reportes <ArrowRight className="w-3 h-3" />
               </button>
             </div>
-            <div className="flex items-end gap-3 md:gap-4 h-44 md:h-52">
+            <div className="flex items-end gap-3 md:gap-4" style={{ height: '200px' }}>
               {last7Days.map((day, i) => {
                 const isToday = i === 6
                 const pct = day.value > 0 ? Math.max(10, (day.value / maxDayValue) * 100) : 4
+                const barHeight = Math.round((pct / 100) * 170)
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group">
-                    <div className="w-full relative flex-1 flex items-end rounded-lg bg-gray-100 dark:bg-gray-800/60 overflow-hidden">
+                  <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5 group" style={{ height: '100%' }}>
+                    <div
+                      className="w-full relative rounded-lg overflow-hidden"
+                      style={{ height: '170px' }}
+                    >
+                      <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800/60 rounded-lg" />
                       <div
-                        className={`w-full rounded-lg transition-all duration-700 ease-out ${isToday ? 'bg-gradient-to-t from-[#6ba52e] to-[#8CC63F]' : day.value > 0 ? 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-500 dark:to-gray-400 group-hover:from-[#6ba52e]/70 group-hover:to-[#8CC63F]/70' : 'bg-gray-200 dark:bg-gray-700'}`}
-                        style={{ height: `${pct}%` }}
+                        className={`absolute bottom-0 left-0 right-0 rounded-lg transition-all duration-700 ease-out ${isToday ? 'bg-gradient-to-t from-[#6ba52e] to-[#8CC63F]' : day.value > 0 ? 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-500 dark:to-gray-400 group-hover:from-[#6ba52e]/70 group-hover:to-[#8CC63F]/70' : 'bg-gray-200/50 dark:bg-gray-700/50'}`}
+                        style={{ height: `${barHeight}px` }}
                         title={`${day.dateKey}: ${formatCurrency(day.value)} (${day.count} ventas)`}
                       />
                     </div>
