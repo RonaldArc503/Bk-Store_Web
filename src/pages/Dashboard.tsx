@@ -230,7 +230,7 @@ export default function Dashboard() {
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
           {/* Ventas Hoy */}
-          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-blue-500 to-blue-600 p-4 md:p-5 rounded-2xl text-white shadow-lg shadow-blue-500/20 relative overflow-hidden">
+          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-[#8CC63F] to-[#6ba52e] p-4 md:p-5 rounded-2xl text-white shadow-lg shadow-[#8CC63F]/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-6 -mt-6" />
             <div className="relative">
               <div className="flex items-center gap-2 mb-3">
@@ -242,9 +242,9 @@ export default function Dashboard() {
                   </span>
                 )}
               </div>
-              <p className="text-blue-100 text-xs font-medium">Ventas Hoy</p>
+              <p className="text-lime-100 text-xs font-medium">Ventas Hoy</p>
               <p className="text-xl md:text-2xl font-bold mt-0.5">{loading ? '...' : formatCurrency(revenueToday)}</p>
-              <p className="text-blue-200 text-[11px] mt-1">{ordersToday.length} transacciones</p>
+              <p className="text-lime-200 text-[11px] mt-1">{ordersToday.length} transacciones</p>
             </div>
           </div>
 
