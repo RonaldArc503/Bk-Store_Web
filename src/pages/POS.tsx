@@ -156,19 +156,18 @@ export default function POS() {
   }
 
   const addToCart = (product: ProductDB) => {
-    let added = false
-    setCart((prev) => {
-      const existing = prev.find((p) => p.id === product.id)
-      const nextQty = (existing?.quantity ?? 0) + 1
-      if (nextQty > product.stock) {
-        toast.warning('Stock insuficiente para este producto')
-        return prev
-      }
-      added = true
-      if (existing) return prev.map((p) => (p.id === product.id ? { ...p, quantity: nextQty } : p))
-      return [...prev, { ...product, quantity: 1 }]
-    })
-    if (added) toast.success(`${product.nombre} agregado`, { autoClose: 1000, hideProgressBar: true })
+    const existing = cart.find((p) => p.id === product.id)
+    const nextQty = (existing?.quantity ?? 0) + 1
+    if (nextQty > product.stock) {
+      toast.warning('Stock insuficiente para este producto')
+      return
+    }
+    if (existing) {
+      setCart(cart.map((p) => (p.id === product.id ? { ...p, quantity: nextQty } : p)))
+    } else {
+      setCart([...cart, { ...product, quantity: 1 }])
+    }
+    toast.success(`${product.nombre} agregado`, { autoClose: 1000, hideProgressBar: true })
   }
 
   const updateQuantity = (id: string, delta: number) => {
