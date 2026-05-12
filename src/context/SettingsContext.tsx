@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { CatalogService } from '../services/CatalogService'
 
 export interface InventoryCatalogItem {
   id: string
@@ -164,9 +165,29 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [undoSnapshot, setUndoSnapshot] = useState<StoreSettings | null>(null)
   const canUndo = undoSnapshot !== null
 
+  // On mount, load catalog from Firebase and override localStorage if Firebase has data.
   useEffect(() => {
-    // Keep lastSavedAt reasonably current on first mount/load.
     setLastSavedAt(Date.now())
+    ;(async () => {
+      try {
+        const remote = await CatalogService.getCatalog()
+        if (!remote) return
+        setSettings((prev) => {
+          const next: StoreSettings = {
+            ...prev,
+            inventory: {
+              ...prev.inventory,
+              productTypes: remote.productTypes.length > 0 ? remote.productTypes : prev.inventory.productTypes,
+              materials: remote.materials.length > 0 ? remote.materials : prev.inventory.materials,
+            },
+          }
+          persist(next)
+          return next
+        })
+      } catch {
+        // Firebase unavailable — keep localStorage data
+      }
+    })()
   }, [])
 
   const updateSettings = useCallback((patch: Partial<StoreSettings>) => {
@@ -212,6 +233,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const next = { ...prev, inventory: { ...prev.inventory, [key]: nextList } }
         persist(next)
         setLastSavedAt(Date.now())
+        // Sync to Firebase in the background (non-blocking)
+        CatalogService.updateKey(key, nextList).catch(() => {})
         return next
       })
     },
@@ -260,6 +283,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setUndoSnapshot(null)
     persist(defaultSettings)
     setLastSavedAt(Date.now())
+    CatalogService.setCatalog({ productTypes: [], materials: [] }).catch(() => {})
   }, [])
 
   return (

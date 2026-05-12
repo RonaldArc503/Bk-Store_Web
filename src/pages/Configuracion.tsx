@@ -222,7 +222,6 @@ function InventorySection() {
   const materials = settings.inventory.materials || []
 
   const [productos, setProductos] = useState<Producto[]>([])
-  const [productosLoading, setProductosLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
@@ -233,8 +232,6 @@ function InventorySection() {
         setProductos(list)
       } catch {
         // Non-blocking: catalog editing still works without counts.
-      } finally {
-        if (alive) setProductosLoading(false)
       }
     })()
     return () => {
@@ -401,299 +398,249 @@ function InventorySection() {
             <p className="text-sm font-medium text-gray-900 dark:text-white">Catálogo: Tipo de prenda y material</p>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Estas opciones se usan al crear/editar productos en Inventario.
+            Estas opciones se usan al crear/editar productos en Inventario. El número entre paréntesis indica cuántos productos usan cada opción.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                Tipos de prenda
-              </p>
-              <div className="flex gap-2">
-                <input
-                  value={newProductType}
-                  onChange={(e) => setNewProductType(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addToList('productTypes', newProductType)
-                      setNewProductType('')
-                    }
-                  }}
-                  placeholder="Ej: Bikini, Short..."
-                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    addToList('productTypes', newProductType)
-                    setNewProductType('')
-                  }}
-                  className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors"
-                >
-                  Agregar
-                </button>
-              </div>
-              {productTypes.length === 0 ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  No hay tipos configurados. Agrega al menos 1 para poder seleccionar en Inventario.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {productTypes.map((it: InventoryCatalogItem, idx: number) => {
-                    const isEditing = editing?.key === 'productTypes' && editing.id === it.id
-                    const count = usage.typeCount.get(normalizeKey(it.label)) || 0
-                    return (
-                      <div
-                        key={it.id}
-                        className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+          <div className="grid grid-cols-2 gap-4">
+            {/* ── TIPOS DE PRENDA ── */}
+            {(
+              () => {
+                const items = productTypes
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                        Tipos de prenda
+                      </p>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {items.length} {items.length === 1 ? 'tipo' : 'tipos'}
+                      </span>
+                    </div>
+
+                    {/* Input agregar */}
+                    <div className="flex gap-2">
+                      <input
+                        value={newProductType}
+                        onChange={(e) => setNewProductType(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addToList('productTypes', newProductType)
+                            setNewProductType('')
+                          }
+                        }}
+                        placeholder="Ej: Bikini, Short..."
+                        className="flex-1 min-w-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { addToList('productTypes', newProductType); setNewProductType('') }}
+                        className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors whitespace-nowrap"
                       >
-                        <div className="flex-1 min-w-0">
-                          {isEditing ? (
-                            <input
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  void commitEdit()
-                                }
-                                if (e.key === 'Escape') cancelEdit()
-                              }}
-                              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent"
-                              aria-label="Renombrar tipo de prenda"
-                              autoFocus
-                            />
-                          ) : (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="truncate text-sm text-gray-900 dark:text-gray-100">{it.label}</span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-                            </div>
-                          )}
+                        Agregar
+                      </button>
+                    </div>
+
+                    {/* Lista siempre visible */}
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60 overflow-hidden min-h-[72px] max-h-56 overflow-y-auto">
+                      {items.length === 0 ? (
+                        <div className="flex items-center justify-center py-5 px-3">
+                          <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                            Sin tipos configurados. Agrega al menos 1.
+                          </p>
                         </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => moveItem('productTypes', idx, -1)}
-                            disabled={idx === 0}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Subir"
-                            title="Subir"
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveItem('productTypes', idx, 1)}
-                            disabled={idx === productTypes.length - 1}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Bajar"
-                            title="Bajar"
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-
-                          {!isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => startEdit('productTypes', it)}
-                              className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                              aria-label="Editar"
-                              title="Editar"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void commitEdit()}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Guardar"
-                                title="Guardar"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEdit}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Cancelar"
-                                title="Cancelar"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => removeFromList('productTypes', it.id)}
-                            className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
-                            aria-label="Eliminar"
-                            title={count > 0 ? 'No se puede eliminar (en uso)' : 'Eliminar'}
-                            disabled={count > 0}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                      ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {items.map((it: InventoryCatalogItem, idx: number) => {
+                            const isEd = editing?.key === 'productTypes' && editing.id === it.id
+                            const count = usage.typeCount.get(normalizeKey(it.label)) || 0
+                            return (
+                              <div key={it.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                  {isEd ? (
+                                    <input
+                                      value={editingText}
+                                      onChange={(e) => setEditingText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { e.preventDefault(); void commitEdit() }
+                                        if (e.key === 'Escape') cancelEdit()
+                                      }}
+                                      className="w-full rounded-md border border-lime-400 dark:border-lime-600 bg-lime-50 dark:bg-lime-950/30 text-sm text-gray-900 dark:text-gray-100 px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="truncate text-sm text-gray-800 dark:text-gray-200">{it.label}</span>
+                                      {count > 0 && (
+                                        <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5">
+                                          {count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button type="button" onClick={() => moveItem('productTypes', idx, -1)} disabled={idx === 0}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Subir">
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button type="button" onClick={() => moveItem('productTypes', idx, 1)} disabled={idx === items.length - 1}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Bajar">
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  {!isEd ? (
+                                    <button type="button" onClick={() => startEdit('productTypes', it)}
+                                      className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-500 dark:text-blue-400" title="Editar">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button type="button" onClick={() => void commitEdit()}
+                                        className="p-1 rounded hover:bg-lime-50 dark:hover:bg-lime-950/40 text-lime-600 dark:text-lime-400" title="Guardar">
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button type="button" onClick={cancelEdit}
+                                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" title="Cancelar">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                  <button type="button" onClick={() => removeFromList('productTypes', it.id)} disabled={count > 0}
+                                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 dark:text-red-400 disabled:opacity-30"
+                                    title={count > 0 ? `En uso por ${count} producto(s)` : 'Eliminar'}>
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      </div>
-                    )
-                  })}
-                  {!productosLoading && (
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      El numero entre parentesis indica cuantos productos usan cada opcion.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+            )()}
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                Materiales
-              </p>
-              <div className="flex gap-2">
-                <input
-                  value={newMaterial}
-                  onChange={(e) => setNewMaterial(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addToList('materials', newMaterial)
-                      setNewMaterial('')
-                    }
-                  }}
-                  placeholder="Ej: Algodón, Poliéster..."
-                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    addToList('materials', newMaterial)
-                    setNewMaterial('')
-                  }}
-                  className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors"
-                >
-                  Agregar
-                </button>
-              </div>
-              {materials.length === 0 ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  No hay materiales configurados. Agrega al menos 1 para poder seleccionar en Inventario.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {materials.map((it: InventoryCatalogItem, idx: number) => {
-                    const isEditing = editing?.key === 'materials' && editing.id === it.id
-                    const count = usage.materialCount.get(normalizeKey(it.label)) || 0
-                    return (
-                      <div
-                        key={it.id}
-                        className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+            {/* ── MATERIALES ── */}
+            {(
+              () => {
+                const items = materials
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                        Materiales
+                      </p>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {items.length} {items.length === 1 ? 'material' : 'materiales'}
+                      </span>
+                    </div>
+
+                    {/* Input agregar */}
+                    <div className="flex gap-2">
+                      <input
+                        value={newMaterial}
+                        onChange={(e) => setNewMaterial(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addToList('materials', newMaterial)
+                            setNewMaterial('')
+                          }
+                        }}
+                        placeholder="Ej: Algodón, Poliéster..."
+                        className="flex-1 min-w-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { addToList('materials', newMaterial); setNewMaterial('') }}
+                        className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors whitespace-nowrap"
                       >
-                        <div className="flex-1 min-w-0">
-                          {isEditing ? (
-                            <input
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  void commitEdit()
-                                }
-                                if (e.key === 'Escape') cancelEdit()
-                              }}
-                              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent"
-                              aria-label="Renombrar material"
-                              autoFocus
-                            />
-                          ) : (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="truncate text-sm text-gray-900 dark:text-gray-100">{it.label}</span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-                            </div>
-                          )}
+                        Agregar
+                      </button>
+                    </div>
+
+                    {/* Lista siempre visible */}
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60 overflow-hidden min-h-[72px] max-h-56 overflow-y-auto">
+                      {items.length === 0 ? (
+                        <div className="flex items-center justify-center py-5 px-3">
+                          <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                            Sin materiales configurados. Agrega al menos 1.
+                          </p>
                         </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => moveItem('materials', idx, -1)}
-                            disabled={idx === 0}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Subir"
-                            title="Subir"
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveItem('materials', idx, 1)}
-                            disabled={idx === materials.length - 1}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Bajar"
-                            title="Bajar"
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-
-                          {!isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => startEdit('materials', it)}
-                              className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                              aria-label="Editar"
-                              title="Editar"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void commitEdit()}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Guardar"
-                                title="Guardar"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEdit}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Cancelar"
-                                title="Cancelar"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => removeFromList('materials', it.id)}
-                            className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
-                            aria-label="Eliminar"
-                            title={count > 0 ? 'No se puede eliminar (en uso)' : 'Eliminar'}
-                            disabled={count > 0}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                      ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {items.map((it: InventoryCatalogItem, idx: number) => {
+                            const isEd = editing?.key === 'materials' && editing.id === it.id
+                            const count = usage.materialCount.get(normalizeKey(it.label)) || 0
+                            return (
+                              <div key={it.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                  {isEd ? (
+                                    <input
+                                      value={editingText}
+                                      onChange={(e) => setEditingText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { e.preventDefault(); void commitEdit() }
+                                        if (e.key === 'Escape') cancelEdit()
+                                      }}
+                                      className="w-full rounded-md border border-lime-400 dark:border-lime-600 bg-lime-50 dark:bg-lime-950/30 text-sm text-gray-900 dark:text-gray-100 px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="truncate text-sm text-gray-800 dark:text-gray-200">{it.label}</span>
+                                      {count > 0 && (
+                                        <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5">
+                                          {count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button type="button" onClick={() => moveItem('materials', idx, -1)} disabled={idx === 0}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Subir">
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button type="button" onClick={() => moveItem('materials', idx, 1)} disabled={idx === items.length - 1}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Bajar">
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  {!isEd ? (
+                                    <button type="button" onClick={() => startEdit('materials', it)}
+                                      className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-500 dark:text-blue-400" title="Editar">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button type="button" onClick={() => void commitEdit()}
+                                        className="p-1 rounded hover:bg-lime-50 dark:hover:bg-lime-950/40 text-lime-600 dark:text-lime-400" title="Guardar">
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button type="button" onClick={cancelEdit}
+                                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" title="Cancelar">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                  <button type="button" onClick={() => removeFromList('materials', it.id)} disabled={count > 0}
+                                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 dark:text-red-400 disabled:opacity-30"
+                                    title={count > 0 ? `En uso por ${count} producto(s)` : 'Eliminar'}>
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      </div>
-                    )
-                  })}
-                  {!productosLoading && (
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      El numero entre parentesis indica cuantos productos usan cada opcion.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+            )()}
           </div>
         </div>
       </SettingCard>
