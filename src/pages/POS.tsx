@@ -65,6 +65,7 @@ export default function POS() {
 
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (cart.length === 0 && isCartOpen) {
@@ -72,6 +73,12 @@ export default function POS() {
       if (isMobile) setIsCartOpen(false)
     }
   }, [cart.length])
+
+  useEffect(() => {
+    if (!isPaymentModalOpen && !isTicketModalOpen && !showSaleSuccess && !isCartOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 100)
+    }
+  }, [isPaymentModalOpen, isTicketModalOpen, showSaleSuccess, isCartOpen])
 
   useEffect(() => {
     const styleId = 'print-paper-size-style'
@@ -153,6 +160,25 @@ export default function POS() {
 
   const getAvailableStock = (productId: string) => {
     return products.find((p) => p.id === productId)?.stock ?? 0
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return
+    const query = searchTerm.trim().toLowerCase()
+    if (!query) return
+
+    const match = products.find(
+      (p) => (p.codigo || '').toLowerCase() === query || p.nombre.toLowerCase() === query
+    )
+    if (match && match.stock > 0) {
+      addToCart(match)
+      setSearchTerm('')
+      searchInputRef.current?.focus()
+    } else if (match && match.stock <= 0) {
+      toast.warning(`${match.nombre} no tiene stock disponible`)
+    } else {
+      toast.error('Producto no encontrado')
+    }
   }
 
   const addToCart = (product: ProductDB) => {
@@ -540,9 +566,12 @@ export default function POS() {
               <div className="relative min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-lime-700/50 dark:text-lime-300/70" size={17} />
                 <input
+                  ref={searchInputRef}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por nombre o código..."
+                  onKeyDown={handleSearchKeyDown}
+                  autoFocus
+                  placeholder="Escanear código o buscar producto..."
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-lime-200/80 dark:border-lime-800/70 bg-lime-50/40 dark:bg-lime-900/20 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-lime-300 dark:focus:ring-lime-700"
                 />
               </div>
