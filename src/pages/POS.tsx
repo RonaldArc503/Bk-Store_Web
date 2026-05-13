@@ -164,6 +164,7 @@ export default function POS() {
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
+    e.preventDefault()
     const query = searchTerm.trim().toLowerCase()
     if (!query) return
 
@@ -172,13 +173,15 @@ export default function POS() {
     )
     if (match && match.stock > 0) {
       addToCart(match)
-      setSearchTerm('')
-      searchInputRef.current?.focus()
     } else if (match && match.stock <= 0) {
       toast.warning(`${match.nombre} no tiene stock disponible`)
     } else {
       toast.error('Producto no encontrado')
     }
+    setSearchTerm('')
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+    })
   }
 
   const addToCart = (product: ProductDB) => {
