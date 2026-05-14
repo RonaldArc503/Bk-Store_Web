@@ -192,9 +192,9 @@ export default function POS() {
     })
   }
 
-  const addToCart = (product: ProductDB) => {
+  const addToCart = (product: ProductDB, qty = 1) => {
     const existing = cart.find((p) => p.id === product.id)
-    const nextQty = (existing?.quantity ?? 0) + 1
+    const nextQty = (existing?.quantity ?? 0) + qty
     if (nextQty > product.stock) {
       toast.warning('Stock insuficiente para este producto')
       return
@@ -202,9 +202,10 @@ export default function POS() {
     if (existing) {
       setCart(cart.map((p) => (p.id === product.id ? { ...p, quantity: nextQty } : p)))
     } else {
-      setCart([...cart, { ...product, quantity: 1 }])
+      setCart([...cart, { ...product, quantity: qty }])
     }
-    toast.success(`${product.nombre} agregado`, { autoClose: 1000, hideProgressBar: true })
+    const label = qty === 1 ? `${product.nombre} agregado` : `${qty}x ${product.nombre} agregados`
+    toast.success(label, { autoClose: 1000, hideProgressBar: true })
   }
 
   const updateQuantity = (id: string, delta: number) => {
@@ -707,11 +708,10 @@ export default function POS() {
               return (
                 <div
                   key={product.id}
-                  onClick={() => { if (!isOutOfStock) addToCart(product) }}
                   className={`group relative overflow-hidden rounded-2xl border p-4 transition-all duration-200 ${
                     isOutOfStock
-                      ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-80 cursor-not-allowed'
-                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 cursor-pointer hover:-translate-y-0.5 hover:shadow-md dark:hover:shadow-gray-900/60'
+                      ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-80'
+                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:-translate-y-0.5 hover:shadow-md dark:hover:shadow-gray-900/60'
                   }`}
                 >
                   <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-slate-100/80 dark:bg-slate-700/20 blur-2xl pointer-events-none" />
@@ -730,14 +730,30 @@ export default function POS() {
                       <p className="text-2xl font-bold leading-tight text-lime-800 dark:text-lime-100">${(product.precioUnitario || 0).toFixed(2)}</p>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-2.5 py-2">
+                      <button
+                        onClick={() => { if (!isOutOfStock && stock >= 6) addToCart(product, 6) }}
+                        disabled={isOutOfStock || stock < 6}
+                        className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                          isOutOfStock || stock < 6
+                            ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
+                            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700 cursor-pointer active:scale-95'
+                        }`}
+                      >
                         <p className="text-[10px] text-gray-500 dark:text-gray-400">6 unidades</p>
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${(product.precioMediaDocena || 0).toFixed(2)}</p>
-                      </div>
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-2.5 py-2">
+                      </button>
+                      <button
+                        onClick={() => { if (!isOutOfStock && stock >= 12) addToCart(product, 12) }}
+                        disabled={isOutOfStock || stock < 12}
+                        className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                          isOutOfStock || stock < 12
+                            ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
+                            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700 cursor-pointer active:scale-95'
+                        }`}
+                      >
                         <p className="text-[10px] text-gray-500 dark:text-gray-400">12 unidades</p>
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${(product.precioDocena || 0).toFixed(2)}</p>
-                      </div>
+                      </button>
                     </div>
                     <div className="mt-3">
                       <div className="flex items-center justify-between text-xs">
@@ -749,9 +765,9 @@ export default function POS() {
                       </div>
                     </div>
                     <button
-                      onClick={(event) => { event.stopPropagation(); if (!isOutOfStock) addToCart(product) }}
+                      onClick={() => { if (!isOutOfStock) addToCart(product) }}
                       disabled={isOutOfStock}
-                      className={`mt-4 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                      className={`mt-4 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors active:scale-[0.97] ${
                         isOutOfStock
                           ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-500 cursor-not-allowed'
                           : 'bg-lime-100 hover:bg-lime-200 dark:bg-lime-800/40 dark:hover:bg-lime-700/50 text-lime-900 dark:text-lime-100'
