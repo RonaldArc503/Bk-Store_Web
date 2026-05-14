@@ -7,6 +7,9 @@ import {
   ShoppingBag,
   DollarSign,
   Archive,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -16,8 +19,13 @@ import autoTable from "jspdf-autotable";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
 import { Button } from "../components/Button";
 import { Input } from "../components/input";
+import { toast } from "react-toastify";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
+import { InventoryService } from "../services/InventoryService";
+import { DevolucionService, type DevolucionItem } from "../services/DevolucionService";
+import { UserService } from "../services/UserService";
+import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../context/SettingsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,6 +60,7 @@ type OrderRecord = {
   taxRate?: number;
   method?: string;
   total?: number;
+  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string };
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -163,6 +172,113 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const { settings } = useSettings();
+  const { user } = useAuth();
+
+  const [showDevolucion, setShowDevolucion] = useState(false);
+  const [devItems, setDevItems] = useState<Record<string, number>>({});
+  const [devMotivo, setDevMotivo] = useState("defectuoso");
+  const [isProcessingDev, setIsProcessingDev] = useState(false);
+
+  const MOTIVOS = [
+    { value: "defectuoso", label: "Producto defectuoso" },
+    { value: "error_venta", label: "Error de venta" },
+    { value: "cambio_opinion", label: "Cliente cambió de opinión" },
+    { value: "otro", label: "Otro" },
+  ];
+
+  const openDevolucionModal = () => {
+    if (!selectedOrder) return;
+    const initial: Record<string, number> = {};
+    (selectedOrder.items || []).forEach((_, idx) => { initial[String(idx)] = 0; });
+    setDevItems(initial);
+    setDevMotivo("defectuoso");
+    setShowDevolucion(true);
+  };
+
+  const devTotal = useMemo(() => {
+    if (!selectedOrder) return 0;
+    const items = selectedOrder.items || [];
+    return Object.entries(devItems).reduce((sum, [idx, qty]) => {
+      if (qty <= 0) return sum;
+      const item = items[Number(idx)];
+      if (!item) return sum;
+      const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
+      return sum + unitPrice * qty;
+    }, 0);
+  }, [devItems, selectedOrder]);
+
+  const hasDevSelection = Object.values(devItems).some((q) => q > 0);
+
+  const processDevolucion = async () => {
+    if (!selectedOrder || !hasDevSelection) return;
+    setIsProcessingDev(true);
+    try {
+      const items = selectedOrder.items || [];
+      const devolucionItems: DevolucionItem[] = [];
+
+      for (const [idx, qty] of Object.entries(devItems)) {
+        if (qty <= 0) continue;
+        const item = items[Number(idx)];
+        if (!item) continue;
+        const productId = item.id || item.productId || item.productoId || "";
+        const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
+        devolucionItems.push({
+          productId,
+          nombre: getItemName(item),
+          cantidad: qty,
+          precioUnitario: unitPrice,
+          subtotal: unitPrice * qty,
+        });
+
+        if (productId) {
+          try {
+            const inv = await InventoryService.getInventarioByProductoId(productId);
+            if (inv?.id) {
+              await InventoryService.agregarStock(inv.id, qty, `devolución venta ${selectedOrder.id}`);
+            }
+          } catch (e) { console.warn("No se pudo restaurar stock para", productId, e); }
+        }
+      }
+
+      const totalItemsOriginal = items.reduce((s, i) => s + getItemQuantity(i), 0);
+      const totalDevuelto = devolucionItems.reduce((s, i) => s + i.cantidad, 0);
+      const tipo = totalDevuelto >= totalItemsOriginal ? "total" as const : "parcial" as const;
+
+      let empNombre = user?.email || "Desconocido";
+      let empRol = "Vendedor";
+      if (user?.email) {
+        try {
+          const u = await UserService.getUserByEmail(user.email);
+          if (u) { empNombre = u.nombreCompleto || u.usuario; empRol = u.rol || "Vendedor"; }
+        } catch {}
+      }
+
+      const devolucion = await DevolucionService.crearDevolucion({
+        ventaOriginalId: selectedOrder.id,
+        fecha: new Date().toLocaleString("es-SV"),
+        empleado: empNombre,
+        empleadoRol: empRol,
+        motivo: MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
+        items: devolucionItems,
+        totalDevuelto: devTotal,
+        tipo,
+      });
+
+      await OrderService.marcarDevolucion(selectedOrder.id, tipo, devolucion.id);
+
+      toast.success(`Devolución ${tipo} procesada correctamente`);
+      setShowDevolucion(false);
+      setSelectedOrder(null);
+
+      const freshOrders = await OrderService.getAllOrders();
+      setOrders(freshOrders);
+    } catch (err) {
+      console.error("Error procesando devolución:", err);
+      toast.error("Error al procesar la devolución");
+    } finally {
+      setIsProcessingDev(false);
+    }
+  };
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -1150,14 +1266,123 @@ export default function Reports() {
                 </table>
               </div>
 
-              <div className="flex justify-end">
+              {selectedOrder.devolucion && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                  selectedOrder.devolucion.tipo === 'total'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                }`}>
+                  <RotateCcw className="w-4 h-4" />
+                  Venta con devolución {selectedOrder.devolucion.tipo}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                {!selectedOrder.devolucion?.tipo || selectedOrder.devolucion.tipo !== 'total' ? (
+                  <Button
+                    onClick={openDevolucionModal}
+                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Devolución
+                  </Button>
+                ) : null}
                 <Button
                   onClick={() => downloadOrderReceiptPdf(selectedOrder)}
                   className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
                 >
                   <Download className="w-4 h-4" />
-                  Descargar comprobante PDF
+                  Descargar PDF
                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Devolución */}
+      {showDevolucion && selectedOrder && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
+          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                <RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo de devolución</label>
+                <select
+                  value={devMotivo}
+                  onChange={(e) => setDevMotivo(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                >
+                  {MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecciona artículos a devolver</p>
+                <div className="space-y-2">
+                  {(selectedOrder.items || []).map((item, idx) => {
+                    const maxQty = getItemQuantity(item);
+                    const currentQty = devItems[String(idx)] || 0;
+                    return (
+                      <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQty} · ${getItemSubtotal(item).toFixed(2)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, currentQty - 1) }))}
+                            disabled={currentQty === 0}
+                            className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                          >−</button>
+                          <span className={`w-8 text-center text-sm font-bold ${currentQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{currentQty}</span>
+                          <button
+                            onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQty, currentQty + 1) }))}
+                            disabled={currentQty >= maxQty}
+                            className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                          >+</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {hasDevSelection && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
+                  <span className="text-lg font-bold text-amber-700 dark:text-amber-400">${devTotal.toFixed(2)}</span>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">El stock de los productos seleccionados será restaurado automáticamente al inventario.</p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowDevolucion(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >Cancelar</button>
+                <button
+                  onClick={processDevolucion}
+                  disabled={!hasDevSelection || isProcessingDev}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${
+                    hasDevSelection && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
+                  }`}
+                >
+                  {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar Devolución</>}
+                </button>
               </div>
             </div>
           </div>

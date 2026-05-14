@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, DollarSign, Package, Users,
   ArrowRight, AlertTriangle, Clock, Receipt, CreditCard, Banknote,
-  BarChart3, ShoppingBag, CalendarDays,
+  BarChart3, ShoppingBag, CalendarDays, RotateCcw, CheckCircle2,
 } from 'lucide-react'
+import { toast } from 'react-toastify'
 import { Sidebar } from '../components/Sidebar'
 import { OrderService } from '../services/OrderService'
 import { InventoryService } from '../services/InventoryService'
 import { UserService } from '../services/UserService'
+import { DevolucionService, type DevolucionItem } from '../services/DevolucionService'
+import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
 import type { InventoryStats } from '../types/product'
 import { useNavigate } from 'react-router-dom'
@@ -25,6 +28,7 @@ type OrderRecord = {
   id: string; date?: string; createdAt?: string
   items?: OrderItem[]; method?: string
   subtotal?: number; tax?: number; total?: number
+  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string }
 }
 
 export default function Dashboard() {
@@ -38,6 +42,104 @@ export default function Dashboard() {
   const [userStats, setUserStats] = useState({ totalUsuarios: 0, usuariosActivos: 0, usuariosInactivos: 0 })
   const [loading, setLoading] = useState(true)
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null)
+  const { user } = useAuth()
+
+  const [showDevolucion, setShowDevolucion] = useState(false)
+  const [devItems, setDevItems] = useState<Record<string, number>>({})
+  const [devMotivo, setDevMotivo] = useState('defectuoso')
+  const [isProcessingDev, setIsProcessingDev] = useState(false)
+
+  const DEV_MOTIVOS = [
+    { value: 'defectuoso', label: 'Producto defectuoso' },
+    { value: 'error_venta', label: 'Error de venta' },
+    { value: 'cambio_opinion', label: 'Cliente cambió de opinión' },
+    { value: 'otro', label: 'Otro' },
+  ]
+
+  const openDevModal = () => {
+    if (!selectedOrder) return
+    const init: Record<string, number> = {}
+    ;(selectedOrder.items || []).forEach((_, i) => { init[String(i)] = 0 })
+    setDevItems(init)
+    setDevMotivo('defectuoso')
+    setShowDevolucion(true)
+  }
+
+  const devTotal = useMemo(() => {
+    if (!selectedOrder) return 0
+    const items = selectedOrder.items || []
+    return Object.entries(devItems).reduce((sum, [idx, qty]) => {
+      if (qty <= 0) return sum
+      const item = items[Number(idx)]
+      if (!item) return sum
+      const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
+      return sum + up * qty
+    }, 0)
+  }, [devItems, selectedOrder])
+
+  const hasDevSel = Object.values(devItems).some((q) => q > 0)
+
+  const processDev = async () => {
+    if (!selectedOrder || !hasDevSel) return
+    setIsProcessingDev(true)
+    try {
+      const items = selectedOrder.items || []
+      const devolucionItems: DevolucionItem[] = []
+
+      for (const [idx, qty] of Object.entries(devItems)) {
+        if (qty <= 0) continue
+        const item = items[Number(idx)]
+        if (!item) continue
+        const productId = item.id || item.productId || item.productoId || ''
+        const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
+        devolucionItems.push({ productId, nombre: getItemName(item), cantidad: qty, precioUnitario: up, subtotal: up * qty })
+
+        if (productId) {
+          try {
+            const inv = await InventoryService.getInventarioByProductoId(productId)
+            if (inv?.id) await InventoryService.agregarStock(inv.id, qty, `devolución venta ${selectedOrder.id}`)
+          } catch (e) { console.warn('Stock restore failed', productId, e) }
+        }
+      }
+
+      const totalOrig = items.reduce((s, i) => s + getItemQuantity(i), 0)
+      const totalDev = devolucionItems.reduce((s, i) => s + i.cantidad, 0)
+      const tipo = totalDev >= totalOrig ? 'total' as const : 'parcial' as const
+
+      let empNombre = user?.email || 'Desconocido'
+      let empRol = 'Vendedor'
+      if (user?.email) {
+        try {
+          const u = await UserService.getUserByEmail(user.email)
+          if (u) { empNombre = u.nombreCompleto || u.usuario; empRol = u.rol || 'Vendedor' }
+        } catch {}
+      }
+
+      const dev = await DevolucionService.crearDevolucion({
+        ventaOriginalId: selectedOrder.id,
+        fecha: new Date().toLocaleString('es-SV'),
+        empleado: empNombre,
+        empleadoRol: empRol,
+        motivo: DEV_MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
+        items: devolucionItems,
+        totalDevuelto: devTotal,
+        tipo,
+      })
+
+      await OrderService.marcarDevolucion(selectedOrder.id, tipo, dev.id)
+      toast.success(`Devolución ${tipo} procesada`)
+      setShowDevolucion(false)
+      setSelectedOrder(null)
+
+      const fresh = await OrderService.getAllOrders()
+      setOrders(fresh)
+    } catch (err) {
+      console.error('Error en devolución:', err)
+      toast.error('Error al procesar la devolución')
+    } finally {
+      setIsProcessingDev(false)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -509,9 +611,85 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex justify-end">
+              {selectedOrder.devolucion && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                  selectedOrder.devolucion.tipo === 'total'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                }`}>
+                  <RotateCcw className="w-4 h-4" />
+                  Venta con devolución {selectedOrder.devolucion.tipo}
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                {(!selectedOrder.devolucion?.tipo || selectedOrder.devolucion.tipo !== 'total') && (
+                  <button onClick={openDevModal} className="px-4 py-2.5 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-xl flex items-center gap-2 active:scale-95 transition">
+                    <RotateCcw className="w-4 h-4" /> Devolución
+                  </button>
+                )}
                 <button onClick={() => downloadOrderReceiptPdf(selectedOrder)} className="px-4 py-2.5 text-sm font-medium text-white bg-[#8CC63F] hover:bg-[#7ab535] rounded-xl flex items-center gap-2 active:scale-95 transition">
                   <Receipt className="w-4 h-4" /> Descargar PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Devolución */}
+      {showDevolucion && selectedOrder && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
+          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg"><RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" /></div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo</label>
+                <select value={devMotivo} onChange={(e) => setDevMotivo(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100">
+                  {DEV_MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Artículos a devolver</p>
+                <div className="space-y-2">
+                  {(selectedOrder.items || []).map((item, idx) => {
+                    const maxQ = getItemQuantity(item)
+                    const curQ = devItems[String(idx)] || 0
+                    return (
+                      <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQ} · {formatCurrency(getItemSubtotal(item))}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, curQ - 1) }))} disabled={curQ === 0} className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40">−</button>
+                          <span className={`w-8 text-center text-sm font-bold ${curQ > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{curQ}</span>
+                          <button onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQ, curQ + 1) }))} disabled={curQ >= maxQ} className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40">+</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              {hasDevSel && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
+                  <span className="text-lg font-bold text-amber-700 dark:text-amber-400">{formatCurrency(devTotal)}</span>
+                </div>
+              )}
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">El stock será restaurado automáticamente al inventario.</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowDevolucion(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
+                <button onClick={processDev} disabled={!hasDevSel || isProcessingDev} className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${hasDevSel && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'}`}>
+                  {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar</>}
                 </button>
               </div>
             </div>

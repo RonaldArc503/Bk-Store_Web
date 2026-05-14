@@ -1,4 +1,4 @@
-import { ref, push, set, get, remove } from 'firebase/database'
+import { ref, push, set, get, remove, update } from 'firebase/database'
 import { database } from '../app/firebase'
 
 const ORDERS_PATH = 'orders'
@@ -61,6 +61,17 @@ export const OrderService = {
       return snap.val()
     } catch (error) {
       console.error('Error getting order:', error)
+      throw error
+    }
+  },
+
+  async marcarDevolucion(orderId: string, tipo: 'total' | 'parcial', devolucionId: string) {
+    try {
+      await update(ref(database, `${ORDERS_PATH}/${orderId}`), {
+        devolucion: { tipo, devolucionId, fecha: new Date().toISOString() },
+      })
+    } catch (error) {
+      console.error('Error marking order as returned:', error)
       throw error
     }
   },
