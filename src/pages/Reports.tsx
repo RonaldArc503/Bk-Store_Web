@@ -149,13 +149,6 @@ const getOrderSubtotal = (order: OrderRecord) =>
   toNumber(order.subtotal) ||
   (order.items || []).reduce((sum, item) => sum + getItemSubtotal(item), 0);
 const getOrderTotal = (order: OrderRecord) => toNumber(order.total);
-const getOrderTax = (order: OrderRecord) => {
-  const subtotal = getOrderSubtotal(order);
-  const total = getOrderTotal(order);
-  const taxFromRecord = toNumber(order.tax);
-  if (taxFromRecord > 0) return taxFromRecord;
-  return Math.max(0, subtotal > 0 ? total - subtotal : 0);
-};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -533,57 +526,66 @@ export default function Reports() {
   const downloadOrderReceiptPdf = (order: OrderRecord) => {
     const items = Array.isArray(order.items) ? order.items : [];
     const width = 80;
-    const baseHeight = 95;
-    const lineHeight = 5;
-    const height = Math.max(baseHeight, 55 + items.length * lineHeight + 35);
+    const lh = 4;
+    const height = Math.max(140, 90 + items.length * (lh * 2) + 60);
+    const doc = new jsPDF({ unit: "mm", format: [width, height] });
+    const left = 4; const right = width - 4; const center = width / 2;
+    const fs = 7;
+    let y = 8;
 
-    const subtotal = getOrderSubtotal(order);
-    const total = getOrderTotal(order);
-    const tax = getOrderTax(order);
-    const method = toPaymentLabel(order.method);
-    const date = toDateTime(order.date || order.createdAt);
-    const ticket = getTicket(order.id);
+    doc.setFontSize(12); doc.setFont("helvetica", "bold");
+    doc.text("Bikini Store", center, y, { align: "center" }); y += 4;
+    doc.setFontSize(fs); doc.setFont("helvetica", "normal");
+    doc.text("Sistema de Punto de Venta", center, y, { align: "center" }); y += 5;
 
-    const doc = new jsPDF({
-      unit: "mm",
-      format: [width, height],
-    });
+    doc.text(`Doc N°: ${getTicket(order.id)}`, left, y);
+    doc.text("Caja: 1", right, y, { align: "right" }); y += 3.5;
+    doc.text(`Fecha: ${toDateTime(order.date || order.createdAt)}`, left, y); y += 3.5;
+    doc.text(`Pago: ${toPaymentLabel(order.method)}`, left, y); y += 3;
 
-    const left = 6;
-    const right = width - 6;
-    let y = 10;
-    const receiptFontSize = 8;
+    doc.setLineWidth(0.3); doc.line(left, y, right, y); y += 3;
 
-    doc.setFontSize(12);
-    doc.text("Bikini Store", width / 2, y, { align: "center" });
-    y += 5;
-    doc.setFontSize(receiptFontSize);
-    doc.text(`Ticket: ${ticket}`, left, y);
-    y += 4;
-    doc.text(`Fecha: ${date}`, left, y);
-    y += 4;
-    doc.text(`Pago: ${method}`, left, y);
-    y += 3;
-    doc.line(left, y, right, y);
-    y += 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(fs);
+    doc.text("Cant.", left, y); doc.text("Artículo", left + 8, y);
+    y += 2; doc.setLineWidth(0.15); doc.line(left, y, right, y); y += 3;
 
+    doc.setFont("helvetica", "normal"); doc.setFontSize(fs);
     items.forEach((item) => {
-      const name = getItemName(item);
       const qty = getItemQuantity(item);
+      const name = getItemName(item);
       const lineTotal = getItemSubtotal(item);
-      doc.text(`${qty} x ${name}`, left, y);
+      const unitPrice = qty > 0 ? lineTotal / qty : 0;
+      const displayName = name.length > 30 ? name.substring(0, 29) + "…" : name;
+      doc.text(`${qty}`, left, y); doc.text(displayName, left + 8, y); y += lh;
+      doc.setFontSize(fs - 1);
+      doc.text(`  P.Unit: $${unitPrice.toFixed(2)}`, left, y);
       doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: "right" });
-      y += lineHeight;
+      doc.setFontSize(fs); y += lh;
     });
 
-    y += 2;
-    doc.line(left, y, right, y);
-    y += 4;
-    doc.text(`Total sin IVA: $${subtotal.toFixed(2)}`, left, y);
-    y += 4;
-    doc.text(`IVA: $${tax.toFixed(2)}`, left, y);
-    y += 5;
-    doc.text(`Total con IVA: $${total.toFixed(2)}`, left, y);
+    y += 1; doc.line(left, y, right, y); y += 3.5;
+
+    const total = getOrderTotal(order);
+    const base = Math.round((total / 1.13) * 100) / 100;
+    const iva = Math.round((total - base) * 100) / 100;
+
+    doc.setFontSize(fs);
+    doc.text("Subtotal (sin IVA):", left, y); doc.text(`$${base.toFixed(2)}`, right, y, { align: "right" }); y += 3.5;
+    doc.text("IVA 13%:", left, y); doc.text(`$${iva.toFixed(2)}`, right, y, { align: "right" }); y += 3;
+    doc.setLineWidth(0.4); doc.line(left, y, right, y); y += 4;
+
+    doc.setFontSize(11); doc.setFont("helvetica", "bold");
+    doc.text("TOTAL:", left, y); doc.text(`$${total.toFixed(2)}`, right, y, { align: "right" }); y += 5;
+
+    doc.setFontSize(fs); doc.setFont("helvetica", "normal");
+    doc.text(`Método de pago: ${toPaymentLabel(order.method)}`, left, y); y += 3.5;
+    doc.text(`Pagado: $${total.toFixed(2)}`, left, y); y += 4;
+
+    doc.setLineWidth(0.3); doc.line(left, y, right, y); y += 3.5;
+    doc.setFontSize(fs);
+    doc.text("¡Gracias por su compra!", center, y, { align: "center" }); y += 3;
+    doc.setFontSize(fs - 1);
+    doc.text("IVA incluido en todos los precios", center, y, { align: "center" });
 
     const safeId = String(order.id).replace(/[^a-zA-Z0-9_-]/g, "");
     doc.save(`comprobante-${safeId || "venta"}.pdf`);

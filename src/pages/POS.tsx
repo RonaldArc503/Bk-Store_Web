@@ -392,116 +392,114 @@ export default function POS() {
     const width = paperSize === '58mm' ? 58 : paperSize === '80mm' ? 80 : 216
     const isLetter = paperSize === 'letter'
     const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
-    const lineHeight = 5
-    const height = isLetter ? 279 : Math.max(130, 80 + items.length * lineHeight + 50)
+    const lineHeight = paperSize === '58mm' ? 4 : 5
+    const height = isLetter ? 279 : Math.max(140, 90 + items.length * (lineHeight * 2) + 60)
 
     const doc = new jsPDF({ unit: 'mm', format: isLetter ? 'letter' : [width, height] })
-    const left = 5
-    const right = isLetter ? 200 : width - 5
+    const left = 4
+    const right = isLetter ? 200 : width - 4
     const center = (left + right) / 2
+    const fs = paperSize === '58mm' ? 6 : 7
     let y = 8
 
-    // Header
-    doc.setFontSize(14)
+    doc.setFontSize(paperSize === '58mm' ? 10 : 14)
     doc.setFont('helvetica', 'bold')
     doc.text('Bikini Store', center, y, { align: 'center' })
-    y += 5
-    doc.setFontSize(7)
+    y += 4
+    doc.setFontSize(fs)
     doc.setFont('helvetica', 'normal')
     doc.text('Sistema de Punto de Venta', center, y, { align: 'center' })
-    y += 6
+    y += 5
 
-    // Ticket info
-    doc.setFontSize(7)
+    doc.setFontSize(fs)
     const ticketId = String(orderInfo.orderId || orderInfo.id || '').slice(-8).toUpperCase()
-    const empLabel = empleadoInfo.nombre ? `${empleadoInfo.nombre} (${empleadoInfo.rol || 'Vendedor'})` : (user?.email || 'Cajero')
-    doc.text(`Documento N°: ${ticketId}`, left, y)
+    doc.text(`Doc N°: ${ticketId}`, left, y)
     doc.text(`Caja: 1`, right, y, { align: 'right' })
-    y += 4
+    y += 3.5
     doc.text(`Fecha: ${orderInfo.date || ''}`, left, y)
-    y += 4
-    doc.text(`Empleado: ${empLabel}`, left, y)
+    y += 3.5
+    const empName = empleadoInfo.nombre || user?.email || 'Cajero'
+    const empRol = empleadoInfo.rol || 'Vendedor'
+    doc.text(`Empleado: ${empName}`, left, y)
+    y += 3.5
+    doc.text(`Cargo: ${empRol}`, left, y)
     y += 3
 
-    // Divider
     doc.setDrawColor(0)
     doc.setLineWidth(0.3)
     doc.line(left, y, right, y)
-    y += 4
+    y += 3
 
-    // Table header
+    // Items — each item on two lines to avoid column overlap
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7)
+    doc.setFontSize(fs)
     doc.text('Cant.', left, y)
-    doc.text('Artículo', left + 10, y)
-    doc.text('P. Unit.', right - 22, y, { align: 'right' })
-    doc.text('Total', right, y, { align: 'right' })
+    doc.text('Artículo', left + 8, y)
     y += 2
-    doc.setLineWidth(0.2)
+    doc.setLineWidth(0.15)
     doc.line(left, y, right, y)
-    y += 4
+    y += 3
 
-    // Items
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
+    doc.setFontSize(fs)
     items.forEach((item: any) => {
       const name = String(item.name || 'Producto')
       const qty = Number(item.quantity || 0)
       const lineTotal = Number(item.lineTotal || 0)
       const unitPrice = qty > 0 ? lineTotal / qty : 0
-      const displayName = name.length > 18 ? name.substring(0, 17) + '…' : name
+      const maxNameLen = paperSize === '58mm' ? 22 : 30
+      const displayName = name.length > maxNameLen ? name.substring(0, maxNameLen - 1) + '…' : name
 
-      doc.text(String(qty), left + 2, y, { align: 'center' })
-      doc.text(displayName, left + 10, y)
-      doc.text(`$${unitPrice.toFixed(2)}`, right - 22, y, { align: 'right' })
+      doc.text(`${qty}`, left, y)
+      doc.text(displayName, left + 8, y)
+      y += lineHeight
+      doc.setFontSize(fs - 1)
+      doc.text(`  P.Unit: $${unitPrice.toFixed(2)}`, left, y)
       doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: 'right' })
+      doc.setFontSize(fs)
       y += lineHeight
     })
 
-    // Subtotal divider
     y += 1
     doc.line(left, y, right, y)
-    y += 4
+    y += 3.5
 
-    // IVA breakdown
     const total = Number(orderInfo.total || 0)
     const baseImponible = Math.round((total / 1.13) * 100) / 100
     const ivaAmount = Math.round((total - baseImponible) * 100) / 100
 
-    doc.setFontSize(7)
+    doc.setFontSize(fs)
     doc.text('Subtotal (sin IVA):', left, y)
     doc.text(`$${baseImponible.toFixed(2)}`, right, y, { align: 'right' })
-    y += 4
+    y += 3.5
     doc.text('IVA 13%:', left, y)
     doc.text(`$${ivaAmount.toFixed(2)}`, right, y, { align: 'right' })
     y += 3
+    doc.setLineWidth(0.4)
     doc.line(left, y, right, y)
-    y += 5
+    y += 4
 
-    // Total
-    doc.setFontSize(11)
+    doc.setFontSize(paperSize === '58mm' ? 9 : 11)
     doc.setFont('helvetica', 'bold')
     doc.text('TOTAL:', left, y)
     doc.text(`$${total.toFixed(2)}`, right, y, { align: 'right' })
-    y += 6
+    y += 5
 
-    // Payment method
-    doc.setFontSize(8)
+    doc.setFontSize(fs)
     doc.setFont('helvetica', 'normal')
     const method = paymentLabels[orderInfo.method] || orderInfo.method || 'Efectivo'
     doc.text(`Método de pago: ${method}`, left, y)
-    y += 4
+    y += 3.5
     doc.text(`Pagado: $${total.toFixed(2)}`, left, y)
-    y += 5
+    y += 4
 
-    // Footer
     doc.setLineWidth(0.3)
     doc.line(left, y, right, y)
-    y += 4
-    doc.setFontSize(7)
+    y += 3.5
+    doc.setFontSize(fs)
     doc.text('¡Gracias por su compra!', center, y, { align: 'center' })
     y += 3
-    doc.setFontSize(6)
+    doc.setFontSize(fs - 1)
     doc.text('IVA incluido en todos los precios', center, y, { align: 'center' })
 
     return doc
