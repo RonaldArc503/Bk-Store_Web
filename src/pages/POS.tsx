@@ -26,6 +26,7 @@ import { OrderService } from '../services/OrderService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
+import { UserService } from '../services/UserService'
 import { useSettings } from '../context/SettingsContext'
 
 type ProductDB = {
@@ -65,6 +66,14 @@ export default function POS() {
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [empleadoInfo, setEmpleadoInfo] = useState<{ nombre: string; rol: string }>({ nombre: '', rol: '' })
+
+  useEffect(() => {
+    if (!user?.email) return
+    UserService.getUserByEmail(user.email).then((u) => {
+      if (u) setEmpleadoInfo({ nombre: u.nombreCompleto || u.usuario, rol: u.rol || '' })
+    }).catch(() => {})
+  }, [user?.email])
 
   useEffect(() => {
     if (cart.length === 0 && isCartOpen) {
@@ -352,7 +361,7 @@ export default function POS() {
 
       if (settings.printing.autoPrint) {
         setTimeout(() => {
-          downloadTicketPdf(completedOrder, true)
+          printTicketPdf(completedOrder, true)
         }, 200)
       }
     } catch (err) {
@@ -376,8 +385,8 @@ export default function POS() {
 
   const paymentLabels: Record<string, string> = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', qr: 'Código QR' }
 
-  const downloadTicketPdf = (orderInfo: any, closeAfter: boolean) => {
-    if (!orderInfo) return
+  const buildTicketPdf = (orderInfo: any) => {
+    if (!orderInfo) return null
 
     const paperSize = settings.printing.paperSize
     const width = paperSize === '58mm' ? 58 : paperSize === '80mm' ? 80 : 216
@@ -405,12 +414,13 @@ export default function POS() {
     // Ticket info
     doc.setFontSize(7)
     const ticketId = String(orderInfo.orderId || orderInfo.id || '').slice(-8).toUpperCase()
+    const empLabel = empleadoInfo.nombre ? `${empleadoInfo.nombre} (${empleadoInfo.rol || 'Vendedor'})` : (user?.email || 'Cajero')
     doc.text(`Documento N°: ${ticketId}`, left, y)
+    doc.text(`Caja: 1`, right, y, { align: 'right' })
     y += 4
     doc.text(`Fecha: ${orderInfo.date || ''}`, left, y)
     y += 4
-    doc.text(`Caja: 1`, left, y)
-    doc.text(`Empleado: ${user?.displayName || user?.email || 'Cajero'}`, center, y, { align: 'center' })
+    doc.text(`Empleado: ${empLabel}`, left, y)
     y += 3
 
     // Divider
@@ -494,10 +504,30 @@ export default function POS() {
     doc.setFontSize(6)
     doc.text('IVA incluido en todos los precios', center, y, { align: 'center' })
 
+    return doc
+  }
+
+  const saveTicketPdf = (orderInfo: any, closeAfter: boolean) => {
+    const doc = buildTicketPdf(orderInfo)
+    if (!doc) return
     const rawId = String(orderInfo.orderId || orderInfo.id || 'ticket')
     const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '')
     doc.save(`ticket-${safeId || 'venta'}.pdf`)
+    if (closeAfter) setIsTicketModalOpen(false)
+  }
 
+  const printTicketPdf = (orderInfo: any, closeAfter: boolean) => {
+    const doc = buildTicketPdf(orderInfo)
+    if (!doc) return
+    const pdfBlob = doc.output('blob')
+    const blobUrl = URL.createObjectURL(pdfBlob)
+    const printWindow = window.open(blobUrl, '_blank')
+    if (printWindow) {
+      printWindow.addEventListener('load', () => {
+        printWindow.focus()
+        printWindow.print()
+      })
+    }
     if (closeAfter) setIsTicketModalOpen(false)
   }
 
@@ -869,10 +899,11 @@ export default function POS() {
                 </div>
 
                 {/* Info */}
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-500 dark:text-gray-400 mb-3 px-1">
+                <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-[11px] text-gray-500 dark:text-gray-400 mb-3 px-1">
                   <p>Doc N°: <span className="font-medium text-gray-700 dark:text-gray-300">{tTicketId}</span></p>
                   <p className="text-right">Caja: <span className="font-medium text-gray-700 dark:text-gray-300">1</span></p>
                   <p className="col-span-2">Fecha: <span className="font-medium text-gray-700 dark:text-gray-300">{lastOrderInfo.date}</span></p>
+                  <p className="col-span-2">Empleado: <span className="font-medium text-gray-700 dark:text-gray-300">{empleadoInfo.nombre || user?.email || 'Cajero'}{empleadoInfo.rol ? ` (${empleadoInfo.rol})` : ''}</span></p>
                 </div>
 
                 {/* Items table */}
@@ -934,7 +965,7 @@ export default function POS() {
 
               <div className="mt-3 flex gap-2">
                 <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
-                <button onClick={() => downloadTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />Descargar PDF</button>
+                <button onClick={() => saveTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />Descargar PDF</button>
               </div>
             </div>
           </div>
