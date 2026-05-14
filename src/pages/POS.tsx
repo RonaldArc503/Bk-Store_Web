@@ -41,9 +41,8 @@ type ProductDB = {
 
 type CartItemLocal = ProductDB & { quantity: number }
 
-const TAX_RATE = 0.13
+// IVA ya incluido en precios de venta — no se calcula por separado
 
-const roundCurrency = (value: number) => Math.round(value * 100) / 100
 
 export default function POS() {
   const { user, authReady } = useAuth()
@@ -222,8 +221,6 @@ export default function POS() {
   const clearCart = () => { setCart([]); setIsCartOpen(false) }
 
   const cartTotal = useMemo(() => cart.reduce((sum, it) => sum + calculateItemTotal(it), 0), [cart])
-  const taxAmount = useMemo(() => roundCurrency(cartTotal * TAX_RATE), [cartTotal])
-  const totalWithTax = useMemo(() => roundCurrency(cartTotal + taxAmount), [cartTotal, taxAmount])
   const cartItemCount = useMemo(() => cart.reduce((sum, it) => sum + it.quantity, 0), [cart])
 
   const categories = useMemo(
@@ -279,9 +276,8 @@ export default function POS() {
         lineTotal: calculateItemTotal(i),
       })),
       subtotal: cartTotal,
-      taxRate: TAX_RATE,
-      tax: taxAmount,
-      total: totalWithTax,
+      tax: 0,
+      total: cartTotal,
       method: selectedPaymentMethod,
       createdBy: user.uid,
     }
@@ -423,12 +419,11 @@ export default function POS() {
     y += 2
     doc.line(left, y, right, y)
     y += 4
-    doc.text(`Subtotal: $${Number(orderInfo.subtotal || 0).toFixed(2)}`, left, y)
-    y += 4
-    doc.text(`IVA (13%): $${Number(orderInfo.tax || 0).toFixed(2)}`, left, y)
-    y += 5
     doc.setFontSize(10)
     doc.text(`TOTAL: $${Number(orderInfo.total || 0).toFixed(2)}`, left, y)
+    y += 5
+    doc.setFontSize(7)
+    doc.text('IVA incluido', (left + right) / 2, y, { align: 'center' })
 
     const rawId = String(orderInfo.orderId || orderInfo.id || 'ticket')
     const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '')
@@ -520,21 +515,14 @@ export default function POS() {
       {cart.length > 0 && (
         <div className="p-5 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
           <div className="space-y-2 mb-4">
-            <div className="flex justify-between text-gray-500 dark:text-gray-400 text-sm">
-              <span>Subtotal</span>
-              <span>${cartTotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-gray-500 dark:text-gray-400 text-sm">
-              <span>IVA (13%)</span>
-              <span>${taxAmount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-xl font-bold text-gray-900 dark:text-white pt-3 border-t border-gray-200 dark:border-gray-700 mt-2">
+            <div className="flex justify-between text-xl font-bold text-gray-900 dark:text-white">
               <span>Total</span>
-              <span className="text-[#8CC63F]">${totalWithTax.toFixed(2)}</span>
+              <span className="text-[#8CC63F]">${cartTotal.toFixed(2)}</span>
             </div>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 text-right">IVA incluido</p>
           </div>
           <button onClick={handleCheckout} className="w-full py-3.5 rounded-xl bg-[#8CC63F] text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            Cobrar ${totalWithTax.toFixed(2)} <ChevronRight size={18} />
+            Cobrar ${cartTotal.toFixed(2)} <ChevronRight size={18} />
           </button>
           <button onClick={clearCart} className="w-full mt-2 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
             Vaciar carrito
@@ -709,7 +697,7 @@ export default function POS() {
         >
           <ShoppingCart size={20} />
           <span className="font-bold text-sm">
-            {cartItemCount} · ${totalWithTax.toFixed(2)}
+            {cartItemCount} · ${cartTotal.toFixed(2)}
           </span>
         </button>
       )}
@@ -821,18 +809,11 @@ export default function POS() {
               </div>
 
               <div className="mt-4">
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                  <span>Subtotal</span>
-                  <span>${lastOrderInfo.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                  <span>IVA (13%)</span>
-                  <span>${lastOrderInfo.tax.toFixed(2)}</span>
-                </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
                   <span>TOTAL</span>
                   <span>${lastOrderInfo.total.toFixed(2)}</span>
                 </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">IVA incluido</p>
               </div>
             </div>
 

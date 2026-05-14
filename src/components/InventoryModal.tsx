@@ -164,11 +164,12 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     navigator.clipboard.writeText(formData.codigo)
   }
 
+  const IVA_RATE = 0.13
   const costo = Number(formData.costo) || 0
   const unitario = Number(formData.precioUnitario) || 0
-  // Calculados automáticamente — no se ingresan
-  const mediaDocena = unitario * 6
-  const docena = unitario * 12
+  const precioVentaFinal = Math.round(unitario * (1 + IVA_RATE) * 100) / 100
+  const mediaDocena = Math.round(precioVentaFinal * 6 * 100) / 100
+  const docena = Math.round(precioVentaFinal * 12 * 100) / 100
 
   const margenUnitario = costo > 0 && unitario > 0 ? ((unitario - costo) / unitario * 100) : null
   const costoInvalido = costo > 0 && unitario > 0 && costo >= unitario
@@ -233,7 +234,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         stock: Number(formData.stock) || 0,
         stockMinimo: lowStockThreshold,
         costo,
-        precioUnitario: unitario,
+        precioBase: unitario,
+        precioUnitario: precioVentaFinal,
         precioMediaDocena: mediaDocena,
         precioDocena: docena,
       }
@@ -547,6 +549,16 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 )}
               </div>
 
+              {/* Precio de venta final (con IVA) */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs md:text-sm font-medium text-[#8CC63F] mb-1 md:mb-2">
+                  Precio de Venta Final (IVA 13% incluido) — calculado
+                </label>
+                <div className="w-full px-3 py-2.5 bg-[#8CC63F]/10 border border-[#8CC63F]/30 rounded-lg text-base font-bold text-[#8CC63F]">
+                  {unitario > 0 ? `$${precioVentaFinal.toFixed(2)}` : '—'}
+                </div>
+              </div>
+
               {/* Campos calculados automáticamente */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 md:mb-2">
@@ -570,21 +582,21 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
             {/* Resumen de precios en tiempo real */}
             {unitario > 0 && (
               <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 space-y-2">
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Resumen</p>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Resumen de precios al público (IVA incluido)</p>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">1 unidad</p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">${unitario.toFixed(2)}</p>
+                    <p className="text-sm font-bold text-[#8CC63F]">${precioVentaFinal.toFixed(2)}</p>
                   </div>
                   <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">½ docena (×6)</p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">${mediaDocena.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">${unitario.toFixed(2)}/u.</p>
+                    <p className="text-sm font-bold text-[#8CC63F]">${mediaDocena.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${precioVentaFinal.toFixed(2)}/u.</p>
                   </div>
                   <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">docena (×12)</p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">${docena.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">${unitario.toFixed(2)}/u.</p>
+                    <p className="text-sm font-bold text-[#8CC63F]">${docena.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${precioVentaFinal.toFixed(2)}/u.</p>
                   </div>
                 </div>
                 {margenUnitario !== null && (

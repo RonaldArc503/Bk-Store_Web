@@ -78,13 +78,7 @@ export default function Dashboard() {
     const id = String(item.id ?? item.productId ?? item.productoId ?? '').trim()
     return id ? `id:${id}` : `name:${getItemName(item).toLowerCase()}`
   }
-  const getOrderSubtotal = (order: OrderRecord) => toNumber(order.subtotal) || (order.items || []).reduce((s, item) => s + getItemSubtotal(item), 0)
   const getOrderTotal = (order: OrderRecord) => toNumber(order.total)
-  const getOrderTax = (order: OrderRecord) => {
-    const tax = toNumber(order.tax)
-    if (tax > 0) return tax
-    return Math.max(0, getOrderTotal(order) - getOrderSubtotal(order))
-  }
   const getTicket = (orderId: string) => orderId.slice(-8).toUpperCase()
   const toDateTime = (value?: string) => {
     if (!value) return ''
@@ -189,9 +183,10 @@ export default function Dashboard() {
     doc.line(left, y, right, y); y += 4
     items.forEach((item) => { doc.text(`${getItemQuantity(item)} x ${getItemName(item)}`, left, y); doc.text(`$${getItemSubtotal(item).toFixed(2)}`, right, y, { align: 'right' }); y += lineHeight })
     y += 2; doc.line(left, y, right, y); y += 4
-    doc.text(`Total sin IVA: $${getOrderSubtotal(order).toFixed(2)}`, left, y); y += 4
-    doc.text(`IVA: $${getOrderTax(order).toFixed(2)}`, left, y); y += 5
-    doc.text(`Total con IVA: $${getOrderTotal(order).toFixed(2)}`, left, y)
+    doc.setFontSize(10)
+    doc.text(`TOTAL: $${getOrderTotal(order).toFixed(2)}`, left, y); y += 5
+    doc.setFontSize(7)
+    doc.text('IVA incluido', (left + right) / 2, y, { align: 'center' })
     doc.save(`comprobante-${String(order.id).replace(/[^a-zA-Z0-9_-]/g, '') || 'venta'}.pdf`)
   }
 
@@ -439,10 +434,6 @@ export default function Dashboard() {
                 <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Pago</p>
                   <p className="font-medium text-gray-900 dark:text-white mt-0.5">{toPaymentLabel(selectedOrder.method)}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Subtotal</p>
-                  <p className="font-medium text-gray-900 dark:text-white mt-0.5">{formatCurrency(getOrderSubtotal(selectedOrder))}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-[#8CC63F]/10 border border-[#8CC63F]/20">
                   <p className="text-xs text-[#8CC63F] font-medium">Total</p>
