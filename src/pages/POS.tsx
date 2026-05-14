@@ -374,65 +374,131 @@ export default function POS() {
     }
   }
 
+  const paymentLabels: Record<string, string> = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', qr: 'Código QR' }
+
   const downloadTicketPdf = (orderInfo: any, closeAfter: boolean) => {
     if (!orderInfo) return
 
     const paperSize = settings.printing.paperSize
     const width = paperSize === '58mm' ? 58 : paperSize === '80mm' ? 80 : 216
     const isLetter = paperSize === 'letter'
-    const baseHeight = 90
+    const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
     const lineHeight = 5
-    const itemsCount = Array.isArray(orderInfo.items) ? orderInfo.items.length : 0
-    const height = isLetter ? 279 : Math.max(baseHeight, 55 + itemsCount * lineHeight + 30)
+    const height = isLetter ? 279 : Math.max(130, 80 + items.length * lineHeight + 50)
 
-    const doc = new jsPDF({
-      unit: 'mm',
-      format: isLetter ? 'letter' : [width, height],
-    })
+    const doc = new jsPDF({ unit: 'mm', format: isLetter ? 'letter' : [width, height] })
+    const left = 5
+    const right = isLetter ? 200 : width - 5
+    const center = (left + right) / 2
+    let y = 8
 
-    const left = 6
-    const right = isLetter ? 200 : width - 6
-    let y = 10
-
-    doc.setFontSize(12)
-    doc.text('Bikini Store', (left + right) / 2, y, { align: 'center' })
+    // Header
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Bikini Store', center, y, { align: 'center' })
     y += 5
-    doc.setFontSize(8)
-    doc.text(`Ticket: ${orderInfo.orderId || orderInfo.id || ''}`, left, y)
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Sistema de Punto de Venta', center, y, { align: 'center' })
+    y += 6
+
+    // Ticket info
+    doc.setFontSize(7)
+    const ticketId = String(orderInfo.orderId || orderInfo.id || '').slice(-8).toUpperCase()
+    doc.text(`Documento N°: ${ticketId}`, left, y)
     y += 4
     doc.text(`Fecha: ${orderInfo.date || ''}`, left, y)
     y += 4
+    doc.text(`Caja: 1`, left, y)
+    doc.text(`Empleado: ${user?.displayName || user?.email || 'Cajero'}`, center, y, { align: 'center' })
+    y += 3
+
+    // Divider
+    doc.setDrawColor(0)
+    doc.setLineWidth(0.3)
     doc.line(left, y, right, y)
     y += 4
 
-    doc.setFontSize(8)
-    const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
+    // Table header
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.text('Cant.', left, y)
+    doc.text('Artículo', left + 10, y)
+    doc.text('P. Unit.', right - 22, y, { align: 'right' })
+    doc.text('Total', right, y, { align: 'right' })
+    y += 2
+    doc.setLineWidth(0.2)
+    doc.line(left, y, right, y)
+    y += 4
+
+    // Items
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
     items.forEach((item: any) => {
-      const name = item.name || 'Producto'
-      const qty = item.quantity || 0
+      const name = String(item.name || 'Producto')
+      const qty = Number(item.quantity || 0)
       const lineTotal = Number(item.lineTotal || 0)
-      doc.text(`${qty} x ${name}`, left, y)
+      const unitPrice = qty > 0 ? lineTotal / qty : 0
+      const displayName = name.length > 18 ? name.substring(0, 17) + '…' : name
+
+      doc.text(String(qty), left + 2, y, { align: 'center' })
+      doc.text(displayName, left + 10, y)
+      doc.text(`$${unitPrice.toFixed(2)}`, right - 22, y, { align: 'right' })
       doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: 'right' })
       y += lineHeight
     })
 
-    y += 2
+    // Subtotal divider
+    y += 1
     doc.line(left, y, right, y)
     y += 4
-    doc.setFontSize(10)
-    doc.text(`TOTAL: $${Number(orderInfo.total || 0).toFixed(2)}`, left, y)
-    y += 5
+
+    // IVA breakdown
+    const total = Number(orderInfo.total || 0)
+    const baseImponible = Math.round((total / 1.13) * 100) / 100
+    const ivaAmount = Math.round((total - baseImponible) * 100) / 100
+
     doc.setFontSize(7)
-    doc.text('IVA incluido', (left + right) / 2, y, { align: 'center' })
+    doc.text('Subtotal (sin IVA):', left, y)
+    doc.text(`$${baseImponible.toFixed(2)}`, right, y, { align: 'right' })
+    y += 4
+    doc.text('IVA 13%:', left, y)
+    doc.text(`$${ivaAmount.toFixed(2)}`, right, y, { align: 'right' })
+    y += 3
+    doc.line(left, y, right, y)
+    y += 5
+
+    // Total
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('TOTAL:', left, y)
+    doc.text(`$${total.toFixed(2)}`, right, y, { align: 'right' })
+    y += 6
+
+    // Payment method
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    const method = paymentLabels[orderInfo.method] || orderInfo.method || 'Efectivo'
+    doc.text(`Método de pago: ${method}`, left, y)
+    y += 4
+    doc.text(`Pagado: $${total.toFixed(2)}`, left, y)
+    y += 5
+
+    // Footer
+    doc.setLineWidth(0.3)
+    doc.line(left, y, right, y)
+    y += 4
+    doc.setFontSize(7)
+    doc.text('¡Gracias por su compra!', center, y, { align: 'center' })
+    y += 3
+    doc.setFontSize(6)
+    doc.text('IVA incluido en todos los precios', center, y, { align: 'center' })
 
     const rawId = String(orderInfo.orderId || orderInfo.id || 'ticket')
     const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '')
-    const fileName = `ticket-${safeId || 'venta'}.pdf`
-    doc.save(fileName)
+    doc.save(`ticket-${safeId || 'venta'}.pdf`)
 
-    if (closeAfter) {
-      setIsTicketModalOpen(false)
-    }
+    if (closeAfter) setIsTicketModalOpen(false)
   }
 
   if (cajaOpen === null) {
@@ -785,45 +851,95 @@ export default function POS() {
       )}
 
       {/* Ticket Modal */}
-      {isTicketModalOpen && lastOrderInfo && (
-        <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl w-full max-w-sm">
-            <div id="print-area" className="bg-white dark:bg-gray-900 p-6 rounded-lg">
-              <div className="text-center mb-4">
-                <div className="w-10 h-10 bg-[#8CC63F] text-white rounded-lg flex items-center justify-center mx-auto mb-2"><Store size={18} /></div>
-                <h2 className="font-bold text-gray-900 dark:text-white">Bikini Store</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {lastOrderInfo.orderId}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Fecha: {lastOrderInfo.date}</p>
-              </div>
-
-              <div className="space-y-2 text-sm border-t border-b border-gray-200 dark:border-gray-700 py-3">
-                {lastOrderInfo.items.map((it: any, idx: number) => (
-                  <div key={idx} className="flex justify-between">
-                    <div>
-                      <p className="font-medium text-gray-800 dark:text-gray-200">{it.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{it.quantity} unidades</p>
-                    </div>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">${it.lineTotal.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4">
-                <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
-                  <span>TOTAL</span>
-                  <span>${lastOrderInfo.total.toFixed(2)}</span>
+      {isTicketModalOpen && lastOrderInfo && (() => {
+        const tTotal = Number(lastOrderInfo.total || 0)
+        const tBase = Math.round((tTotal / 1.13) * 100) / 100
+        const tIva = Math.round((tTotal - tBase) * 100) / 100
+        const tMethod = paymentLabels[lastOrderInfo.method] || lastOrderInfo.method || 'Efectivo'
+        const tTicketId = String(lastOrderInfo.orderId || lastOrderInfo.id || '').slice(-8).toUpperCase()
+        return (
+          <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+              <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm">
+                {/* Header */}
+                <div className="text-center mb-4">
+                  <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2"><Store size={20} /></div>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">Bikini Store</h2>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Sistema de Punto de Venta</p>
                 </div>
-                <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">IVA incluido</p>
-              </div>
-            </div>
 
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cerrar</button>
-              <button onClick={() => downloadTicketPdf(lastOrderInfo, true)} className="flex-1 py-2 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2"><Receipt size={16} />Descargar PDF</button>
+                {/* Info */}
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-500 dark:text-gray-400 mb-3 px-1">
+                  <p>Doc N°: <span className="font-medium text-gray-700 dark:text-gray-300">{tTicketId}</span></p>
+                  <p className="text-right">Caja: <span className="font-medium text-gray-700 dark:text-gray-300">1</span></p>
+                  <p className="col-span-2">Fecha: <span className="font-medium text-gray-700 dark:text-gray-300">{lastOrderInfo.date}</span></p>
+                </div>
+
+                {/* Items table */}
+                <div className="border-t border-gray-200 dark:border-gray-700">
+                  <div className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
+                    <span>Cant.</span>
+                    <span>Artículo</span>
+                    <span className="text-right">P. Unit.</span>
+                    <span className="text-right">Total</span>
+                  </div>
+                  {lastOrderInfo.items.map((it: any, idx: number) => {
+                    const qty = Number(it.quantity || 0)
+                    const lt = Number(it.lineTotal || 0)
+                    const up = qty > 0 ? lt / qty : 0
+                    return (
+                      <div key={idx} className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs border-b border-gray-50 dark:border-gray-800/50">
+                        <span className="text-gray-600 dark:text-gray-300">{qty}</span>
+                        <span className="text-gray-800 dark:text-gray-200 font-medium truncate">{it.name}</span>
+                        <span className="text-right text-gray-500 dark:text-gray-400">${up.toFixed(2)}</span>
+                        <span className="text-right font-medium text-gray-900 dark:text-gray-100">${lt.toFixed(2)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* IVA breakdown */}
+                <div className="mt-3 space-y-1.5 text-xs px-1">
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                    <span>Subtotal (sin IVA)</span>
+                    <span>${tBase.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                    <span>IVA 13%</span>
+                    <span>${tIva.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Total */}
+                <div className="flex justify-between items-center font-bold text-lg mt-3 pt-3 border-t-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-1">
+                  <span>TOTAL</span>
+                  <span>${tTotal.toFixed(2)}</span>
+                </div>
+
+                {/* Payment info */}
+                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Método de pago</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">{tMethod}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Pagado</span>
+                    <span className="font-semibold text-[#8CC63F]">${tTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <p className="text-center text-[10px] text-gray-400 dark:text-gray-500 mt-3">¡Gracias por su compra! · IVA incluido en todos los precios</p>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
+                <button onClick={() => downloadTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />Descargar PDF</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
