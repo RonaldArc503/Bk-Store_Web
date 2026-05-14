@@ -18,6 +18,7 @@ import { Button } from "../components/Button";
 import { Input } from "../components/input";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
+import { useSettings } from "../context/SettingsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,7 @@ export default function Reports() {
   const [cortes, setCortes] = useState<CorteRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+  const { settings } = useSettings();
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -524,16 +526,18 @@ export default function Reports() {
   };
 
   const downloadOrderReceiptPdf = (order: OrderRecord) => {
+    const paperSize = settings.printing.paperSize;
+    const width = paperSize === "58mm" ? 58 : paperSize === "80mm" ? 80 : 216;
+    const isLetter = paperSize === "letter";
     const items = Array.isArray(order.items) ? order.items : [];
-    const width = 80;
-    const lh = 4;
-    const height = Math.max(140, 90 + items.length * (lh * 2) + 60);
-    const doc = new jsPDF({ unit: "mm", format: [width, height] });
-    const left = 4; const right = width - 4; const center = width / 2;
-    const fs = 7;
+    const lh = paperSize === "58mm" ? 4 : 5;
+    const height = isLetter ? 279 : Math.max(140, 90 + items.length * (lh * 2) + 60);
+    const doc = new jsPDF({ unit: "mm", format: isLetter ? "letter" : [width, height] });
+    const left = 4; const right = isLetter ? 200 : width - 4; const center = (left + right) / 2;
+    const fs = paperSize === "58mm" ? 6 : 7;
     let y = 8;
 
-    doc.setFontSize(12); doc.setFont("helvetica", "bold");
+    doc.setFontSize(paperSize === "58mm" ? 10 : 14); doc.setFont("helvetica", "bold");
     doc.text("Bikini Store", center, y, { align: "center" }); y += 4;
     doc.setFontSize(fs); doc.setFont("helvetica", "normal");
     doc.text("Sistema de Punto de Venta", center, y, { align: "center" }); y += 5;
@@ -550,12 +554,13 @@ export default function Reports() {
     y += 2; doc.setLineWidth(0.15); doc.line(left, y, right, y); y += 3;
 
     doc.setFont("helvetica", "normal"); doc.setFontSize(fs);
+    const maxNameLen = paperSize === "58mm" ? 22 : 30;
     items.forEach((item) => {
       const qty = getItemQuantity(item);
       const name = getItemName(item);
       const lineTotal = getItemSubtotal(item);
       const unitPrice = qty > 0 ? lineTotal / qty : 0;
-      const displayName = name.length > 30 ? name.substring(0, 29) + "…" : name;
+      const displayName = name.length > maxNameLen ? name.substring(0, maxNameLen - 1) + "…" : name;
       doc.text(`${qty}`, left, y); doc.text(displayName, left + 8, y); y += lh;
       doc.setFontSize(fs - 1);
       doc.text(`  P.Unit: $${unitPrice.toFixed(2)}`, left, y);
@@ -574,7 +579,7 @@ export default function Reports() {
     doc.text("IVA 13%:", left, y); doc.text(`$${iva.toFixed(2)}`, right, y, { align: "right" }); y += 3;
     doc.setLineWidth(0.4); doc.line(left, y, right, y); y += 4;
 
-    doc.setFontSize(11); doc.setFont("helvetica", "bold");
+    doc.setFontSize(paperSize === "58mm" ? 9 : 11); doc.setFont("helvetica", "bold");
     doc.text("TOTAL:", left, y); doc.text(`$${total.toFixed(2)}`, right, y, { align: "right" }); y += 5;
 
     doc.setFontSize(fs); doc.setFont("helvetica", "normal");
