@@ -54,6 +54,7 @@ export default function POS() {
   const [products, setProducts] = useState<ProductDB[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
+  const [showPricesWithoutIva, setShowPricesWithoutIva] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
@@ -153,6 +154,9 @@ export default function POS() {
     })()
     return () => { mounted = false }
   }, [authReady, user?.uid])
+
+  const displayPrice = (price: number) =>
+    showPricesWithoutIva ? Math.round((price / 1.13) * 100) / 100 : price
 
   const calculateItemTotal = (item: CartItemLocal) => {
     const qty = item.quantity
@@ -614,7 +618,9 @@ export default function POS() {
               <span>Total</span>
               <span className="text-[#8CC63F]">${cartTotal.toFixed(2)}</span>
             </div>
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 text-right">IVA incluido</p>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 text-right">
+              {showPricesWithoutIva ? 'Precios mostrados sin IVA · Total con IVA' : 'IVA incluido'}
+            </p>
           </div>
           <button onClick={handleCheckout} className="w-full py-3.5 rounded-xl bg-[#8CC63F] text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             Cobrar ${cartTotal.toFixed(2)} <ChevronRight size={18} />
@@ -663,7 +669,21 @@ export default function POS() {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            <div className="mt-3 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPricesWithoutIva((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                  showPricesWithoutIva
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700'
+                    : 'bg-lime-50 text-lime-700 border-lime-300 dark:bg-lime-900/30 dark:text-lime-300 dark:border-lime-700'
+                }`}
+              >
+                {showPricesWithoutIva ? 'Precios sin IVA' : 'Precios con IVA'}
+              </button>
+            </div>
+
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {categories.map((category) => {
                 const active = selectedCategory === category
                 return (
@@ -726,8 +746,10 @@ export default function POS() {
                       </span>
                     </div>
                     <div className="mt-3 rounded-xl bg-lime-50 dark:bg-lime-900/20 border border-lime-200 dark:border-lime-800 px-3 py-2.5">
-                      <p className="text-[11px] uppercase tracking-wide text-lime-700/80 dark:text-lime-300">Precio unitario</p>
-                      <p className="text-2xl font-bold leading-tight text-lime-800 dark:text-lime-100">${(product.precioUnitario || 0).toFixed(2)}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-lime-700/80 dark:text-lime-300">
+                        Precio unitario {showPricesWithoutIva && <span className="text-amber-600 dark:text-amber-400">(sin IVA)</span>}
+                      </p>
+                      <p className="text-2xl font-bold leading-tight text-lime-800 dark:text-lime-100">${displayPrice(product.precioUnitario || 0).toFixed(2)}</p>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
@@ -740,7 +762,7 @@ export default function POS() {
                         }`}
                       >
                         <p className="text-[10px] text-gray-500 dark:text-gray-400">6 unidades</p>
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${(product.precioMediaDocena || 0).toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${displayPrice(product.precioMediaDocena || 0).toFixed(2)}</p>
                       </button>
                       <button
                         onClick={() => { if (!isOutOfStock && stock >= 12) addToCart(product, 12) }}
@@ -752,7 +774,7 @@ export default function POS() {
                         }`}
                       >
                         <p className="text-[10px] text-gray-500 dark:text-gray-400">12 unidades</p>
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${(product.precioDocena || 0).toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${displayPrice(product.precioDocena || 0).toFixed(2)}</p>
                       </button>
                     </div>
                     <div className="mt-3">
