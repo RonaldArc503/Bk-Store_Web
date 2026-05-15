@@ -15,6 +15,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
 import { useState, useEffect } from 'react'
+import type { ModuleKey } from '../auth/permissions'
 
 interface SidebarProps {
   activeItem?: string
@@ -41,7 +42,7 @@ const Tooltip = ({ children, label, isCollapsed }: {
 export function Sidebar({ activeItem }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout } = useAuth()
+  const { logout, hasModuleAccess } = useAuth()
   const { settings, updateUI } = useSettings()
   const isCollapsed = settings.ui.sidebarCollapsed
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -51,15 +52,25 @@ export function Sidebar({ activeItem }: SidebarProps) {
     setIsMobileMenuOpen(false)
   }, [location.pathname])
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: BarChart3 },
-    { id: 'pos', label: 'Punto de Venta', path: '/pos', icon: ShoppingBag },
-    { id: 'corte', label: 'Corte de Caja', path: '/corte', icon: Banknote },
-    { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart },
-    { id: 'reportes', label: 'Reportes', path: '/reports', icon: FileText },
-    { id: 'usuarios', label: 'Usuarios', path: '/users', icon: Users },
-    { id: 'configuracion', label: 'Configuración', path: '/configuracion', icon: Settings },
+  const menuItems: Array<{
+    id: string
+    label: string
+    path: string
+    icon: typeof BarChart3
+    moduleKey: ModuleKey
+    requiredAccess?: 'view' | 'full'
+  }> = [
+    { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: BarChart3, moduleKey: 'dashboard' },
+    { id: 'pos', label: 'Punto de Venta', path: '/pos', icon: ShoppingBag, moduleKey: 'pos', requiredAccess: 'full' },
+    { id: 'corte', label: 'Corte de Caja', path: '/corte', icon: Banknote, moduleKey: 'corte', requiredAccess: 'view' },
+    { id: 'inventario', label: 'Inventario', path: '/inventory', icon: ShoppingCart, moduleKey: 'inventory', requiredAccess: 'view' },
+    { id: 'reportes', label: 'Reportes', path: '/reports', icon: FileText, moduleKey: 'reports' },
+    { id: 'usuarios', label: 'Usuarios', path: '/users', icon: Users, moduleKey: 'users' },
+    { id: 'configuracion', label: 'Configuracion', path: '/configuracion', icon: Settings, moduleKey: 'configuracion' },
   ]
+  const visibleItems = menuItems.filter((item) =>
+    hasModuleAccess(item.moduleKey, item.requiredAccess || 'view'),
+  )
 
   const handleNavigate = (path: string) => {
     navigate(path)
@@ -115,7 +126,7 @@ export function Sidebar({ activeItem }: SidebarProps) {
         {/* Navigation */}
         <nav className={`flex-1 py-6 ${isCollapsed ? 'px-2' : 'px-4'}`}>
           <div className="space-y-1.5">
-            {menuItems.map((item) => {
+            {visibleItems.map((item) => {
               const Icon = item.icon
               const active = isActive(item)
               return (
@@ -199,7 +210,7 @@ export function Sidebar({ activeItem }: SidebarProps) {
       >
         <div className="h-full overflow-y-auto overscroll-contain">
           <div className="p-4 space-y-1">
-            {menuItems.map((item) => {
+            {visibleItems.map((item) => {
               const Icon = item.icon
               const active = isActive(item)
               return (
@@ -246,3 +257,4 @@ export function Sidebar({ activeItem }: SidebarProps) {
     </>
   )
 }
+

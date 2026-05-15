@@ -9,11 +9,14 @@ import { Sidebar } from '../components/Sidebar'
 import { InventoryModal } from '../components/InventoryModal'
 import { InventoryService } from '../services/InventoryService'
 import { useSettings } from '../context/SettingsContext'
+import { useAuth } from '../hooks/useAuth'
 import type { Product, InventoryStats } from '../types/product'
 import { toast } from 'react-toastify'
 
 export default function InventoryPage() {
   const { settings } = useSettings()
+  const { hasModuleAccess } = useAuth()
+  const canManageInventory = hasModuleAccess('inventory', 'full')
   const lowStockThreshold = settings.inventory.lowStockThreshold
   const lastLowStockNotice = useRef<number | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -101,6 +104,10 @@ export default function InventoryPage() {
 
   // Abrir modal para editar
   const handleEditClick = (product: Product) => {
+    if (!canManageInventory) {
+      toast.error('No tienes permisos para editar productos')
+      return
+    }
     setEditingProduct(product)
     setIsModalOpen(true)
   }
@@ -113,6 +120,9 @@ export default function InventoryPage() {
 
   // Manejar éxito del modal
   const handleModalSuccess = (product: Product) => {
+    if (!canManageInventory) {
+      return
+    }
     if (editingProduct) {
       handleUpdateProduct(product)
     } else {
@@ -183,15 +193,17 @@ export default function InventoryPage() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-lime-500 dark:focus:ring-lime-600 focus:border-transparent text-sm"
               />
             </div>
-            <button
-              onClick={() => {
-                setEditingProduct(null)
-                setIsModalOpen(true)
-              }}
-              className="w-full md:w-auto px-4 md:px-6 py-3 md:py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition whitespace-nowrap text-sm md:text-base"
-            >
-              + Agregar Producto
-            </button>
+            {canManageInventory && (
+              <button
+                onClick={() => {
+                  setEditingProduct(null)
+                  setIsModalOpen(true)
+                }}
+                className="w-full md:w-auto px-4 md:px-6 py-3 md:py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition whitespace-nowrap text-sm md:text-base"
+              >
+                + Agregar Producto
+              </button>
+            )}
           </div>
         </div>
 
@@ -265,22 +277,24 @@ export default function InventoryPage() {
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 font-medium">${product.costo.toFixed(2)}</td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 font-medium">${product.precioUnitario.toFixed(2)}</td>
                       <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditClick(product)}
-                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(product.id)}
-                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {canManageInventory && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditClick(product)}
+                              className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(product.id)}
+                              className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -345,22 +359,24 @@ export default function InventoryPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditClick(product)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition border border-blue-200 dark:border-blue-800/60"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Editar</span>
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm(product.id)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition border border-red-200 dark:border-red-800/60"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Eliminar</span>
-                  </button>
-                </div>
+                {canManageInventory && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEditClick(product)}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition border border-blue-200 dark:border-blue-800/60"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">Editar</span>
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(product.id)}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition border border-red-200 dark:border-red-800/60"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">Eliminar</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -383,7 +399,13 @@ export default function InventoryPage() {
                   Cancelar
                 </button>
                 <button
-                  onClick={() => handleDeleteProduct(deleteConfirm)}
+                  onClick={() => {
+                    if (!canManageInventory) {
+                      toast.error('No tienes permisos para eliminar productos')
+                      return
+                    }
+                    void handleDeleteProduct(deleteConfirm)
+                  }}
                   disabled={deleteLoading}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition disabled:opacity-50 text-sm"
                 >

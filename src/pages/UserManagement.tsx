@@ -4,11 +4,13 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Users, Plus, Edit2, Power, Trash2, Search } from 'lucide-react'
+import { Users, Plus, Edit2, Power, Trash2, Search, Shield } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { UserModal } from '../components/UserModal'
+import { UserPermissionsModal } from '../components/UserPermissionsModal'
 import { UserService } from '../services/UserService'
 import type { SystemUser } from '../types/index'
+import type { UserPermissions } from '../auth/permissions'
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<SystemUser[]>([])
@@ -17,6 +19,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null)
+  const [permissionsUser, setPermissionsUser] = useState<SystemUser | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [stats, setStats] = useState({
@@ -127,6 +130,16 @@ export default function UserManagementPage() {
     } else {
       handleCreateUser(user)
     }
+  }
+
+  const handlePermissionsSaved = (nextPermissions: UserPermissions) => {
+    if (!permissionsUser) return
+    const patch = (u: SystemUser) =>
+      u.id === permissionsUser.id
+        ? { ...u, permissions: nextPermissions, fechaActualizacion: new Date().toISOString().split('T')[0] }
+        : u
+    setUsers((prev) => prev.map(patch))
+    setFilteredUsers((prev) => prev.map(patch))
   }
 
   return (
@@ -288,6 +301,13 @@ export default function UserManagementPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={() => setPermissionsUser(user)}
+                            className="p-2 text-lime-600 dark:text-lime-400 hover:bg-lime-50 dark:hover:bg-lime-950/40 rounded-lg transition"
+                            title="Permisos"
+                          >
+                            <Shield className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => handleEditClick(user)}
                             className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
                             title="Editar"
@@ -350,6 +370,12 @@ export default function UserManagementPage() {
           onClose={handleCloseModal}
           onSuccess={handleModalSuccess}
           editingUser={editingUser}
+        />
+        <UserPermissionsModal
+          isOpen={Boolean(permissionsUser)}
+          user={permissionsUser}
+          onClose={() => setPermissionsUser(null)}
+          onSaved={handlePermissionsSaved}
         />
       </main>
     </div>

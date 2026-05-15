@@ -61,42 +61,42 @@ export const CajaService = {
    */
   async getActiveCaja(userId?: string) {
     try {
-      if (!userId) return null
-
-      // If we have a userId, try to read mapping first
-      try {
-        const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
-        const mappedId = mapSnap.exists() ? mapSnap.val() : null
-        if (mappedId) {
-          const mappedCajaRef = ref(database, `${CAJAS_PATH}/${mappedId}`)
-          const snap = await get(mappedCajaRef)
-          if (snap.exists()) {
-            const mappedCaja = snap.val()
-            if (mappedCaja?.status === 'open') {
-              return mappedCaja
-            }
-          }
-
-          try {
-            await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
-          } catch (cleanupError) {
-            console.warn('Error removing stale active caja mapping', cleanupError)
-          }
-        }
-      } catch (err) {
-        console.warn('Error reading user active caja mapping', err)
-      }
-
-      // Fallback: scan for any open caja (optionally created by userId)
       const snapAll = await get(ref(database, CAJAS_PATH))
       if (!snapAll.exists()) return null
       const data = snapAll.val()
       const cajas = Object.values(data) as any[]
+      const openCajas = cajas
+        .filter((c) => c?.status === 'open')
+        .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
 
-      const found = cajas.find((c) => c.status === 'open' && c.apertura?.createdBy === userId)
-      if (found) return found
+      if (openCajas.length === 0) return null
 
-      return null
+      // If we have a userId, try to read mapping first.
+      if (userId) {
+        try {
+          const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+          const mappedId = mapSnap.exists() ? mapSnap.val() : null
+          if (mappedId) {
+            const mapped = openCajas.find((c) => c?.id === mappedId)
+            if (mapped) return mapped
+
+            try {
+              await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+            } catch (cleanupError) {
+              console.warn('Error removing stale active caja mapping', cleanupError)
+            }
+          }
+        } catch (err) {
+          console.warn('Error reading user active caja mapping', err)
+        }
+
+        // Preferred fallback: open caja created by this user.
+        const ownOpenCaja = openCajas.find((c) => c?.apertura?.createdBy === userId)
+        if (ownOpenCaja) return ownOpenCaja
+      }
+
+      // Final fallback: return latest global open caja.
+      return openCajas[0] || null
     } catch (error) {
       console.error('Error getting active caja:', error)
       return null
@@ -161,6 +161,39 @@ export const CajaService = {
       return true
     } catch (error) {
       console.error('Error closing caja:', error)
+      throw error
+    }
+  },
+
+  async reopenCaja(cajaId: string) {
+    try {
+      const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
+      const snap = await get(cajaRef)
+      if (!snap.exists()) {
+        throw new Error('Caja no encontrada')
+      }
+
+      const caja = snap.val()
+      if (caja?.status !== 'closed') {
+        return caja
+      }
+
+      await update(cajaRef, {
+        status: 'open',
+        cierreData: null,
+        closedAt: null,
+        reopenedAt: new Date().toISOString(),
+      })
+
+      const createdBy = caja.apertura?.createdBy
+      if (createdBy) {
+        await set(ref(database, `${USER_ACTIVE_PATH}/${createdBy}`), cajaId)
+      }
+
+      const reopenedSnap = await get(cajaRef)
+      return reopenedSnap.exists() ? reopenedSnap.val() : { ...caja, status: 'open' }
+    } catch (error) {
+      console.error('Error reopening caja:', error)
       throw error
     }
   },

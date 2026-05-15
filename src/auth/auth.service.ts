@@ -1,6 +1,6 @@
 /**
  * Auth Service
- * Maneja autenticación con Firebase
+ * Maneja autenticacion con Firebase
  */
 
 import type { User as FirebaseUser } from "firebase/auth";
@@ -18,35 +18,66 @@ export interface AuthResponse {
   token: string;
 }
 
+function getAuthErrorCode(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return String((error as { code?: string }).code ?? '')
+  }
+  return ''
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
 /**
- * Login con email y contraseña
+ * Login con email y contrasena
  */
 export const loginEmail = async (email: string, password: string): Promise<AuthResponse> => {
+  const normalizedEmail = normalizeEmail(email)
+
   try {
-    const res = await signInWithEmailAndPassword(auth, email, password);
+    const res = await signInWithEmailAndPassword(auth, normalizedEmail, password);
     const token = await res.user.getIdToken();
     return { user: res.user, token };
   } catch (err: unknown) {
-    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : ''
-    if (code === 'auth/user-not-found') {
-      const verified = await UserService.verifyUserCredentials(email, password)
+    const code = getAuthErrorCode(err)
+    const canBootstrapAuthUser =
+      code === 'auth/user-not-found' ||
+      code === 'auth/invalid-credential' ||
+      code === 'auth/invalid-login-credentials'
+
+    if (canBootstrapAuthUser) {
+      const verified = await UserService.verifyUserCredentials(normalizedEmail, password)
       if (!verified) {
-        throw new Error('Credenciales inválidas')
+        throw new Error('Credenciales invalidas')
       }
 
-      const res = await createUserWithEmailAndPassword(auth, email, password)
-      const token = await res.user.getIdToken()
-      return { user: res.user, token }
+      try {
+        const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
+        const token = await res.user.getIdToken()
+        return { user: res.user, token }
+      } catch (createErr: unknown) {
+        const createErrCode = getAuthErrorCode(createErr)
+        if (createErrCode !== 'auth/email-already-in-use') {
+          throw createErr
+        }
+
+        const signInRes = await signInWithEmailAndPassword(auth, normalizedEmail, password)
+        const signInToken = await signInRes.user.getIdToken()
+        return { user: signInRes.user, token: signInToken }
+      }
     }
+
     throw err
   }
 };
 
 /**
- * Registro con email y contraseña
+ * Registro con email y contrasena
  */
 export const registerEmail = async (email: string, password: string): Promise<AuthResponse> => {
-  const res = await createUserWithEmailAndPassword(auth, email, password);
+  const normalizedEmail = normalizeEmail(email)
+  const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
   const token = await res.user.getIdToken();
   return { user: res.user, token };
 };
