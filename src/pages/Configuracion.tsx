@@ -18,14 +18,14 @@
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
-import { useSettings, type InventoryCatalogItem } from '../context/SettingsContext'
+import { useSettings, type InventoryCatalogItem, type StoreSettings } from '../context/SettingsContext'
+import { useAuth } from '../hooks/useAuth'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import type { Producto } from '../types/product'
-import * as XLSX from 'xlsx'
 
 /* --- Toggle switch reutilizable --- */
 
@@ -706,6 +706,8 @@ function DataSection({
   loading,
   backupLoading,
   importLoading,
+  backupAutomation,
+  onUpdateBackupAutomation,
 }: {
   onReset: () => void
   onDownloadBackupJson: () => void
@@ -714,8 +716,23 @@ function DataSection({
   loading: boolean
   backupLoading: boolean
   importLoading: boolean
+  backupAutomation: StoreSettings['backupAutomation']
+  onUpdateBackupAutomation: (patch: Partial<StoreSettings['backupAutomation']>) => void
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const weekOptions: { value: `${0 | 1 | 2 | 3 | 4 | 5 | 6}`; label: string }[] = [
+    { value: '0', label: 'Domingo' },
+    { value: '1', label: 'Lunes' },
+    { value: '2', label: 'Martes' },
+    { value: '3', label: 'Miercoles' },
+    { value: '4', label: 'Jueves' },
+    { value: '5', label: 'Viernes' },
+    { value: '6', label: 'Sabado' },
+  ]
+  const monthlyDayOptions = Array.from({ length: 31 }, (_, i) => {
+    const day = String(i + 1)
+    return { value: day, label: day }
+  })
 
   return (
     <SettingsSection icon={<Database className="w-4 h-4 text-red-500 dark:text-red-400" />} title="Datos">
@@ -772,6 +789,79 @@ function DataSection({
           </div>
         </SettingRow>
         <SettingRow
+          icon={<Database className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" />}
+          title="Backup automatico"
+          description="Programa descargas automaticas mensuales o semanales. Opcional."
+        >
+          <div className="w-full md:w-[420px] space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Activar programacion</span>
+              <Toggle
+                checked={backupAutomation.enabled}
+                onChange={(v) => onUpdateBackupAutomation({ enabled: v })}
+                label="Activar backup automatico"
+              />
+            </div>
+            {backupAutomation.enabled && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <Select
+                    value={backupAutomation.scheduleType}
+                    onChange={(v) =>
+                      onUpdateBackupAutomation({
+                        scheduleType: v as 'monthly' | 'weekly',
+                      })
+                    }
+                    options={[
+                      { value: 'monthly', label: 'Mensual' },
+                      { value: 'weekly', label: 'Semanal' },
+                    ]}
+                  />
+                  <Select
+                    value={backupAutomation.format}
+                    onChange={(v) =>
+                      onUpdateBackupAutomation({
+                        format: v as 'json' | 'xlsx',
+                      })
+                    }
+                    options={[
+                      { value: 'json', label: 'Formato JSON' },
+                      { value: 'xlsx', label: 'Formato Excel' },
+                    ]}
+                  />
+                </div>
+                {backupAutomation.scheduleType === 'monthly' ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Dia del mes</span>
+                    <Select
+                      value={String(backupAutomation.monthlyDay)}
+                      onChange={(v) =>
+                        onUpdateBackupAutomation({
+                          monthlyDay: Math.min(31, Math.max(1, Number(v) || 1)),
+                        })
+                      }
+                      options={monthlyDayOptions}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Dia de la semana</span>
+                    <Select
+                      value={String(backupAutomation.weeklyDay) as `${0 | 1 | 2 | 3 | 4 | 5 | 6}`}
+                      onChange={(v) =>
+                        onUpdateBackupAutomation({
+                          weeklyDay: Number(v) as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+                        })
+                      }
+                      options={weekOptions}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </SettingRow>
+        <SettingRow
           icon={<Database className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />}
           title="Borrar datos de prueba"
           description="Elimina ventas, cajas, cortes, inventario y movimientos. Conserva usuarios."
@@ -794,7 +884,8 @@ function DataSection({
 /* --- Pagina principal --- */
 
 export default function ConfiguracionPage() {
-  const { settings, resetSettings, lastSavedAt, canUndo, undoLastChange } = useSettings()
+  const { settings, resetSettings, lastSavedAt, updateBackupAutomation } = useSettings()
+  const { hasConfigSectionAccess } = useAuth()
   const [showReset, setShowReset] = useState(false)
   const [isDataResetOpen, setIsDataResetOpen] = useState(false)
   const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false)
@@ -803,6 +894,13 @@ export default function ConfiguracionPage() {
   const [isImportLoading, setIsImportLoading] = useState(false)
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
   const [savedPulse, setSavedPulse] = useState(false)
+  const canViewNotifications = hasConfigSectionAccess('notifications')
+  const canViewInterface = hasConfigSectionAccess('interfaz')
+  const canViewInventory = hasConfigSectionAccess('inventory')
+  const canViewPrinting = hasConfigSectionAccess('printing')
+  const canViewData = hasConfigSectionAccess('data')
+  const hasVisibleSections =
+    canViewNotifications || canViewInterface || canViewInventory || canViewPrinting || canViewData
 
   useEffect(() => {
     setSavedPulse(true)
@@ -828,29 +926,11 @@ export default function ConfiguracionPage() {
     }
   }
 
-  const triggerDownload = (blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = fileName
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const buildBackupFileName = (ext: 'json' | 'xlsx') => {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    return `bk-store-backup-${stamp}.${ext}`
-  }
-
   const handleDownloadBackupJson = async () => {
     if (isBackupLoading || isImportLoading) return
     setIsBackupLoading(true)
     try {
-      const backup = await MaintenanceService.createFullBackup(settings)
-      const blob = new Blob([JSON.stringify(backup, null, 2)], {
-        type: 'application/json;charset=utf-8',
-      })
-      triggerDownload(blob, buildBackupFileName('json'))
+      await MaintenanceService.downloadFullBackupJson(settings)
       toast.success('Backup JSON descargado')
     } catch (error) {
       console.error(error)
@@ -860,49 +940,11 @@ export default function ConfiguracionPage() {
     }
   }
 
-  const flattenForSheet = (value: unknown): Record<string, unknown>[] => {
-    if (Array.isArray(value)) {
-      return value.map((item, idx) => ({
-        index: idx + 1,
-        ...(typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : { value: item }),
-      }))
-    }
-
-    if (value && typeof value === 'object') {
-      return Object.entries(value as Record<string, unknown>).map(([key, item]) => ({
-        key,
-        ...(typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : { value: item }),
-      }))
-    }
-
-    return [{ value }]
-  }
-
   const handleDownloadBackupExcel = async () => {
     if (isBackupLoading || isImportLoading) return
     setIsBackupLoading(true)
     try {
-      const backup = await MaintenanceService.createFullBackup(settings)
-      const wb = XLSX.utils.book_new()
-      const orderedKeys = Object.keys(backup.database || {}).sort((a, b) => a.localeCompare(b))
-
-      const resumen = [
-        { campo: 'fuente', valor: backup.meta.source },
-        { campo: 'version', valor: backup.meta.version },
-        { campo: 'exportado_en', valor: backup.meta.exportedAt },
-        { campo: 'modulos', valor: orderedKeys.length },
-      ]
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen')
-
-      for (const key of orderedKeys) {
-        const rows = flattenForSheet((backup.database as Record<string, unknown>)[key])
-        const sheetName = key.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 31) || 'data'
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName)
-      }
-
-      const localRows = flattenForSheet(backup.local?.settings || {})
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localRows), 'config_local')
-      XLSX.writeFile(wb, buildBackupFileName('xlsx'))
+      await MaintenanceService.downloadFullBackupExcel(settings)
       toast.success('Backup Excel descargado')
     } catch (error) {
       console.error(error)
@@ -956,66 +998,72 @@ export default function ConfiguracionPage() {
               {savedPulse && (
                 <span className="text-xs text-gray-500 dark:text-gray-400">Guardado</span>
               )}
-              {canUndo && (
-                <button
-                  type="button"
-                  onClick={undoLastChange}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  Deshacer
-                </button>
-              )}
             </div>
           </div>
 
           <div className="space-y-8">
-            <ThemeSection />
-            <NotificationsSection />
-            <InterfaceSection />
-            <InventorySection />
-            <PrintingSection />
-            <DataSection
-              onReset={() => setIsDataResetOpen(true)}
-              onDownloadBackupJson={() => {
-                void handleDownloadBackupJson()
-              }}
-              onDownloadBackupExcel={() => {
-                void handleDownloadBackupExcel()
-              }}
-              onImportBackupJson={(file) => {
-                setPendingImportFile(file)
-                setIsImportConfirmOpen(true)
-              }}
-              loading={isDataResetLoading}
-              backupLoading={isBackupLoading}
-              importLoading={isImportLoading}
-            />
-          </div>
-
-          <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
-            {!showReset ? (
-              <button
-                type="button"
-                onClick={() => setShowReset(true)}
-                className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Restablecer valores predeterminados
-              </button>
-            ) : (
-              <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-xl p-4">
-                <p className="text-sm text-red-600 dark:text-red-400 flex-1">
-                  ¿Estás seguro? Esto restablecerá todas las preferencias (excepto el tema).
-                </p>
-                <button type="button" onClick={handleReset} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors">
-                  Confirmar
-                </button>
-                <button type="button" onClick={() => setShowReset(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors">
-                  Cancelar
-                </button>
+            {!hasVisibleSections && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-700 dark:text-amber-300">
+                No tienes secciones habilitadas en Configuracion.
               </div>
             )}
+            {canViewInterface && (
+              <>
+                <ThemeSection />
+                <InterfaceSection />
+              </>
+            )}
+            {canViewNotifications && <NotificationsSection />}
+            {canViewInventory && <InventorySection />}
+            {canViewPrinting && <PrintingSection />}
+            {canViewData && (
+              <DataSection
+                onReset={() => setIsDataResetOpen(true)}
+                onDownloadBackupJson={() => {
+                  void handleDownloadBackupJson()
+                }}
+                onDownloadBackupExcel={() => {
+                  void handleDownloadBackupExcel()
+                }}
+                onImportBackupJson={(file) => {
+                  setPendingImportFile(file)
+                  setIsImportConfirmOpen(true)
+                }}
+                loading={isDataResetLoading}
+                backupLoading={isBackupLoading}
+                importLoading={isImportLoading}
+                backupAutomation={settings.backupAutomation}
+                onUpdateBackupAutomation={updateBackupAutomation}
+              />
+            )}
           </div>
+
+          {canViewData && (
+            <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
+              {!showReset ? (
+                <button
+                  type="button"
+                  onClick={() => setShowReset(true)}
+                  className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Restablecer valores predeterminados
+                </button>
+              ) : (
+                <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-xl p-4">
+                  <p className="text-sm text-red-600 dark:text-red-400 flex-1">
+                    ¿Estás seguro? Esto restablecerá todas las preferencias (excepto el tema).
+                  </p>
+                  <button type="button" onClick={handleReset} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors">
+                    Confirmar
+                  </button>
+                  <button type="button" onClick={() => setShowReset(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <ConfirmDialog

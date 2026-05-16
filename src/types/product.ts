@@ -51,8 +51,12 @@ export interface Inventario {
   stockMinimo: number
   costo: number
   precioUnitario: number
+  precioTresUnidades: number
   precioMediaDocena: number
   precioDocena: number
+  price_for_3_units: number
+  price_for_half_dozen: number
+  price_for_dozen: number
   updatedAt: string
 }
 
@@ -62,6 +66,7 @@ export interface CreateInventarioInput {
   stockMinimo: number
   costo: number
   precioUnitario: number
+  precioTresUnidades: number
   precioMediaDocena: number
   precioDocena: number
 }
@@ -72,6 +77,7 @@ export interface UpdateInventarioInput {
   stockMinimo?: number
   costo?: number
   precioUnitario?: number
+  precioTresUnidades?: number
   precioMediaDocena?: number
   precioDocena?: number
 }
@@ -112,6 +118,7 @@ export interface Product {
   stock: number
   costo: number
   precioUnitario: number
+  precioTresUnidades: number
   precioMediaDocena: number
   precioDocena: number
   fechaCreacion: string
@@ -130,6 +137,7 @@ export interface CreateProductInput {
   stockMinimo?: number
   costo: number
   precioUnitario: number
+  precioTresUnidades: number
   precioMediaDocena: number
   precioDocena: number
 }

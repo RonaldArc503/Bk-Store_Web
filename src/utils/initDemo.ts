@@ -9,6 +9,7 @@ import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { auth, database } from '../app/firebase'
 import type { SystemUser } from '../types/index'
 import { hashPassword } from './password'
+import { getDefaultPermissionsByRole, getFullPermissions } from '../auth/permissions'
 
 const DEMO_PASSWORD = 'demo123456'
 
@@ -18,6 +19,7 @@ const DEMO_USERS: SystemUser[] = [
     usuario: 'admin',
     nombreCompleto: 'Administrador Principal',
     rol: 'Administrador',
+    permissions: getFullPermissions(),
     estado: 'Activo',
     email: 'admin@bikinistore.com',
     fechaCreacion: '8/4/2026',
@@ -28,6 +30,7 @@ const DEMO_USERS: SystemUser[] = [
     usuario: 'bodeguero',
     nombreCompleto: 'Encargado de Bodega',
     rol: 'Bodeguero',
+    permissions: getDefaultPermissionsByRole('Bodeguero'),
     estado: 'Activo',
     email: 'bodega@bikinistore.com',
     fechaCreacion: '8/4/2026',
@@ -38,6 +41,7 @@ const DEMO_USERS: SystemUser[] = [
     usuario: 'caja',
     nombreCompleto: 'Usuario de Caja',
     rol: 'Caja',
+    permissions: getDefaultPermissionsByRole('Caja'),
     estado: 'Activo',
     email: 'caja@bikinistore.com',
     fechaCreacion: '8/4/2026',
@@ -48,6 +52,7 @@ const DEMO_USERS: SystemUser[] = [
     usuario: 'vendedor',
     nombreCompleto: 'Vendedor',
     rol: 'Vendedor',
+    permissions: getDefaultPermissionsByRole('Vendedor'),
     estado: 'Activo',
     email: 'vendedor@bikinistore.com',
     fechaCreacion: '8/4/2026',
