@@ -132,4 +132,25 @@ export const CorteService = {
       return []
     }
   },
+
+  async deleteCorteForReopen(corteId: string): Promise<void> {
+    const corteRef = ref(database, `${CORTES_PATH}/${corteId}`)
+    const corteSnap = await get(corteRef)
+    if (!corteSnap.exists()) return
+
+    const corte = corteSnap.val() as Partial<CorteRecord> & { dateKey?: string }
+    const dateKey =
+      corte.dateKey ||
+      (corte.createdAt ? toDateKey(new Date(corte.createdAt)) : toDateKey(new Date()))
+    const dayLockRef = ref(database, `${CORTES_BY_DATE_PATH}/${dateKey}`)
+
+    await remove(corteRef)
+
+    const lockSnap = await get(dayLockRef)
+    if (!lockSnap.exists()) return
+    const lock = lockSnap.val() as { id?: string }
+    if (lock?.id === corteId) {
+      await remove(dayLockRef)
+    }
+  },
 }

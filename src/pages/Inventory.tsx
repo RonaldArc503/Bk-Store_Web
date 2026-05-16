@@ -9,11 +9,14 @@ import { Sidebar } from '../components/Sidebar'
 import { InventoryModal } from '../components/InventoryModal'
 import { InventoryService } from '../services/InventoryService'
 import { useSettings } from '../context/SettingsContext'
+import { useAuth } from '../hooks/useAuth'
 import type { Product, InventoryStats } from '../types/product'
 import { toast } from 'react-toastify'
 
 export default function InventoryPage() {
   const { settings } = useSettings()
+  const { hasModuleAccess } = useAuth()
+  const canManageInventory = hasModuleAccess('inventory', 'full')
   const lowStockThreshold = settings.inventory.lowStockThreshold
   const lastLowStockNotice = useRef<number | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -101,6 +104,10 @@ export default function InventoryPage() {
 
   // Abrir modal para editar
   const handleEditClick = (product: Product) => {
+    if (!canManageInventory) {
+      toast.error('No tienes permisos para editar productos')
+      return
+    }
     setEditingProduct(product)
     setIsModalOpen(true)
   }
@@ -113,6 +120,9 @@ export default function InventoryPage() {
 
   // Manejar éxito del modal
   const handleModalSuccess = (product: Product) => {
+    if (!canManageInventory) {
+      return
+    }
     if (editingProduct) {
       handleUpdateProduct(product)
     } else {
@@ -140,33 +150,33 @@ export default function InventoryPage() {
                 <Package className="w-5 h-5 md:w-6 md:h-6 text-lime-600" />
               </div>
             </div>
-            <p className="text-gray-500 text-xs md:text-sm font-medium">Total de Productos</p>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.totalProductos}</p>
-            <p className="text-xs text-gray-400 mt-2">En catálogo</p>
+            <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm font-medium">Total de Productos</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">{stats.totalProductos}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">En catálogo</p>
           </div>
 
           {/* Stock Total */}
           <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-3 md:mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Package className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 dark:bg-blue-950/40 rounded-lg flex items-center justify-center">
+                <Package className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
-            <p className="text-gray-500 text-xs md:text-sm font-medium">Stock Total</p>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.stockTotal}</p>
-            <p className="text-xs text-gray-400 mt-2">Unidades disponibles</p>
+            <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm font-medium">Stock Total</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">{stats.stockTotal}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Unidades disponibles</p>
           </div>
 
           {/* Alertas Stock */}
           <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 sm:col-span-2 lg:col-span-1">
             <div className="flex items-center justify-between mb-3 md:mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-orange-600" />
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-100 dark:bg-orange-950/40 rounded-lg flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
-            <p className="text-gray-500 text-xs md:text-sm font-medium">Alertas de Stock</p>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.alertasStock}</p>
-            <p className="text-xs text-gray-400 mt-2">Productos con stock bajo</p>
+            <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm font-medium">Alertas de Stock</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">{stats.alertasStock}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Productos con stock bajo</p>
           </div>
         </div>
 
@@ -180,18 +190,20 @@ export default function InventoryPage() {
                 placeholder="Buscar por nombre, código..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lime-500 focus:border-transparent text-sm"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-lime-500 dark:focus:ring-lime-600 focus:border-transparent text-sm"
               />
             </div>
-            <button
-              onClick={() => {
-                setEditingProduct(null)
-                setIsModalOpen(true)
-              }}
-              className="w-full md:w-auto px-4 md:px-6 py-3 md:py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition whitespace-nowrap text-sm md:text-base"
-            >
-              + Agregar Producto
-            </button>
+            {canManageInventory && (
+              <button
+                onClick={() => {
+                  setEditingProduct(null)
+                  setIsModalOpen(true)
+                }}
+                className="w-full md:w-auto px-4 md:px-6 py-3 md:py-2 bg-lime-500 hover:bg-lime-600 text-white rounded-lg font-medium transition whitespace-nowrap text-sm md:text-base"
+              >
+                + Agregar Producto
+              </button>
+            )}
           </div>
         </div>
 
@@ -209,78 +221,80 @@ export default function InventoryPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-800">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Código
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Producto
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Tipo
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Material
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Género
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Stock
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Costo
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       P. Unitario
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Acciones
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {filteredProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 text-sm font-mono text-gray-500">{product.codigo}</td>
+                    <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                      <td className="px-6 py-4 text-sm font-mono text-gray-500 dark:text-gray-400">{product.codigo}</td>
                       <td className="px-6 py-4">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{product.nombre}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{product.nombre}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{product.tipo}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{product.material}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{product.genero}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{product.tipo}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{product.material}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{product.genero}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-sm font-medium ${product.stock < lowStockThreshold ? 'text-orange-600' : 'text-green-600'}`}
+                            className={`text-sm font-medium ${product.stock < lowStockThreshold ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}
                           >
                             {product.stock}
                           </span>
-                          {product.stock < lowStockThreshold && <AlertTriangle className="w-4 h-4 text-orange-600" />}
+                          {product.stock < lowStockThreshold && <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400" />}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">${product.costo.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">${product.precioUnitario.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 font-medium">${product.costo.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 font-medium">${product.precioUnitario.toFixed(2)}</td>
                       <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditClick(product)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(product.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {canManageInventory && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditClick(product)}
+                              className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(product.id)}
+                              className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -293,74 +307,76 @@ export default function InventoryPage() {
         {/* Products Cards - Mobile */}
         <div className="md:hidden space-y-4 pb-8">
           {loading ? (
-            <div className="p-8 text-center bg-white rounded-lg">
-              <p className="text-gray-500">Cargando productos...</p>
+            <div className="p-8 text-center bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800">
+              <p className="text-gray-500 dark:text-gray-400">Cargando productos...</p>
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-lg">
-              <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No se encontraron productos</p>
+            <div className="p-8 text-center bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800">
+              <Package className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400">No se encontraron productos</p>
             </div>
           ) : (
             filteredProducts.map((product) => (
-              <div key={product.id} className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+              <div key={product.id} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-4 shadow-sm">
                 <div className="mb-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <p className="font-semibold text-gray-900">{product.nombre}</p>
-                      <p className="text-xs text-gray-500 font-mono">{product.codigo}</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{product.nombre}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{product.codigo}</p>
                     </div>
                     {product.stock < lowStockThreshold && (
-                      <AlertTriangle className="w-5 h-5 text-orange-600" />
+                      <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                     )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
                   <div>
-                    <p className="text-gray-500">Tipo</p>
-                    <p className="font-medium text-gray-900">{product.tipo}</p>
+                    <p className="text-gray-500 dark:text-gray-400">Tipo</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{product.tipo}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Material</p>
-                    <p className="font-medium text-gray-900">{product.material}</p>
+                    <p className="text-gray-500 dark:text-gray-400">Material</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{product.material}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Género</p>
-                    <p className="font-medium text-gray-900">{product.genero}</p>
+                    <p className="text-gray-500 dark:text-gray-400">Género</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{product.genero}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Stock</p>
-                    <p className={`font-medium ${product.stock < lowStockThreshold ? 'text-orange-600' : 'text-green-600'}`}>
+                    <p className="text-gray-500 dark:text-gray-400">Stock</p>
+                    <p className={`font-medium ${product.stock < lowStockThreshold ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                       {product.stock} unidades
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Costo</p>
-                    <p className="font-medium text-gray-900">${product.costo.toFixed(2)}</p>
+                    <p className="text-gray-500 dark:text-gray-400">Costo</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">${product.costo.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Precio</p>
-                    <p className="font-medium text-gray-900">${product.precioUnitario.toFixed(2)}</p>
+                    <p className="text-gray-500 dark:text-gray-400">Precio</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">${product.precioUnitario.toFixed(2)}</p>
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditClick(product)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition border border-blue-200"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Editar</span>
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm(product.id)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 hover:bg-red-50 rounded-lg transition border border-red-200"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Eliminar</span>
-                  </button>
-                </div>
+                {canManageInventory && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEditClick(product)}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition border border-blue-200 dark:border-blue-800/60"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">Editar</span>
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(product.id)}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition border border-red-200 dark:border-red-800/60"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">Eliminar</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -369,21 +385,27 @@ export default function InventoryPage() {
         {/* Delete Confirmation Modal */}
         {deleteConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">¿Eliminar producto?</h3>
-              <p className="text-gray-600 mb-6">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">¿Eliminar producto?</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
                 Esta acción no se puede deshacer. El producto será eliminado permanentemente.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-end">
                 <button
                   onClick={() => setDeleteConfirm(null)}
                   disabled={deleteLoading}
-                  className="px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition text-sm"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={() => handleDeleteProduct(deleteConfirm)}
+                  onClick={() => {
+                    if (!canManageInventory) {
+                      toast.error('No tienes permisos para eliminar productos')
+                      return
+                    }
+                    void handleDeleteProduct(deleteConfirm)
+                  }}
                   disabled={deleteLoading}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition disabled:opacity-50 text-sm"
                 >

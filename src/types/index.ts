@@ -36,6 +36,7 @@ export interface SystemUser {
   rol: UserRole
   estado: UserStatus
   email?: string
+  permissions?: unknown
   fechaCreacion: string
   fechaActualizacion: string
 }

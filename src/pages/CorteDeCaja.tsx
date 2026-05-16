@@ -293,21 +293,29 @@ function AperturaForm({ state, dispatch, onSave }: any) {
           />
         </div>
         <div>
-          <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Usuario Responsable</label>
+          <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Usuario Responsable *</label>
           <input
             type="text"
-            className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800"
+            placeholder="Nombre del responsable"
+            className={`w-full p-2 md:p-3 border rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800 ${
+              !state.isAperturaSaved && !state.aperturaUsuario.trim()
+                ? 'border-red-400 dark:border-red-600 focus:ring-red-300 dark:focus:ring-red-700'
+                : 'border-gray-200 dark:border-gray-700'
+            }`}
             value={state.aperturaUsuario}
             onChange={(e) => dispatch({ type: "SET_APERTURA_USUARIO", payload: e.target.value })}
             disabled={state.isAperturaSaved}
           />
+          {!state.isAperturaSaved && !state.aperturaUsuario.trim() && (
+            <p className="text-[11px] text-red-500 mt-1">Este campo es obligatorio</p>
+          )}
         </div>
       </div>
       <div className="mt-4 flex gap-3">
         {!state.isAperturaSaved ? (
           <button
             onClick={onSave}
-            disabled={!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0}
+            disabled={!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0 || !state.aperturaUsuario.trim()}
             className="px-4 py-2 bg-lime-500 text-white rounded-lg hover:bg-lime-600 transition disabled:opacity-50"
           >
             Guardar Apertura
@@ -658,7 +666,7 @@ function HistoryTimeline({ loading, entries, onOpenDay, filterMonth, onFilterCha
               )}
               <button
                 type="button" onClick={() => onOpenDay(day.key)}
-                className="mt-3 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                className="mt-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 Ver detalle del día
               </button>
@@ -859,9 +867,12 @@ function PrintVoucher({ corte, onClose }: { corte: CorteRecord; onClose: () => v
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export default function CorteDeCaja() {
-  const { user, authReady } = useAuth();
+  const { user, authReady, hasModuleAccess } = useAuth();
   const { settings } = useSettings();
+  const canManageCaja = hasModuleAccess("corte", "full");
+  const canReopenCaja = hasModuleAccess("corteReopen", "full");
   const reminderShown = useRef(false);
+  const autoCloseAttemptedDayRef = useRef<string | null>(null);
   const [state, dispatch] = useReducer(corteReducer, initialState);
 
   const buildTimeline = useCallback((cortes: CorteRecord[], cajas: any[]): TimelineEntry[] => {
@@ -929,20 +940,127 @@ export default function CorteDeCaja() {
     if (!settings.notifications.cashRegister) return;
     if (reminderShown.current) return;
     if (!state.isCajaOpen || state.todayClosed) return;
-    toast.info("Recuerda realizar el corte de caja al finalizar el día");
+    toast.info("Recuerda realizar el corte de caja al finalizar el dia");
     reminderShown.current = true;
   }, [settings.notifications.cashRegister, state.isCajaOpen, state.todayClosed]);
 
+  const autoCloseOpenCajaAt11Pm = useCallback(async () => {
+    if (!user?.uid) return;
+
+    const now = new Date();
+
+    const todayKey = toDateKeyFromIso(now.toISOString());
+    if (autoCloseAttemptedDayRef.current === todayKey) return;
+
+    const active = await CajaService.getActiveCaja(user.uid);
+    if (!active || active.status !== "open") return;
+
+    const activeDateSource = active.apertura?.fecha || active.createdAt || now.toISOString();
+    const activeDayKey = toDateKeyFromIso(activeDateSource);
+    const isStaleFromPreviousDay = activeDayKey < todayKey;
+    if (now.getHours() < 23 && !isStaleFromPreviousDay) return;
+
+    const remesas = remesasToArray(active.remesas);
+    const ventasDia = {
+      efectivo: Number(active.totals?.efectivo ?? 0),
+      transferencia: Number(active.totals?.transferencia ?? 0),
+      qr: Number(active.totals?.qr ?? 0),
+      tarjeta: Number(active.totals?.tarjeta ?? 0),
+    };
+    const totalVentasAuto =
+      ventasDia.efectivo + ventasDia.transferencia + ventasDia.qr + ventasDia.tarjeta;
+    const totalRetirosAuto = remesas.reduce((acc, r) => acc + Number(r?.monto || 0), 0);
+    const aperturaMonto = Number(active.apertura?.monto ?? 0);
+    const esperadoEfectivoAuto = aperturaMonto + ventasDia.efectivo - totalRetirosAuto;
+
+    const corteAuto = {
+      aperturaInfo: {
+        monto: aperturaMonto,
+        fecha: active.apertura?.fecha || new Date().toISOString(),
+        usuario: active.apertura?.usuario || "Usuario de Caja",
+      },
+      ventasDia,
+      totalVentas: totalVentasAuto,
+      remesas: remesas.map((r) => ({
+        id: Number(r?.id ?? Date.now()),
+        monto: Number(r?.monto ?? 0),
+        motivo: r?.motivo || "",
+      })),
+      totalRemesas: totalRetirosAuto,
+      efectivoContado: esperadoEfectivoAuto,
+      transferenciasContado: ventasDia.transferencia,
+      qrContado: ventasDia.qr,
+      tarjetaContado: ventasDia.tarjeta,
+      esperadoEfectivo: esperadoEfectivoAuto,
+      notas: "Cierre automatico 23:00",
+      createdBy: user.uid,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      const created = await CorteService.saveCorte(corteAuto);
+      await CajaService.closeCaja(active.id, { corteId: created.id, closedAt: new Date().toISOString() });
+      dispatch({ type: "SET_CAJA_OPEN", payload: false });
+      dispatch({ type: "SET_ACTIVE_CAJA_ID", payload: null });
+      dispatch({ type: "SET_TODAY_CLOSED", payload: true });
+      dispatch({ type: "SET_TODAY_CORTE", payload: created.corte as CorteRecord });
+      await reloadData();
+      autoCloseAttemptedDayRef.current = todayKey;
+      toast.info("La caja se cerro automaticamente a las 11:00 PM.");
+    } catch (err) {
+      if ((err as Error & { code?: string }).code === "CLOSE_ALREADY_EXISTS") {
+        autoCloseAttemptedDayRef.current = todayKey;
+      } else {
+        console.error("Error in automatic 11 PM close:", err);
+      }
+    }
+  }, [reloadData, user?.uid]);
+
+  useEffect(() => {
+    if (!authReady || !user?.uid) return;
+    void autoCloseOpenCajaAt11Pm();
+    const timer = window.setInterval(() => {
+      void autoCloseOpenCajaAt11Pm();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [authReady, autoCloseOpenCajaAt11Pm, user?.uid]);
+
   const handleSaveApertura = async () => {
+    if (!canManageCaja) { toast.error("No tienes permisos para abrir la caja"); return; }
     if (state.isAperturaSaved) { toast.info("Apertura ya guardada"); return; }
     if (state.todayClosed) { toast.warning("Ya se realizó un cierre hoy."); return; }
     if (!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0) { toast.warning("Ingrese un monto de apertura válido"); return; }
+    if (!state.aperturaUsuario.trim()) { toast.warning("El nombre del usuario responsable es obligatorio"); return; }
     try {
+      const alreadyOpen = await CajaService.getActiveCaja(user?.uid);
+      if (alreadyOpen && alreadyOpen.status === "open") {
+        dispatch({
+          type: "LOAD_CAJA_DATA",
+          payload: {
+            aperturaMonto: alreadyOpen.apertura?.monto,
+            aperturaFecha: alreadyOpen.apertura?.fecha
+              ? localDatetimeString(new Date(alreadyOpen.apertura.fecha))
+              : localDatetimeString(),
+            aperturaUsuario: alreadyOpen.apertura?.usuario ?? user?.displayName ?? "Usuario de Caja",
+            ventasDia: {
+              efectivo: Number(alreadyOpen.totals?.efectivo ?? 0),
+              transferencia: Number(alreadyOpen.totals?.transferencia ?? 0),
+              qr: Number(alreadyOpen.totals?.qr ?? 0),
+              tarjeta: Number(alreadyOpen.totals?.tarjeta ?? 0),
+            },
+            retiros: alreadyOpen.remesas || [],
+            activeCajaId: alreadyOpen.id || null,
+          },
+        });
+        toast.info("Ya existe una caja abierta. Se cargó la caja en curso.");
+        return;
+      }
+
       const now = new Date();
       const aperturaInfo = {
         monto: parseFloat(state.aperturaMonto),
         fecha: state.aperturaFecha ? new Date(state.aperturaFecha).toISOString() : now.toISOString(),
-        usuario: state.aperturaUsuario || "Usuario de Caja",
+        usuario: state.aperturaUsuario.trim(),
         createdBy: user?.uid,
       };
       const createdCaja = await CajaService.openCaja(aperturaInfo);
@@ -958,6 +1076,7 @@ export default function CorteDeCaja() {
   };
 
   const handleOpenView = async () => {
+    if (!canManageCaja) { toast.error("No tienes permisos para abrir la caja"); return; }
     if (state.todayClosed) { toast.warning("Ya se realizó un cierre hoy."); return; }
     try {
       const active = await CajaService.getActiveCaja(user?.uid);
@@ -990,6 +1109,65 @@ export default function CorteDeCaja() {
     }
   };
 
+  const handleReopenCaja = async () => {
+    if (!canReopenCaja) {
+      toast.error("No tienes permisos para reabrir la caja");
+      return;
+    }
+    if (!state.todayClosed || !state.todayCorte?.id) {
+      toast.warning("No hay un cierre de hoy para reabrir");
+      return;
+    }
+
+    const todayKey = toDateKeyFromIso(new Date().toISOString());
+    const corteDay = toDateKeyFromIso(state.todayCorte.createdAt || new Date().toISOString());
+    if (todayKey !== corteDay) {
+      toast.error("Solo se puede reabrir una caja dentro del mismo dia");
+      return;
+    }
+
+    try {
+      const cajas = await CajaService.getAllCajas();
+      const cajaToReopen = cajas.find(
+        (c) => c?.status === "closed" && c?.cierreData?.corteId === state.todayCorte?.id,
+      );
+
+      if (!cajaToReopen?.id) {
+        toast.error("No se encontro la caja cerrada asociada al cierre de hoy");
+        return;
+      }
+
+      const reopened = await CajaService.reopenCaja(cajaToReopen.id);
+      await CorteService.deleteCorteForReopen(state.todayCorte.id);
+
+      dispatch({
+        type: "LOAD_CAJA_DATA",
+        payload: {
+          aperturaMonto: reopened.apertura?.monto,
+          aperturaFecha: reopened.apertura?.fecha
+            ? localDatetimeString(new Date(reopened.apertura.fecha))
+            : localDatetimeString(),
+          aperturaUsuario: reopened.apertura?.usuario ?? user?.displayName ?? "Usuario de Caja",
+          ventasDia: {
+            efectivo: Number(reopened.totals?.efectivo ?? 0),
+            transferencia: Number(reopened.totals?.transferencia ?? 0),
+            qr: Number(reopened.totals?.qr ?? 0),
+            tarjeta: Number(reopened.totals?.tarjeta ?? 0),
+          },
+          retiros: reopened.remesas || [],
+          activeCajaId: reopened.id || null,
+        },
+      });
+      dispatch({ type: "SET_TODAY_CLOSED", payload: false });
+      dispatch({ type: "SET_TODAY_CORTE", payload: null });
+      await reloadData();
+      toast.success("Caja reabierta correctamente");
+    } catch (err) {
+      console.error("Error reopening caja", err);
+      toast.error("No se pudo reabrir la caja");
+    }
+  };
+
   const totalVentas = state.ventasDia.efectivo + state.ventasDia.transferencia + state.ventasDia.qr + state.ventasDia.tarjeta;
   const totalRetiros = state.retiros.reduce((acc, r) => acc + (r.monto || 0), 0);
   const efectivoEsperado = parseFloat(state.aperturaMonto || "0") + state.ventasDia.efectivo - totalRetiros;
@@ -998,6 +1176,7 @@ export default function CorteDeCaja() {
   const requiereNota = Math.abs(diferenciaEfectivo) > 50;
 
   const handleCerrarCaja = async () => {
+    if (!canManageCaja) { toast.error("No tienes permisos para cerrar la caja"); return; }
     if (state.todayClosed) return;
     if (!state.isAperturaSaved || !state.activeCajaId) { toast.error("No hay una caja activa para cerrar"); return; }
     if (requiereNota && !state.notas.trim()) { toast.error("Se requiere una nota explicativa para la diferencia mayor a $50"); return; }
@@ -1136,17 +1315,34 @@ export default function CorteDeCaja() {
                 <h2 className="text-xl md:text-2xl font-bold">Corte de Caja</h2>
               </div>
               <p className="text-gray-500 dark:text-gray-400 text-sm">Gestione la apertura y cierre de caja diario</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Si no se cierra manualmente, la caja se cierra automaticamente a las 11:00 PM.
+              </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
               <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium">
                 <Lock size={18} /> Caja Cerrada
               </div>
-              <button
-                onClick={handleOpenView} disabled={state.todayClosed}
-                className="px-4 py-2 bg-lime-500 text-white rounded-lg text-sm font-medium hover:bg-lime-600 transition disabled:opacity-50"
-              >
-                Abrir Caja
-              </button>
+              {canManageCaja ? (
+                <button
+                  onClick={handleOpenView} disabled={state.todayClosed}
+                  className="px-4 py-2 bg-lime-500 text-white rounded-lg text-sm font-medium hover:bg-lime-600 transition disabled:opacity-50"
+                >
+                  Abrir Caja
+                </button>
+              ) : (
+                <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-sm font-medium">
+                  Solo lectura
+                </div>
+              )}
+              {state.todayClosed && canReopenCaja && (
+                <button
+                  onClick={handleReopenCaja}
+                  className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition"
+                >
+                  Reabrir Caja (hoy)
+                </button>
+              )}
             </div>
           </div>
 
@@ -1236,46 +1432,78 @@ export default function CorteDeCaja() {
         )}
 
         <div className="space-y-4 md:space-y-6 w-full">
-          <AperturaForm state={state} dispatch={dispatch} onSave={handleSaveApertura} disabled={state.isAperturaSaved} />
+          {!canManageCaja && (
+            <div className="rounded-xl border border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-950/30 p-4 text-sm text-blue-700 dark:text-blue-300">
+              Modo solo lectura: puedes consultar la caja, pero no abrirla ni cerrarla.
+            </div>
+          )}
+
+          {canManageCaja ? (
+            <AperturaForm state={state} dispatch={dispatch} onSave={handleSaveApertura} />
+          ) : (
+            state.isAperturaSaved && (
+              <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
+                <h3 className="font-bold mb-2 text-lg">Información de Apertura</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Monto de apertura</p>
+                    <p className="text-lg font-bold text-lime-600">${fmt(parseFloat(state.aperturaMonto || "0"))}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Fecha y hora</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatDateFull(new Date(state.aperturaFecha).toISOString())} {formatTime(new Date(state.aperturaFecha).toISOString())}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Responsable</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{state.aperturaUsuario || "Usuario de Caja"}</p>
+                  </div>
+                </div>
+              </div>
+            )
+          )}
 
           {state.isAperturaSaved && (
             <>
               <VentasResumen ventasDia={state.ventasDia} />
 
-              <RetirosForm
-                state={state}
-                dispatch={dispatch}
-                totalRetiros={totalRetiros}
-                onAddRetiro={async (retiro: any) => {
-                  dispatch({ type: "ADD_RETIRO", payload: retiro });
-                  if (state.activeCajaId) {
-                    try { await CajaService.addRetiro(state.activeCajaId, retiro); }
-                    catch (err) { console.error(err); toast.error("Error al guardar el retiro"); }
-                  }
-                }}
-                onRemoveRetiro={async (id: number) => {
-                  dispatch({ type: "REMOVE_RETIRO", payload: id });
-                  if (state.activeCajaId) {
-                    try { await CajaService.removeRetiro(state.activeCajaId, id); }
-                    catch (err) { console.error(err); toast.error("Error al eliminar el retiro"); }
-                  }
-                }}
-              />
+              {canManageCaja && (
+                <>
+                  <RetirosForm
+                    state={state}
+                    dispatch={dispatch}
+                    totalRetiros={totalRetiros}
+                    onAddRetiro={async (retiro: any) => {
+                      dispatch({ type: "ADD_RETIRO", payload: retiro });
+                      if (state.activeCajaId) {
+                        try { await CajaService.addRetiro(state.activeCajaId, retiro); }
+                        catch (err) { console.error(err); toast.error("Error al guardar el retiro"); }
+                      }
+                    }}
+                    onRemoveRetiro={async (id: number) => {
+                      dispatch({ type: "REMOVE_RETIRO", payload: id });
+                      if (state.activeCajaId) {
+                        try { await CajaService.removeRetiro(state.activeCajaId, id); }
+                        catch (err) { console.error(err); toast.error("Error al eliminar el retiro"); }
+                      }
+                    }}
+                  />
 
-              <CierreForm
-                state={state} dispatch={dispatch}
-                ventasDia={state.ventasDia} aperturaMonto={state.aperturaMonto}
-                totalRetiros={totalRetiros} efectivoEsperado={efectivoEsperado}
-                diferenciaEfectivo={diferenciaEfectivo}
-              />
+                  <CierreForm
+                    state={state} dispatch={dispatch}
+                    ventasDia={state.ventasDia} aperturaMonto={state.aperturaMonto}
+                    totalRetiros={totalRetiros} efectivoEsperado={efectivoEsperado}
+                    diferenciaEfectivo={diferenciaEfectivo}
+                  />
 
-              <button
-                onClick={() => dispatch({ type: "SET_CLOSE_CONFIRM_OPEN", payload: true })}
-                disabled={state.todayClosed || !state.isAperturaSaved || !state.activeCajaId}
-                className="w-full mt-4 md:mt-6 bg-red-600 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
-              >
-                {state.todayClosed ? "Cierre ya realizado hoy" : (!state.isAperturaSaved || !state.activeCajaId) ? "Guarde apertura para cerrar" : "Cerrar Caja"}
-              </button>
+                  <button
+                    onClick={() => dispatch({ type: "SET_CLOSE_CONFIRM_OPEN", payload: true })}
+                    disabled={state.todayClosed || !state.isAperturaSaved || !state.activeCajaId}
+                    className="w-full mt-4 md:mt-6 bg-red-600 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
+                  >
+                    {state.todayClosed ? "Cierre ya realizado hoy" : (!state.isAperturaSaved || !state.activeCajaId) ? "Guarde apertura para cerrar" : "Cerrar Caja"}
+                  </button>
+                </>
+              )}
             </>
           )}
 
@@ -1291,6 +1519,7 @@ export default function CorteDeCaja() {
 
         <DayDetailModal day={selectedDayGroup} onClose={() => dispatch({ type: "SET_SELECTED_DAY_KEY", payload: null })} />
 
+        {canManageCaja && (
         <ConfirmDialog
           isOpen={state.isCloseConfirmOpen}
           title="Confirmar cierre de caja"
@@ -1316,6 +1545,7 @@ export default function CorteDeCaja() {
           onCancel={() => dispatch({ type: "SET_CLOSE_CONFIRM_OPEN", payload: false })}
           onConfirm={handleCerrarCaja}
         />
+        )}
       </main>
     </div>
   );

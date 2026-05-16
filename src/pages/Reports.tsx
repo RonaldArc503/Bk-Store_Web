@@ -7,6 +7,9 @@ import {
   ShoppingBag,
   DollarSign,
   Archive,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -16,8 +19,14 @@ import autoTable from "jspdf-autotable";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
 import { Button } from "../components/Button";
 import { Input } from "../components/input";
+import { toast } from "react-toastify";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
+import { InventoryService } from "../services/InventoryService";
+import { DevolucionService, type DevolucionItem } from "../services/DevolucionService";
+import { UserService } from "../services/UserService";
+import { useAuth } from "../hooks/useAuth";
+import { useSettings } from "../context/SettingsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +60,9 @@ type OrderRecord = {
   taxRate?: number;
   method?: string;
   total?: number;
+  cashReceived?: number;
+  changeAmount?: number;
+  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string };
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -149,13 +161,13 @@ const getOrderSubtotal = (order: OrderRecord) =>
   toNumber(order.subtotal) ||
   (order.items || []).reduce((sum, item) => sum + getItemSubtotal(item), 0);
 const getOrderTotal = (order: OrderRecord) => toNumber(order.total);
-const getOrderTax = (order: OrderRecord) => {
-  const subtotal = getOrderSubtotal(order);
+const getOrderTotalWithIva = (order: OrderRecord) => {
   const total = getOrderTotal(order);
-  const taxFromRecord = toNumber(order.tax);
-  if (taxFromRecord > 0) return taxFromRecord;
-  return Math.max(0, subtotal > 0 ? total - subtotal : 0);
+  if (total > 0) return total;
+  return getOrderSubtotal(order);
 };
+const getOrderTotalWithoutIva = (order: OrderRecord) =>
+  roundCurrency(getOrderTotalWithIva(order) / 1.13);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -168,6 +180,114 @@ export default function Reports() {
   const [cortes, setCortes] = useState<CorteRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+  const { settings } = useSettings();
+  const { user } = useAuth();
+
+  const [showDevolucion, setShowDevolucion] = useState(false);
+  const [devItems, setDevItems] = useState<Record<string, number>>({});
+  const [devMotivo, setDevMotivo] = useState("defectuoso");
+  const [isProcessingDev, setIsProcessingDev] = useState(false);
+
+  const MOTIVOS = [
+    { value: "defectuoso", label: "Producto defectuoso" },
+    { value: "error_venta", label: "Error de venta" },
+    { value: "cambio_opinion", label: "Cliente cambió de opinión" },
+    { value: "otro", label: "Otro" },
+  ];
+
+  const openDevolucionModal = () => {
+    if (!selectedOrder) return;
+    const initial: Record<string, number> = {};
+    (selectedOrder.items || []).forEach((_, idx) => { initial[String(idx)] = 0; });
+    setDevItems(initial);
+    setDevMotivo("defectuoso");
+    setShowDevolucion(true);
+  };
+
+  const devTotal = useMemo(() => {
+    if (!selectedOrder) return 0;
+    const items = selectedOrder.items || [];
+    return Object.entries(devItems).reduce((sum, [idx, qty]) => {
+      if (qty <= 0) return sum;
+      const item = items[Number(idx)];
+      if (!item) return sum;
+      const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
+      return sum + unitPrice * qty;
+    }, 0);
+  }, [devItems, selectedOrder]);
+
+  const hasDevSelection = Object.values(devItems).some((q) => q > 0);
+
+  const processDevolucion = async () => {
+    if (!selectedOrder || !hasDevSelection) return;
+    setIsProcessingDev(true);
+    try {
+      const items = selectedOrder.items || [];
+      const devolucionItems: DevolucionItem[] = [];
+
+      for (const [idx, qty] of Object.entries(devItems)) {
+        if (qty <= 0) continue;
+        const item = items[Number(idx)];
+        if (!item) continue;
+        const productId = item.id || item.productId || item.productoId || "";
+        const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
+        devolucionItems.push({
+          productId,
+          nombre: getItemName(item),
+          cantidad: qty,
+          precioUnitario: unitPrice,
+          subtotal: unitPrice * qty,
+        });
+
+        if (productId) {
+          try {
+            const inv = await InventoryService.getInventarioByProductoId(productId);
+            if (inv?.id) {
+              await InventoryService.agregarStock(inv.id, qty, `devolución venta ${selectedOrder.id}`);
+            }
+          } catch (e) { console.warn("No se pudo restaurar stock para", productId, e); }
+        }
+      }
+
+      const totalItemsOriginal = items.reduce((s, i) => s + getItemQuantity(i), 0);
+      const totalDevuelto = devolucionItems.reduce((s, i) => s + i.cantidad, 0);
+      const tipo = totalDevuelto >= totalItemsOriginal ? "total" as const : "parcial" as const;
+
+      let empNombre = user?.email || "Desconocido";
+      let empRol = "Vendedor";
+      if (user?.email) {
+        try {
+          const u = await UserService.getUserByEmail(user.email);
+          if (u) { empNombre = u.nombreCompleto || u.usuario; empRol = u.rol || "Vendedor"; }
+        } catch {}
+      }
+
+      const devolucion = await DevolucionService.crearDevolucion({
+        ventaOriginalId: selectedOrder.id,
+        fecha: new Date().toLocaleString("es-SV"),
+        empleado: empNombre,
+        empleadoRol: empRol,
+        motivo: MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
+        items: devolucionItems,
+        totalDevuelto: devTotal,
+        tipo,
+      });
+
+      await OrderService.marcarDevolucion(selectedOrder.id, tipo, devolucion.id);
+
+      toast.success(`Devolución ${tipo} procesada correctamente`);
+      setShowDevolucion(false);
+      setSelectedOrder(null);
+
+      const freshOrders = await OrderService.getAllOrders();
+      setOrders(freshOrders);
+    } catch (err) {
+      console.error("Error procesando devolución:", err);
+      toast.error("Error al procesar la devolución");
+    } finally {
+      setIsProcessingDev(false);
+    }
+  };
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -531,59 +651,80 @@ export default function Reports() {
   };
 
   const downloadOrderReceiptPdf = (order: OrderRecord) => {
+    const paperSize = settings.printing.paperSize;
+    const width = paperSize === "58mm" ? 58 : paperSize === "80mm" ? 80 : 216;
+    const isLetter = paperSize === "letter";
     const items = Array.isArray(order.items) ? order.items : [];
-    const width = 80;
-    const baseHeight = 95;
-    const lineHeight = 5;
-    const height = Math.max(baseHeight, 55 + items.length * lineHeight + 35);
+    const lh = paperSize === "58mm" ? 4 : 5;
+    const height = isLetter ? 279 : Math.max(140, 90 + items.length * (lh * 2) + 60);
+    const doc = new jsPDF({ unit: "mm", format: isLetter ? "letter" : [width, height] });
+    const left = 4; const right = isLetter ? 200 : width - 4; const center = (left + right) / 2;
+    const fs = paperSize === "58mm" ? 6 : 7;
+    let y = 8;
 
-    const subtotal = getOrderSubtotal(order);
-    const total = getOrderTotal(order);
-    const tax = getOrderTax(order);
-    const method = toPaymentLabel(order.method);
-    const date = toDateTime(order.date || order.createdAt);
-    const ticket = getTicket(order.id);
+    doc.setFontSize(paperSize === "58mm" ? 10 : 14); doc.setFont("helvetica", "bold");
+    doc.text("Bikini Store", center, y, { align: "center" }); y += 4;
+    doc.setFontSize(fs); doc.setFont("helvetica", "normal");
+    doc.text("Sistema de Punto de Venta", center, y, { align: "center" }); y += 5;
 
-    const doc = new jsPDF({
-      unit: "mm",
-      format: [width, height],
-    });
+    doc.text(`Doc N°: ${getTicket(order.id)}`, left, y);
+    doc.text("Caja: 1", right, y, { align: "right" }); y += 3.5;
+    doc.text(`Fecha: ${toDateTime(order.date || order.createdAt)}`, left, y); y += 3.5;
+    doc.text(`Pago: ${toPaymentLabel(order.method)}`, left, y); y += 3;
 
-    const left = 6;
-    const right = width - 6;
-    let y = 10;
-    const receiptFontSize = 8;
+    doc.setLineWidth(0.3); doc.line(left, y, right, y); y += 3;
 
-    doc.setFontSize(12);
-    doc.text("Bikini Store", width / 2, y, { align: "center" });
-    y += 5;
-    doc.setFontSize(receiptFontSize);
-    doc.text(`Ticket: ${ticket}`, left, y);
-    y += 4;
-    doc.text(`Fecha: ${date}`, left, y);
-    y += 4;
-    doc.text(`Pago: ${method}`, left, y);
-    y += 3;
-    doc.line(left, y, right, y);
-    y += 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(fs);
+    doc.text("Cant.", left, y); doc.text("Artículo", left + 8, y);
+    y += 2; doc.setLineWidth(0.15); doc.line(left, y, right, y); y += 3;
 
+    doc.setFont("helvetica", "normal"); doc.setFontSize(fs);
+    const maxNameLen = paperSize === "58mm" ? 22 : 30;
     items.forEach((item) => {
-      const name = getItemName(item);
       const qty = getItemQuantity(item);
+      const name = getItemName(item);
       const lineTotal = getItemSubtotal(item);
-      doc.text(`${qty} x ${name}`, left, y);
+      const unitPrice = qty > 0 ? lineTotal / qty : 0;
+      const displayName = name.length > maxNameLen ? name.substring(0, maxNameLen - 1) + "…" : name;
+      doc.text(`${qty}`, left, y); doc.text(displayName, left + 8, y); y += lh;
+      doc.setFontSize(fs - 1);
+      doc.text(`  P.Unit: $${unitPrice.toFixed(2)}`, left, y);
       doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: "right" });
-      y += lineHeight;
+      doc.setFontSize(fs); y += lh;
     });
 
-    y += 2;
-    doc.line(left, y, right, y);
-    y += 4;
-    doc.text(`Total sin IVA: $${subtotal.toFixed(2)}`, left, y);
-    y += 4;
-    doc.text(`IVA: $${tax.toFixed(2)}`, left, y);
-    y += 5;
-    doc.text(`Total con IVA: $${total.toFixed(2)}`, left, y);
+    y += 1; doc.line(left, y, right, y); y += 3.5;
+
+    const total = getOrderTotalWithIva(order);
+    const base = Math.round((total / 1.13) * 100) / 100;
+    const iva = Math.round((total - base) * 100) / 100;
+
+    doc.setFontSize(fs);
+    doc.text("Subtotal (sin IVA):", left, y); doc.text(`$${base.toFixed(2)}`, right, y, { align: "right" }); y += 3.5;
+    doc.text("IVA 13%:", left, y); doc.text(`$${iva.toFixed(2)}`, right, y, { align: "right" }); y += 3;
+    doc.setLineWidth(0.4); doc.line(left, y, right, y); y += 4;
+
+    doc.setFontSize(paperSize === "58mm" ? 9 : 11); doc.setFont("helvetica", "bold");
+    doc.text("TOTAL:", left, y); doc.text(`$${total.toFixed(2)}`, right, y, { align: "right" }); y += 5;
+
+    doc.setFontSize(fs); doc.setFont("helvetica", "normal");
+    doc.text(`Método de pago: ${toPaymentLabel(order.method)}`, left, y); y += 3.5;
+    if (order.method === "efectivo") {
+      const cashReceived = toNumber(order.cashReceived) > 0 ? toNumber(order.cashReceived) : total;
+      const hasSavedChange = order.changeAmount !== null && typeof order.changeAmount !== "undefined";
+      const changeAmount = hasSavedChange ? toNumber(order.changeAmount) : roundCurrency(total - cashReceived);
+      const formattedChange = changeAmount < 0 ? `-$${Math.abs(changeAmount).toFixed(2)}` : `$${changeAmount.toFixed(2)}`;
+      doc.text(`Efectivo: $${cashReceived.toFixed(2)}`, left, y); y += 3.5;
+      doc.text(`Cambio: ${formattedChange}`, left, y); y += 4;
+    } else {
+      doc.text(`Pagado: $${total.toFixed(2)}`, left, y); y += 4;
+    }
+
+    doc.setLineWidth(0.3); doc.line(left, y, right, y); y += 3.5;
+    doc.setFontSize(fs);
+    doc.text("¡Gracias por su compra!", center, y, { align: "center" }); y += 3;
+    doc.setFontSize(fs - 1);
+    doc.text("IVA incluido en todos los precios", center, y, { align: "center" });
 
     const safeId = String(order.id).replace(/[^a-zA-Z0-9_-]/g, "");
     doc.save(`comprobante-${safeId || "venta"}.pdf`);
@@ -1084,6 +1225,16 @@ export default function Reports() {
             className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800"
             onClick={(e) => e.stopPropagation()}
           >
+            {(() => {
+              const totalConIva = getOrderTotalWithIva(selectedOrder);
+              const totalSinIva = getOrderTotalWithoutIva(selectedOrder);
+              const isCash = selectedOrder.method === "efectivo";
+              const efectivo = toNumber(selectedOrder.cashReceived) > 0 ? toNumber(selectedOrder.cashReceived) : totalConIva;
+              const hasSavedChange = selectedOrder.changeAmount !== null && typeof selectedOrder.changeAmount !== "undefined";
+              const cambio = hasSavedChange ? toNumber(selectedOrder.changeAmount) : roundCurrency(totalConIva - efectivo);
+              const cambioText = cambio < 0 ? `-$${Math.abs(cambio).toFixed(2)}` : `$${cambio.toFixed(2)}`;
+              return (
+                <>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
@@ -1114,12 +1265,24 @@ export default function Reports() {
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total sin IVA</p>
-                  <p className="font-medium">{toMoney(getOrderSubtotal(selectedOrder))}</p>
+                  <p className="font-medium">{toMoney(totalSinIva)}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total con IVA</p>
-                  <p className="font-semibold">{toMoney(getOrderTotal(selectedOrder))}</p>
+                  <p className="font-semibold">{toMoney(totalConIva)}</p>
                 </div>
+                {isCash && (
+                  <>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Efectivo</p>
+                      <p className="font-medium">{toMoney(efectivo)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Cambio</p>
+                      <p className="font-medium">{cambioText}</p>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -1143,14 +1306,126 @@ export default function Reports() {
                 </table>
               </div>
 
-              <div className="flex justify-end">
+              {selectedOrder.devolucion && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                  selectedOrder.devolucion.tipo === 'total'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                }`}>
+                  <RotateCcw className="w-4 h-4" />
+                  Venta con devolución {selectedOrder.devolucion.tipo}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                {!selectedOrder.devolucion?.tipo || selectedOrder.devolucion.tipo !== 'total' ? (
+                  <Button
+                    onClick={openDevolucionModal}
+                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Devolución
+                  </Button>
+                ) : null}
                 <Button
                   onClick={() => downloadOrderReceiptPdf(selectedOrder)}
                   className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
                 >
                   <Download className="w-4 h-4" />
-                  Descargar comprobante PDF
+                  Descargar PDF
                 </Button>
+              </div>
+              </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Devolución */}
+      {showDevolucion && selectedOrder && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
+          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                <RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo de devolución</label>
+                <select
+                  value={devMotivo}
+                  onChange={(e) => setDevMotivo(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                >
+                  {MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecciona artículos a devolver</p>
+                <div className="space-y-2">
+                  {(selectedOrder.items || []).map((item, idx) => {
+                    const maxQty = getItemQuantity(item);
+                    const currentQty = devItems[String(idx)] || 0;
+                    return (
+                      <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQty} · ${getItemSubtotal(item).toFixed(2)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, currentQty - 1) }))}
+                            disabled={currentQty === 0}
+                            className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                          >−</button>
+                          <span className={`w-8 text-center text-sm font-bold ${currentQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{currentQty}</span>
+                          <button
+                            onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQty, currentQty + 1) }))}
+                            disabled={currentQty >= maxQty}
+                            className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                          >+</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {hasDevSelection && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
+                  <span className="text-lg font-bold text-amber-700 dark:text-amber-400">${devTotal.toFixed(2)}</span>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">El stock de los productos seleccionados será restaurado automáticamente al inventario.</p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowDevolucion(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >Cancelar</button>
+                <button
+                  onClick={processDevolucion}
+                  disabled={!hasDevSelection || isProcessingDev}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${
+                    hasDevSelection && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
+                  }`}
+                >
+                  {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar Devolución</>}
+                </button>
               </div>
             </div>
           </div>

@@ -18,14 +18,14 @@
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { useTheme } from '../context/ThemeContext'
-import { useSettings, type InventoryCatalogItem } from '../context/SettingsContext'
+import { useSettings, type InventoryCatalogItem, type StoreSettings } from '../context/SettingsContext'
+import { useAuth } from '../hooks/useAuth'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import type { Producto } from '../types/product'
-import * as XLSX from 'xlsx'
 
 /* --- Toggle switch reutilizable --- */
 
@@ -222,7 +222,6 @@ function InventorySection() {
   const materials = settings.inventory.materials || []
 
   const [productos, setProductos] = useState<Producto[]>([])
-  const [productosLoading, setProductosLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
@@ -233,8 +232,6 @@ function InventorySection() {
         setProductos(list)
       } catch {
         // Non-blocking: catalog editing still works without counts.
-      } finally {
-        if (alive) setProductosLoading(false)
       }
     })()
     return () => {
@@ -401,299 +398,249 @@ function InventorySection() {
             <p className="text-sm font-medium text-gray-900 dark:text-white">Catálogo: Tipo de prenda y material</p>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Estas opciones se usan al crear/editar productos en Inventario.
+            Estas opciones se usan al crear/editar productos en Inventario. El número entre paréntesis indica cuántos productos usan cada opción.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                Tipos de prenda
-              </p>
-              <div className="flex gap-2">
-                <input
-                  value={newProductType}
-                  onChange={(e) => setNewProductType(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addToList('productTypes', newProductType)
-                      setNewProductType('')
-                    }
-                  }}
-                  placeholder="Ej: Bikini, Short..."
-                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    addToList('productTypes', newProductType)
-                    setNewProductType('')
-                  }}
-                  className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors"
-                >
-                  Agregar
-                </button>
-              </div>
-              {productTypes.length === 0 ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  No hay tipos configurados. Agrega al menos 1 para poder seleccionar en Inventario.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {productTypes.map((it: InventoryCatalogItem, idx: number) => {
-                    const isEditing = editing?.key === 'productTypes' && editing.id === it.id
-                    const count = usage.typeCount.get(normalizeKey(it.label)) || 0
-                    return (
-                      <div
-                        key={it.id}
-                        className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+          <div className="grid grid-cols-2 gap-4">
+            {/* ── TIPOS DE PRENDA ── */}
+            {(
+              () => {
+                const items = productTypes
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                        Tipos de prenda
+                      </p>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {items.length} {items.length === 1 ? 'tipo' : 'tipos'}
+                      </span>
+                    </div>
+
+                    {/* Input agregar */}
+                    <div className="flex gap-2">
+                      <input
+                        value={newProductType}
+                        onChange={(e) => setNewProductType(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addToList('productTypes', newProductType)
+                            setNewProductType('')
+                          }
+                        }}
+                        placeholder="Ej: Bikini, Short..."
+                        className="flex-1 min-w-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { addToList('productTypes', newProductType); setNewProductType('') }}
+                        className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors whitespace-nowrap"
                       >
-                        <div className="flex-1 min-w-0">
-                          {isEditing ? (
-                            <input
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  void commitEdit()
-                                }
-                                if (e.key === 'Escape') cancelEdit()
-                              }}
-                              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent"
-                              aria-label="Renombrar tipo de prenda"
-                              autoFocus
-                            />
-                          ) : (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="truncate text-sm text-gray-900 dark:text-gray-100">{it.label}</span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-                            </div>
-                          )}
+                        Agregar
+                      </button>
+                    </div>
+
+                    {/* Lista siempre visible */}
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60 overflow-hidden min-h-[72px] max-h-56 overflow-y-auto">
+                      {items.length === 0 ? (
+                        <div className="flex items-center justify-center py-5 px-3">
+                          <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                            Sin tipos configurados. Agrega al menos 1.
+                          </p>
                         </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => moveItem('productTypes', idx, -1)}
-                            disabled={idx === 0}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Subir"
-                            title="Subir"
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveItem('productTypes', idx, 1)}
-                            disabled={idx === productTypes.length - 1}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Bajar"
-                            title="Bajar"
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-
-                          {!isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => startEdit('productTypes', it)}
-                              className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                              aria-label="Editar"
-                              title="Editar"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void commitEdit()}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Guardar"
-                                title="Guardar"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEdit}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Cancelar"
-                                title="Cancelar"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => removeFromList('productTypes', it.id)}
-                            className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
-                            aria-label="Eliminar"
-                            title={count > 0 ? 'No se puede eliminar (en uso)' : 'Eliminar'}
-                            disabled={count > 0}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                      ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {items.map((it: InventoryCatalogItem, idx: number) => {
+                            const isEd = editing?.key === 'productTypes' && editing.id === it.id
+                            const count = usage.typeCount.get(normalizeKey(it.label)) || 0
+                            return (
+                              <div key={it.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                  {isEd ? (
+                                    <input
+                                      value={editingText}
+                                      onChange={(e) => setEditingText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { e.preventDefault(); void commitEdit() }
+                                        if (e.key === 'Escape') cancelEdit()
+                                      }}
+                                      className="w-full rounded-md border border-lime-400 dark:border-lime-600 bg-lime-50 dark:bg-lime-950/30 text-sm text-gray-900 dark:text-gray-100 px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="truncate text-sm text-gray-800 dark:text-gray-200">{it.label}</span>
+                                      {count > 0 && (
+                                        <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5">
+                                          {count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button type="button" onClick={() => moveItem('productTypes', idx, -1)} disabled={idx === 0}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Subir">
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button type="button" onClick={() => moveItem('productTypes', idx, 1)} disabled={idx === items.length - 1}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Bajar">
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  {!isEd ? (
+                                    <button type="button" onClick={() => startEdit('productTypes', it)}
+                                      className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-500 dark:text-blue-400" title="Editar">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button type="button" onClick={() => void commitEdit()}
+                                        className="p-1 rounded hover:bg-lime-50 dark:hover:bg-lime-950/40 text-lime-600 dark:text-lime-400" title="Guardar">
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button type="button" onClick={cancelEdit}
+                                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" title="Cancelar">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                  <button type="button" onClick={() => removeFromList('productTypes', it.id)} disabled={count > 0}
+                                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 dark:text-red-400 disabled:opacity-30"
+                                    title={count > 0 ? `En uso por ${count} producto(s)` : 'Eliminar'}>
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      </div>
-                    )
-                  })}
-                  {!productosLoading && (
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      El numero entre parentesis indica cuantos productos usan cada opcion.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+            )()}
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                Materiales
-              </p>
-              <div className="flex gap-2">
-                <input
-                  value={newMaterial}
-                  onChange={(e) => setNewMaterial(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addToList('materials', newMaterial)
-                      setNewMaterial('')
-                    }
-                  }}
-                  placeholder="Ej: Algodón, Poliéster..."
-                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    addToList('materials', newMaterial)
-                    setNewMaterial('')
-                  }}
-                  className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors"
-                >
-                  Agregar
-                </button>
-              </div>
-              {materials.length === 0 ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  No hay materiales configurados. Agrega al menos 1 para poder seleccionar en Inventario.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {materials.map((it: InventoryCatalogItem, idx: number) => {
-                    const isEditing = editing?.key === 'materials' && editing.id === it.id
-                    const count = usage.materialCount.get(normalizeKey(it.label)) || 0
-                    return (
-                      <div
-                        key={it.id}
-                        className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+            {/* ── MATERIALES ── */}
+            {(
+              () => {
+                const items = materials
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                        Materiales
+                      </p>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {items.length} {items.length === 1 ? 'material' : 'materiales'}
+                      </span>
+                    </div>
+
+                    {/* Input agregar */}
+                    <div className="flex gap-2">
+                      <input
+                        value={newMaterial}
+                        onChange={(e) => setNewMaterial(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addToList('materials', newMaterial)
+                            setNewMaterial('')
+                          }
+                        }}
+                        placeholder="Ej: Algodón, Poliéster..."
+                        className="flex-1 min-w-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { addToList('materials', newMaterial); setNewMaterial('') }}
+                        className="px-3 py-2 rounded-lg bg-lime-600 hover:bg-lime-700 text-white text-sm font-medium transition-colors whitespace-nowrap"
                       >
-                        <div className="flex-1 min-w-0">
-                          {isEditing ? (
-                            <input
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  void commitEdit()
-                                }
-                                if (e.key === 'Escape') cancelEdit()
-                              }}
-                              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:border-transparent"
-                              aria-label="Renombrar material"
-                              autoFocus
-                            />
-                          ) : (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="truncate text-sm text-gray-900 dark:text-gray-100">{it.label}</span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-                            </div>
-                          )}
+                        Agregar
+                      </button>
+                    </div>
+
+                    {/* Lista siempre visible */}
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60 overflow-hidden min-h-[72px] max-h-56 overflow-y-auto">
+                      {items.length === 0 ? (
+                        <div className="flex items-center justify-center py-5 px-3">
+                          <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                            Sin materiales configurados. Agrega al menos 1.
+                          </p>
                         </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => moveItem('materials', idx, -1)}
-                            disabled={idx === 0}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Subir"
-                            title="Subir"
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveItem('materials', idx, 1)}
-                            disabled={idx === materials.length - 1}
-                            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40"
-                            aria-label="Bajar"
-                            title="Bajar"
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-
-                          {!isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => startEdit('materials', it)}
-                              className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                              aria-label="Editar"
-                              title="Editar"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void commitEdit()}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Guardar"
-                                title="Guardar"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEdit}
-                                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                aria-label="Cancelar"
-                                title="Cancelar"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => removeFromList('materials', it.id)}
-                            className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
-                            aria-label="Eliminar"
-                            title={count > 0 ? 'No se puede eliminar (en uso)' : 'Eliminar'}
-                            disabled={count > 0}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                      ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {items.map((it: InventoryCatalogItem, idx: number) => {
+                            const isEd = editing?.key === 'materials' && editing.id === it.id
+                            const count = usage.materialCount.get(normalizeKey(it.label)) || 0
+                            return (
+                              <div key={it.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                  {isEd ? (
+                                    <input
+                                      value={editingText}
+                                      onChange={(e) => setEditingText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { e.preventDefault(); void commitEdit() }
+                                        if (e.key === 'Escape') cancelEdit()
+                                      }}
+                                      className="w-full rounded-md border border-lime-400 dark:border-lime-600 bg-lime-50 dark:bg-lime-950/30 text-sm text-gray-900 dark:text-gray-100 px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="truncate text-sm text-gray-800 dark:text-gray-200">{it.label}</span>
+                                      {count > 0 && (
+                                        <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5">
+                                          {count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button type="button" onClick={() => moveItem('materials', idx, -1)} disabled={idx === 0}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Subir">
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button type="button" onClick={() => moveItem('materials', idx, 1)} disabled={idx === items.length - 1}
+                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-400 dark:text-gray-500" title="Bajar">
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  {!isEd ? (
+                                    <button type="button" onClick={() => startEdit('materials', it)}
+                                      className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-500 dark:text-blue-400" title="Editar">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button type="button" onClick={() => void commitEdit()}
+                                        className="p-1 rounded hover:bg-lime-50 dark:hover:bg-lime-950/40 text-lime-600 dark:text-lime-400" title="Guardar">
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button type="button" onClick={cancelEdit}
+                                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" title="Cancelar">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                  <button type="button" onClick={() => removeFromList('materials', it.id)} disabled={count > 0}
+                                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 dark:text-red-400 disabled:opacity-30"
+                                    title={count > 0 ? `En uso por ${count} producto(s)` : 'Eliminar'}>
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      </div>
-                    )
-                  })}
-                  {!productosLoading && (
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      El numero entre parentesis indica cuantos productos usan cada opcion.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+            )()}
           </div>
         </div>
       </SettingCard>
@@ -759,6 +706,8 @@ function DataSection({
   loading,
   backupLoading,
   importLoading,
+  backupAutomation,
+  onUpdateBackupAutomation,
 }: {
   onReset: () => void
   onDownloadBackupJson: () => void
@@ -767,8 +716,23 @@ function DataSection({
   loading: boolean
   backupLoading: boolean
   importLoading: boolean
+  backupAutomation: StoreSettings['backupAutomation']
+  onUpdateBackupAutomation: (patch: Partial<StoreSettings['backupAutomation']>) => void
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const weekOptions: { value: `${0 | 1 | 2 | 3 | 4 | 5 | 6}`; label: string }[] = [
+    { value: '0', label: 'Domingo' },
+    { value: '1', label: 'Lunes' },
+    { value: '2', label: 'Martes' },
+    { value: '3', label: 'Miercoles' },
+    { value: '4', label: 'Jueves' },
+    { value: '5', label: 'Viernes' },
+    { value: '6', label: 'Sabado' },
+  ]
+  const monthlyDayOptions = Array.from({ length: 31 }, (_, i) => {
+    const day = String(i + 1)
+    return { value: day, label: day }
+  })
 
   return (
     <SettingsSection icon={<Database className="w-4 h-4 text-red-500 dark:text-red-400" />} title="Datos">
@@ -825,6 +789,79 @@ function DataSection({
           </div>
         </SettingRow>
         <SettingRow
+          icon={<Database className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" />}
+          title="Backup automatico"
+          description="Programa descargas automaticas mensuales o semanales. Opcional."
+        >
+          <div className="w-full md:w-[420px] space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Activar programacion</span>
+              <Toggle
+                checked={backupAutomation.enabled}
+                onChange={(v) => onUpdateBackupAutomation({ enabled: v })}
+                label="Activar backup automatico"
+              />
+            </div>
+            {backupAutomation.enabled && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <Select
+                    value={backupAutomation.scheduleType}
+                    onChange={(v) =>
+                      onUpdateBackupAutomation({
+                        scheduleType: v as 'monthly' | 'weekly',
+                      })
+                    }
+                    options={[
+                      { value: 'monthly', label: 'Mensual' },
+                      { value: 'weekly', label: 'Semanal' },
+                    ]}
+                  />
+                  <Select
+                    value={backupAutomation.format}
+                    onChange={(v) =>
+                      onUpdateBackupAutomation({
+                        format: v as 'json' | 'xlsx',
+                      })
+                    }
+                    options={[
+                      { value: 'json', label: 'Formato JSON' },
+                      { value: 'xlsx', label: 'Formato Excel' },
+                    ]}
+                  />
+                </div>
+                {backupAutomation.scheduleType === 'monthly' ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Dia del mes</span>
+                    <Select
+                      value={String(backupAutomation.monthlyDay)}
+                      onChange={(v) =>
+                        onUpdateBackupAutomation({
+                          monthlyDay: Math.min(31, Math.max(1, Number(v) || 1)),
+                        })
+                      }
+                      options={monthlyDayOptions}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Dia de la semana</span>
+                    <Select
+                      value={String(backupAutomation.weeklyDay) as `${0 | 1 | 2 | 3 | 4 | 5 | 6}`}
+                      onChange={(v) =>
+                        onUpdateBackupAutomation({
+                          weeklyDay: Number(v) as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+                        })
+                      }
+                      options={weekOptions}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </SettingRow>
+        <SettingRow
           icon={<Database className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />}
           title="Borrar datos de prueba"
           description="Elimina ventas, cajas, cortes, inventario y movimientos. Conserva usuarios."
@@ -847,7 +884,8 @@ function DataSection({
 /* --- Pagina principal --- */
 
 export default function ConfiguracionPage() {
-  const { settings, resetSettings, lastSavedAt, canUndo, undoLastChange } = useSettings()
+  const { settings, resetSettings, lastSavedAt, updateBackupAutomation } = useSettings()
+  const { hasConfigSectionAccess } = useAuth()
   const [showReset, setShowReset] = useState(false)
   const [isDataResetOpen, setIsDataResetOpen] = useState(false)
   const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false)
@@ -856,6 +894,13 @@ export default function ConfiguracionPage() {
   const [isImportLoading, setIsImportLoading] = useState(false)
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
   const [savedPulse, setSavedPulse] = useState(false)
+  const canViewNotifications = hasConfigSectionAccess('notifications')
+  const canViewInterface = hasConfigSectionAccess('interfaz')
+  const canViewInventory = hasConfigSectionAccess('inventory')
+  const canViewPrinting = hasConfigSectionAccess('printing')
+  const canViewData = hasConfigSectionAccess('data')
+  const hasVisibleSections =
+    canViewNotifications || canViewInterface || canViewInventory || canViewPrinting || canViewData
 
   useEffect(() => {
     setSavedPulse(true)
@@ -881,29 +926,11 @@ export default function ConfiguracionPage() {
     }
   }
 
-  const triggerDownload = (blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = fileName
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const buildBackupFileName = (ext: 'json' | 'xlsx') => {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    return `bk-store-backup-${stamp}.${ext}`
-  }
-
   const handleDownloadBackupJson = async () => {
     if (isBackupLoading || isImportLoading) return
     setIsBackupLoading(true)
     try {
-      const backup = await MaintenanceService.createFullBackup(settings)
-      const blob = new Blob([JSON.stringify(backup, null, 2)], {
-        type: 'application/json;charset=utf-8',
-      })
-      triggerDownload(blob, buildBackupFileName('json'))
+      await MaintenanceService.downloadFullBackupJson(settings)
       toast.success('Backup JSON descargado')
     } catch (error) {
       console.error(error)
@@ -913,49 +940,11 @@ export default function ConfiguracionPage() {
     }
   }
 
-  const flattenForSheet = (value: unknown): Record<string, unknown>[] => {
-    if (Array.isArray(value)) {
-      return value.map((item, idx) => ({
-        index: idx + 1,
-        ...(typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : { value: item }),
-      }))
-    }
-
-    if (value && typeof value === 'object') {
-      return Object.entries(value as Record<string, unknown>).map(([key, item]) => ({
-        key,
-        ...(typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : { value: item }),
-      }))
-    }
-
-    return [{ value }]
-  }
-
   const handleDownloadBackupExcel = async () => {
     if (isBackupLoading || isImportLoading) return
     setIsBackupLoading(true)
     try {
-      const backup = await MaintenanceService.createFullBackup(settings)
-      const wb = XLSX.utils.book_new()
-      const orderedKeys = Object.keys(backup.database || {}).sort((a, b) => a.localeCompare(b))
-
-      const resumen = [
-        { campo: 'fuente', valor: backup.meta.source },
-        { campo: 'version', valor: backup.meta.version },
-        { campo: 'exportado_en', valor: backup.meta.exportedAt },
-        { campo: 'modulos', valor: orderedKeys.length },
-      ]
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen')
-
-      for (const key of orderedKeys) {
-        const rows = flattenForSheet((backup.database as Record<string, unknown>)[key])
-        const sheetName = key.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 31) || 'data'
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName)
-      }
-
-      const localRows = flattenForSheet(backup.local?.settings || {})
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localRows), 'config_local')
-      XLSX.writeFile(wb, buildBackupFileName('xlsx'))
+      await MaintenanceService.downloadFullBackupExcel(settings)
       toast.success('Backup Excel descargado')
     } catch (error) {
       console.error(error)
@@ -1009,66 +998,72 @@ export default function ConfiguracionPage() {
               {savedPulse && (
                 <span className="text-xs text-gray-500 dark:text-gray-400">Guardado</span>
               )}
-              {canUndo && (
-                <button
-                  type="button"
-                  onClick={undoLastChange}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  Deshacer
-                </button>
-              )}
             </div>
           </div>
 
           <div className="space-y-8">
-            <ThemeSection />
-            <NotificationsSection />
-            <InterfaceSection />
-            <InventorySection />
-            <PrintingSection />
-            <DataSection
-              onReset={() => setIsDataResetOpen(true)}
-              onDownloadBackupJson={() => {
-                void handleDownloadBackupJson()
-              }}
-              onDownloadBackupExcel={() => {
-                void handleDownloadBackupExcel()
-              }}
-              onImportBackupJson={(file) => {
-                setPendingImportFile(file)
-                setIsImportConfirmOpen(true)
-              }}
-              loading={isDataResetLoading}
-              backupLoading={isBackupLoading}
-              importLoading={isImportLoading}
-            />
-          </div>
-
-          <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
-            {!showReset ? (
-              <button
-                type="button"
-                onClick={() => setShowReset(true)}
-                className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Restablecer valores predeterminados
-              </button>
-            ) : (
-              <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-xl p-4">
-                <p className="text-sm text-red-600 dark:text-red-400 flex-1">
-                  ¿Estás seguro? Esto restablecerá todas las preferencias (excepto el tema).
-                </p>
-                <button type="button" onClick={handleReset} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors">
-                  Confirmar
-                </button>
-                <button type="button" onClick={() => setShowReset(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors">
-                  Cancelar
-                </button>
+            {!hasVisibleSections && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-700 dark:text-amber-300">
+                No tienes secciones habilitadas en Configuracion.
               </div>
             )}
+            {canViewInterface && (
+              <>
+                <ThemeSection />
+                <InterfaceSection />
+              </>
+            )}
+            {canViewNotifications && <NotificationsSection />}
+            {canViewInventory && <InventorySection />}
+            {canViewPrinting && <PrintingSection />}
+            {canViewData && (
+              <DataSection
+                onReset={() => setIsDataResetOpen(true)}
+                onDownloadBackupJson={() => {
+                  void handleDownloadBackupJson()
+                }}
+                onDownloadBackupExcel={() => {
+                  void handleDownloadBackupExcel()
+                }}
+                onImportBackupJson={(file) => {
+                  setPendingImportFile(file)
+                  setIsImportConfirmOpen(true)
+                }}
+                loading={isDataResetLoading}
+                backupLoading={isBackupLoading}
+                importLoading={isImportLoading}
+                backupAutomation={settings.backupAutomation}
+                onUpdateBackupAutomation={updateBackupAutomation}
+              />
+            )}
           </div>
+
+          {canViewData && (
+            <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-800">
+              {!showReset ? (
+                <button
+                  type="button"
+                  onClick={() => setShowReset(true)}
+                  className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Restablecer valores predeterminados
+                </button>
+              ) : (
+                <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-xl p-4">
+                  <p className="text-sm text-red-600 dark:text-red-400 flex-1">
+                    ¿Estás seguro? Esto restablecerá todas las preferencias (excepto el tema).
+                  </p>
+                  <button type="button" onClick={handleReset} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors">
+                    Confirmar
+                  </button>
+                  <button type="button" onClick={() => setShowReset(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <ConfirmDialog
