@@ -60,6 +60,8 @@ type OrderRecord = {
   taxRate?: number;
   method?: string;
   total?: number;
+  cashReceived?: number;
+  changeAmount?: number;
   devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string };
 };
 
@@ -159,6 +161,13 @@ const getOrderSubtotal = (order: OrderRecord) =>
   toNumber(order.subtotal) ||
   (order.items || []).reduce((sum, item) => sum + getItemSubtotal(item), 0);
 const getOrderTotal = (order: OrderRecord) => toNumber(order.total);
+const getOrderTotalWithIva = (order: OrderRecord) => {
+  const total = getOrderTotal(order);
+  if (total > 0) return total;
+  return getOrderSubtotal(order);
+};
+const getOrderTotalWithoutIva = (order: OrderRecord) =>
+  roundCurrency(getOrderTotalWithIva(order) / 1.13);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -686,7 +695,7 @@ export default function Reports() {
 
     y += 1; doc.line(left, y, right, y); y += 3.5;
 
-    const total = getOrderTotal(order);
+    const total = getOrderTotalWithIva(order);
     const base = Math.round((total / 1.13) * 100) / 100;
     const iva = Math.round((total - base) * 100) / 100;
 
@@ -700,7 +709,16 @@ export default function Reports() {
 
     doc.setFontSize(fs); doc.setFont("helvetica", "normal");
     doc.text(`Método de pago: ${toPaymentLabel(order.method)}`, left, y); y += 3.5;
-    doc.text(`Pagado: $${total.toFixed(2)}`, left, y); y += 4;
+    if (order.method === "efectivo") {
+      const cashReceived = toNumber(order.cashReceived) > 0 ? toNumber(order.cashReceived) : total;
+      const hasSavedChange = order.changeAmount !== null && typeof order.changeAmount !== "undefined";
+      const changeAmount = hasSavedChange ? toNumber(order.changeAmount) : roundCurrency(total - cashReceived);
+      const formattedChange = changeAmount < 0 ? `-$${Math.abs(changeAmount).toFixed(2)}` : `$${changeAmount.toFixed(2)}`;
+      doc.text(`Efectivo: $${cashReceived.toFixed(2)}`, left, y); y += 3.5;
+      doc.text(`Cambio: ${formattedChange}`, left, y); y += 4;
+    } else {
+      doc.text(`Pagado: $${total.toFixed(2)}`, left, y); y += 4;
+    }
 
     doc.setLineWidth(0.3); doc.line(left, y, right, y); y += 3.5;
     doc.setFontSize(fs);
@@ -1207,6 +1225,16 @@ export default function Reports() {
             className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800"
             onClick={(e) => e.stopPropagation()}
           >
+            {(() => {
+              const totalConIva = getOrderTotalWithIva(selectedOrder);
+              const totalSinIva = getOrderTotalWithoutIva(selectedOrder);
+              const isCash = selectedOrder.method === "efectivo";
+              const efectivo = toNumber(selectedOrder.cashReceived) > 0 ? toNumber(selectedOrder.cashReceived) : totalConIva;
+              const hasSavedChange = selectedOrder.changeAmount !== null && typeof selectedOrder.changeAmount !== "undefined";
+              const cambio = hasSavedChange ? toNumber(selectedOrder.changeAmount) : roundCurrency(totalConIva - efectivo);
+              const cambioText = cambio < 0 ? `-$${Math.abs(cambio).toFixed(2)}` : `$${cambio.toFixed(2)}`;
+              return (
+                <>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
@@ -1237,12 +1265,24 @@ export default function Reports() {
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total sin IVA</p>
-                  <p className="font-medium">{toMoney(getOrderSubtotal(selectedOrder))}</p>
+                  <p className="font-medium">{toMoney(totalSinIva)}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total con IVA</p>
-                  <p className="font-semibold">{toMoney(getOrderTotal(selectedOrder))}</p>
+                  <p className="font-semibold">{toMoney(totalConIva)}</p>
                 </div>
+                {isCash && (
+                  <>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Efectivo</p>
+                      <p className="font-medium">{toMoney(efectivo)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Cambio</p>
+                      <p className="font-medium">{cambioText}</p>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -1295,7 +1335,10 @@ export default function Reports() {
                   Descargar PDF
                 </Button>
               </div>
-            </div>
+              </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

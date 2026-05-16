@@ -57,6 +57,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     stock: number | ''
     costo: number | ''
     precioUnitario: number | ''
+    precioTresUnidades: number | ''
+    precioMediaDocena: number | ''
+    precioDocena: number | ''
   }
 
   const [formData, setFormData] = useState<FormState>({
@@ -68,6 +71,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     stock: '',
     costo: '',
     precioUnitario: '',
+    precioTresUnidades: '',
+    precioMediaDocena: '',
+    precioDocena: '',
   })
   const formRef = useRef<HTMLFormElement | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({})
@@ -111,6 +117,18 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         stock: editingProduct.stock === 0 ? '' : editingProduct.stock,
         costo: editingProduct.costo === 0 ? '' : editingProduct.costo,
         precioUnitario: editingProduct.precioUnitario === 0 ? '' : editingProduct.precioUnitario,
+        precioTresUnidades:
+          editingProduct.precioTresUnidades === 0
+            ? ''
+            : editingProduct.precioTresUnidades || editingProduct.precioUnitario * 3,
+        precioMediaDocena:
+          editingProduct.precioMediaDocena === 0
+            ? ''
+            : editingProduct.precioMediaDocena || editingProduct.precioUnitario * 6,
+        precioDocena:
+          editingProduct.precioDocena === 0
+            ? ''
+            : editingProduct.precioDocena || editingProduct.precioUnitario * 12,
       })
     } else {
       setFormData({
@@ -122,6 +140,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         stock: '',
         costo: '',
         precioUnitario: '',
+        precioTresUnidades: '',
+        precioMediaDocena: '',
+        precioDocena: '',
       })
     }
     setError('')
@@ -136,7 +157,7 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
     setFormData((prev) => ({
       ...prev,
-      [name]: ['stock', 'costo', 'precioUnitario'].includes(name)
+      [name]: ['stock', 'costo', 'precioUnitario', 'precioTresUnidades', 'precioMediaDocena', 'precioDocena'].includes(name)
         ? (value === '' ? '' : Number(value))
         : value,
     }))
@@ -164,12 +185,11 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     navigator.clipboard.writeText(formData.codigo)
   }
 
-  const IVA_RATE = 0.13
   const costo = Number(formData.costo) || 0
   const unitario = Number(formData.precioUnitario) || 0
-  const precioVentaFinal = Math.round(unitario * (1 + IVA_RATE) * 100) / 100
-  const mediaDocena = Math.round(precioVentaFinal * 6 * 100) / 100
-  const docena = Math.round(precioVentaFinal * 12 * 100) / 100
+  const precioTresUnidades = Number(formData.precioTresUnidades) || 0
+  const mediaDocena = Number(formData.precioMediaDocena) || 0
+  const docena = Number(formData.precioDocena) || 0
 
   const margenUnitario = costo > 0 && unitario > 0 ? ((unitario - costo) / unitario * 100) : null
   const costoInvalido = costo > 0 && unitario > 0 && costo >= unitario
@@ -198,6 +218,9 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
     if (!formData.tipoId) errs.tipoId = 'Selecciona un tipo de prenda'
     if (!formData.materialId) errs.materialId = 'Selecciona un material'
     if (!unitario || unitario <= 0) errs.precioUnitario = 'El precio unitario debe ser mayor a 0'
+    if (!precioTresUnidades || precioTresUnidades <= 0) errs.precioTresUnidades = 'El precio para 3 unidades debe ser mayor a 0'
+    if (!mediaDocena || mediaDocena <= 0) errs.precioMediaDocena = 'El precio para media docena debe ser mayor a 0'
+    if (!docena || docena <= 0) errs.precioDocena = 'El precio para docena debe ser mayor a 0'
     if (costo > 0 && unitario > 0 && costo >= unitario) {
       errs.costo = `El costo ($${costo.toFixed(2)}) debe ser menor al precio unitario ($${unitario.toFixed(2)})`
     }
@@ -206,7 +229,16 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
 
     if (Object.keys(errs).length > 0) {
       setError('Revisa los campos marcados en rojo')
-      focusFirstInvalid(['nombre', 'tipoId', 'materialId', 'precioUnitario', 'costo'])
+      focusFirstInvalid([
+        'nombre',
+        'tipoId',
+        'materialId',
+        'precioUnitario',
+        'precioTresUnidades',
+        'precioMediaDocena',
+        'precioDocena',
+        'costo',
+      ])
       return false
     }
 
@@ -234,8 +266,8 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
         stock: Number(formData.stock) || 0,
         stockMinimo: lowStockThreshold,
         costo,
-        precioBase: unitario,
-        precioUnitario: precioVentaFinal,
+        precioUnitario: unitario,
+        precioTresUnidades,
         precioMediaDocena: mediaDocena,
         precioDocena: docena,
       }
@@ -549,54 +581,123 @@ export function InventoryModal({ isOpen, onClose, onSuccess, editingProduct }: I
                 )}
               </div>
 
-              {/* Precio de venta final (con IVA) */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs md:text-sm font-medium text-[#8CC63F] mb-1 md:mb-2">
-                  Precio de Venta Final (IVA 13% incluido) — calculado
+              <div>
+                <label htmlFor="inv-precio-3u" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
+                  Precio para 3 Unidades *
                 </label>
-                <div className="w-full px-3 py-2.5 bg-[#8CC63F]/10 border border-[#8CC63F]/30 rounded-lg text-base font-bold text-[#8CC63F]">
-                  {unitario > 0 ? `$${precioVentaFinal.toFixed(2)}` : '—'}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">$</span>
+                  <input
+                    id="inv-precio-3u"
+                    type="number"
+                    name="precioTresUnidades"
+                    value={formData.precioTresUnidades}
+                    onChange={handleInputChange}
+                    onKeyDown={blockInvalidNumericKeys}
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    aria-invalid={!!fieldErrors.precioTresUnidades}
+                    aria-describedby={fieldErrors.precioTresUnidades ? 'inv-err-precioTresUnidades' : undefined}
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent text-sm ${
+                      fieldErrors.precioTresUnidades ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
+                    }`}
+                    disabled={loading}
+                  />
                 </div>
+                {fieldErrors.precioTresUnidades && (
+                  <p id="inv-err-precioTresUnidades" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.precioTresUnidades}
+                  </p>
+                )}
               </div>
 
-              {/* Campos calculados automáticamente */}
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 md:mb-2">
-                  Precio Media Docena (6 u.) — calculado
+                <label htmlFor="inv-precio-6u" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
+                  Precio Media Docena (6 u.) *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 font-medium">
-                  {unitario > 0 ? `$${mediaDocena.toFixed(2)}` : '—'}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">$</span>
+                  <input
+                    id="inv-precio-6u"
+                    type="number"
+                    name="precioMediaDocena"
+                    value={formData.precioMediaDocena}
+                    onChange={handleInputChange}
+                    onKeyDown={blockInvalidNumericKeys}
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    aria-invalid={!!fieldErrors.precioMediaDocena}
+                    aria-describedby={fieldErrors.precioMediaDocena ? 'inv-err-precioMediaDocena' : undefined}
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent text-sm ${
+                      fieldErrors.precioMediaDocena ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
+                    }`}
+                    disabled={loading}
+                  />
                 </div>
+                {fieldErrors.precioMediaDocena && (
+                  <p id="inv-err-precioMediaDocena" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.precioMediaDocena}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 md:mb-2">
-                  Precio Docena (12 u.) — calculado
+                <label htmlFor="inv-precio-12u" className="block text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
+                  Precio Docena (12 u.) *
                 </label>
-                <div className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 font-medium">
-                  {unitario > 0 ? `$${docena.toFixed(2)}` : '—'}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">$</span>
+                  <input
+                    id="inv-precio-12u"
+                    type="number"
+                    name="precioDocena"
+                    value={formData.precioDocena}
+                    onChange={handleInputChange}
+                    onKeyDown={blockInvalidNumericKeys}
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    aria-invalid={!!fieldErrors.precioDocena}
+                    aria-describedby={fieldErrors.precioDocena ? 'inv-err-precioDocena' : undefined}
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent text-sm ${
+                      fieldErrors.precioDocena ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-gray-300 dark:border-gray-700 focus:ring-lime-500 dark:focus:ring-lime-600'
+                    }`}
+                    disabled={loading}
+                  />
                 </div>
+                {fieldErrors.precioDocena && (
+                  <p id="inv-err-precioDocena" className="mt-1 text-xs text-red-600" role="alert">
+                    {fieldErrors.precioDocena}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Resumen de precios en tiempo real */}
-            {unitario > 0 && (
+            {/* Resumen de precios ingresados */}
+            {unitario > 0 && precioTresUnidades > 0 && mediaDocena > 0 && docena > 0 && (
               <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 space-y-2">
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Resumen de precios al público (IVA incluido)</p>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Resumen de precios configurados</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">1 unidad</p>
-                    <p className="text-sm font-bold text-[#8CC63F]">${precioVentaFinal.toFixed(2)}</p>
+                    <p className="text-sm font-bold text-[#8CC63F]">${unitario.toFixed(2)}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">3 unidades</p>
+                    <p className="text-sm font-bold text-[#8CC63F]">${precioTresUnidades.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${(precioTresUnidades / 3).toFixed(2)}/u.</p>
                   </div>
                   <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">½ docena (×6)</p>
                     <p className="text-sm font-bold text-[#8CC63F]">${mediaDocena.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">${precioVentaFinal.toFixed(2)}/u.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${(mediaDocena / 6).toFixed(2)}/u.</p>
                   </div>
                   <div className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">docena (×12)</p>
                     <p className="text-sm font-bold text-[#8CC63F]">${docena.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">${precioVentaFinal.toFixed(2)}/u.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">${(docena / 12).toFixed(2)}/u.</p>
                   </div>
                 </div>
                 {margenUnitario !== null && (

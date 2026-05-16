@@ -109,7 +109,15 @@ export const CajaService = {
     return snap.val()
   },
 
-  async addSaleToCaja(cajaId: string, sale: { orderId?: string; method: string; amount: number; items?: any[]; createdBy?: string }) {
+  async addSaleToCaja(cajaId: string, sale: {
+    orderId?: string
+    method: string
+    amount: number
+    items?: any[]
+    cashReceived?: number | null
+    changeAmount?: number | null
+    createdBy?: string
+  }) {
     try {
       const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
       const movRef = ref(database, `${CAJAS_PATH}/${cajaId}/movimientos`)
@@ -120,6 +128,8 @@ export const CajaService = {
         method: sale.method,
         amount: sale.amount,
         items: sale.items || [],
+        cashReceived: typeof sale.cashReceived === 'undefined' ? null : sale.cashReceived,
+        changeAmount: typeof sale.changeAmount === 'undefined' ? null : sale.changeAmount,
         createdBy: sale.createdBy || null,
         createdAt: new Date().toISOString(),
       }
