@@ -28,6 +28,7 @@ import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
 import { UserService } from '../services/UserService'
 import { useSettings } from '../context/SettingsContext'
+import { calculateLineTotal } from '../utils/posPricing'
 
 type ProductDB = {
   id: string
@@ -159,27 +160,21 @@ export default function POS() {
   const displayPrice = (price: number) =>
     showPricesWithoutIva ? Math.round((price / 1.13) * 100) / 100 : price
 
-  const calculateItemTotal = (item: CartItemLocal) => {
-    const qty = item.quantity
-    const unitPrice = item.precioUnitario || 0
-    const specialTiers = [
-      { quantity: 12, price: item.precioDocena },
-      { quantity: 6, price: item.precioMediaDocena },
-      { quantity: 3, price: item.precioTresUnidades },
-    ].filter((tier) => Number(tier.price) > 0)
-
-    const bestTier = specialTiers.find((tier) => qty >= tier.quantity)
-    if (!bestTier) return qty * unitPrice
-
-    if (qty === bestTier.quantity) return Number(bestTier.price)
-
-    const remaining = qty - bestTier.quantity
-    return Number(bestTier.price) + remaining * unitPrice
-  }
+  const calculateItemTotal = (item: CartItemLocal) =>
+    calculateLineTotal({
+      quantity: item.quantity,
+      precioUnitario: item.precioUnitario,
+      precioTresUnidades: item.precioTresUnidades,
+      precioMediaDocena: item.precioMediaDocena,
+      precioDocena: item.precioDocena,
+    })
 
   const getAvailableStock = (productId: string) => {
     return products.find((p) => p.id === productId)?.stock ?? 0
   }
+
+  const getCartQuantity = (productId: string) =>
+    cart.find((item) => item.id === productId)?.quantity ?? 0
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
@@ -219,21 +214,23 @@ export default function POS() {
     toast.success(label, { autoClose: 1000, hideProgressBar: true })
   }
 
-  const setSpecialQuantity = (product: ProductDB, qty: 3 | 6 | 12) => {
-    if (qty > product.stock) {
-      toast.warning('Stock insuficiente para este producto')
-      return
-    }
-
+  const addPackToCart = (product: ProductDB, packQty: 3 | 6 | 12) => {
     setCart((prev) => {
-      const exists = prev.some((item) => item.id === product.id)
-      if (exists) {
+      const existing = prev.find((item) => item.id === product.id)
+      const nextQty = (existing?.quantity ?? 0) + packQty
+      const available = getAvailableStock(product.id)
+      if (nextQty > available) {
+        toast.warning('Stock insuficiente para este producto')
+        return prev
+      }
+      if (existing) {
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: qty } : item
+          item.id === product.id ? { ...item, quantity: nextQty } : item,
         )
       }
-      return [...prev, { ...product, quantity: qty }]
+      return [...prev, { ...product, quantity: packQty }]
     })
+    toast.success(`+${packQty} ${product.nombre}`, { autoClose: 1000, hideProgressBar: true })
   }
 
   const updateQuantity = (id: string, delta: number) => {
@@ -641,7 +638,12 @@ export default function POS() {
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">{item.nombre}</h4>
-                  {[3, 6, 12].includes(item.quantity) && <span className="text-[10px] bg-[#8CC63F]/10 text-[#8CC63F] px-2 py-0.5 rounded mt-1 inline-block">Precio por Volumen</span>}
+                  {item.quantity >= 3 &&
+                    (item.precioDocena > 0 || item.precioMediaDocena > 0 || item.precioTresUnidades > 0) && (
+                    <span className="text-[10px] bg-[#8CC63F]/10 text-[#8CC63F] px-2 py-0.5 rounded mt-1 inline-block">
+                      Precio por volumen
+                    </span>
+                  )}
                 </div>
                 <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 shrink-0 ml-2">
                   <Trash2 size={16} />
@@ -661,13 +663,14 @@ export default function POS() {
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {[3, 6, 12].map((pack) => {
-                  const disabled = item.stock < pack
-                  const active = item.quantity === pack
+                  const stockLeft = Math.max(0, getAvailableStock(item.id) - item.quantity)
+                  const disabled = stockLeft < pack
+                  const active = item.quantity >= pack && item.quantity % pack === 0
                   return (
                     <button
                       key={pack}
                       type="button"
-                      onClick={() => !disabled && setSpecialQuantity(item, pack as 3 | 6 | 12)}
+                      onClick={() => !disabled && addPackToCart(item, pack as 3 | 6 | 12)}
                       disabled={disabled}
                       className={`rounded-md border py-1.5 text-xs font-semibold transition-colors ${
                         disabled
@@ -783,6 +786,8 @@ export default function POS() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 pb-24 md:pb-4">
             {filteredProducts.map((product) => {
               const stock = Number(product.stock || 0)
+              const inCart = getCartQuantity(product.id)
+              const stockLeft = Math.max(0, stock - inCart)
               const isOutOfStock = stock <= 0
               const isLowStock = stock > 0 && stock <= 5
               const stockLabel = isOutOfStock ? 'Sin stock' : isLowStock ? 'Stock bajo' : 'Disponible'
@@ -829,10 +834,10 @@ export default function POS() {
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2">
                       <button
-                        onClick={() => { if (!isOutOfStock && stock >= 3) setSpecialQuantity(product, 3) }}
-                        disabled={isOutOfStock || stock < 3}
+                        onClick={() => { if (!isOutOfStock && stockLeft >= 3) addPackToCart(product, 3) }}
+                        disabled={isOutOfStock || stockLeft < 3}
                         className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                          isOutOfStock || stock < 3
+                          isOutOfStock || stockLeft < 3
                             ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
                             : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700 cursor-pointer active:scale-95'
                         }`}
@@ -841,10 +846,10 @@ export default function POS() {
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${(product.precioTresUnidades || product.precioUnitario * 3).toFixed(2)}</p>
                       </button>
                       <button
-                        onClick={() => { if (!isOutOfStock && stock >= 6) setSpecialQuantity(product, 6) }}
-                        disabled={isOutOfStock || stock < 6}
+                        onClick={() => { if (!isOutOfStock && stockLeft >= 6) addPackToCart(product, 6) }}
+                        disabled={isOutOfStock || stockLeft < 6}
                         className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                          isOutOfStock || stock < 6
+                          isOutOfStock || stockLeft < 6
                             ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
                             : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700 cursor-pointer active:scale-95'
                         }`}
@@ -853,10 +858,10 @@ export default function POS() {
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${displayPrice(product.precioMediaDocena || 0).toFixed(2)}</p>
                       </button>
                       <button
-                        onClick={() => { if (!isOutOfStock && stock >= 12) setSpecialQuantity(product, 12) }}
-                        disabled={isOutOfStock || stock < 12}
+                        onClick={() => { if (!isOutOfStock && stockLeft >= 12) addPackToCart(product, 12) }}
+                        disabled={isOutOfStock || stockLeft < 12}
                         className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                          isOutOfStock || stock < 12
+                          isOutOfStock || stockLeft < 12
                             ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
                             : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700 cursor-pointer active:scale-95'
                         }`}
