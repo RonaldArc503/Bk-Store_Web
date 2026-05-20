@@ -146,7 +146,9 @@ interface CorteState {
   loadingHistory: boolean;
   timelineEntries: TimelineEntry[];
   selectedDayKey: string | null;
-  isCloseConfirmOpen: boolean;
+  closeConfirmStep: "none" | "review" | "final";
+  closeConfirmPhrase: string;
+  closeConfirmAck: boolean;
   historyFilterMonth: string;
   previewData: any | null;
   requiredNote: boolean;
@@ -173,7 +175,10 @@ type CorteAction =
   | { type: "SET_LOADING_HISTORY"; payload: boolean }
   | { type: "SET_TIMELINE_ENTRIES"; payload: TimelineEntry[] }
   | { type: "SET_SELECTED_DAY_KEY"; payload: string | null }
-  | { type: "SET_CLOSE_CONFIRM_OPEN"; payload: boolean }
+  | { type: "SET_CLOSE_CONFIRM_STEP"; payload: "none" | "review" | "final" }
+  | { type: "SET_CLOSE_CONFIRM_PHRASE"; payload: string }
+  | { type: "SET_CLOSE_CONFIRM_ACK"; payload: boolean }
+  | { type: "RESET_CLOSE_CONFIRM" }
   | { type: "SET_HISTORY_FILTER_MONTH"; payload: string }
   | { type: "SET_PREVIEW_DATA"; payload: any }
   | { type: "SET_REQUIRED_NOTE"; payload: boolean }
@@ -199,7 +204,9 @@ const initialState: CorteState = {
   loadingHistory: true,
   timelineEntries: [],
   selectedDayKey: null,
-  isCloseConfirmOpen: false,
+  closeConfirmStep: "none",
+  closeConfirmPhrase: "",
+  closeConfirmAck: false,
   historyFilterMonth: "",
   previewData: null,
   requiredNote: false,
@@ -227,7 +234,16 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
     case "SET_LOADING_HISTORY": return { ...state, loadingHistory: action.payload };
     case "SET_TIMELINE_ENTRIES": return { ...state, timelineEntries: action.payload };
     case "SET_SELECTED_DAY_KEY": return { ...state, selectedDayKey: action.payload };
-    case "SET_CLOSE_CONFIRM_OPEN": return { ...state, isCloseConfirmOpen: action.payload };
+    case "SET_CLOSE_CONFIRM_STEP": return { ...state, closeConfirmStep: action.payload };
+    case "SET_CLOSE_CONFIRM_PHRASE": return { ...state, closeConfirmPhrase: action.payload };
+    case "SET_CLOSE_CONFIRM_ACK": return { ...state, closeConfirmAck: action.payload };
+    case "RESET_CLOSE_CONFIRM":
+      return {
+        ...state,
+        closeConfirmStep: "none",
+        closeConfirmPhrase: "",
+        closeConfirmAck: false,
+      };
     case "SET_HISTORY_FILTER_MONTH": return { ...state, historyFilterMonth: action.payload };
     case "SET_PREVIEW_DATA": return { ...state, previewData: action.payload };
     case "SET_REQUIRED_NOTE": return { ...state, requiredNote: action.payload };
@@ -1227,7 +1243,7 @@ export default function CorteDeCaja() {
       dispatch({ type: "SET_ACTIVE_CAJA_ID", payload: null });
       dispatch({ type: "SET_TODAY_CLOSED", payload: true });
       dispatch({ type: "SET_TODAY_CORTE", payload: created.corte as CorteRecord });
-      dispatch({ type: "SET_CLOSE_CONFIRM_OPEN", payload: false });
+      dispatch({ type: "RESET_CLOSE_CONFIRM" });
       await reloadData();
       toast.success("Cierre de caja guardado correctamente");
       if (window.confirm("¿Desea imprimir el comprobante de cierre?")) {
@@ -1498,7 +1514,11 @@ export default function CorteDeCaja() {
                   />
 
                   <button
-                    onClick={() => dispatch({ type: "SET_CLOSE_CONFIRM_OPEN", payload: true })}
+                    onClick={() => {
+                      dispatch({ type: "SET_CLOSE_CONFIRM_PHRASE", payload: "" });
+                      dispatch({ type: "SET_CLOSE_CONFIRM_ACK", payload: false });
+                      dispatch({ type: "SET_CLOSE_CONFIRM_STEP", payload: "review" });
+                    }}
                     disabled={state.todayClosed || !state.isAperturaSaved || !state.activeCajaId}
                     className="w-full mt-4 md:mt-6 bg-red-600 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
                   >
@@ -1522,31 +1542,95 @@ export default function CorteDeCaja() {
         <DayDetailModal day={selectedDayGroup} onClose={() => dispatch({ type: "SET_SELECTED_DAY_KEY", payload: null })} />
 
         {canManageCaja && (
-        <ConfirmDialog
-          isOpen={state.isCloseConfirmOpen}
-          title="Confirmar cierre de caja"
-          description={
-            <div className="space-y-2 text-sm">
-              <p>Se guardará el corte y se cerrará la caja actual.</p>
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg mt-2">
-                <div className="flex justify-between"><span>💰 Efectivo esperado:</span><span className="font-bold">${fmt(efectivoEsperado)}</span></div>
-                <div className="flex justify-between"><span>💵 Efectivo contado:</span><span className="font-bold">${fmt(efectivoActual)}</span></div>
-                <div className={`flex justify-between font-bold mt-1 pt-1 border-t ${diferenciaEfectivo >= 0 ? "text-lime-600" : "text-red-600"}`}>
-                  <span>{diferenciaEfectivo >= 0 ? "💰 Sobrante:" : "⚠️ Faltante:"}</span>
-                  <span>${fmt(Math.abs(diferenciaEfectivo))}</span>
+          <>
+            <ConfirmDialog
+              isOpen={state.closeConfirmStep === "review"}
+              title="Paso 1 de 2 — Revisar cierre"
+              description={
+                <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                  <p>Revisa los montos antes de continuar. <strong>Solo se permite un cierre por día.</strong></p>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                    <div className="flex justify-between"><span>Total ventas del día:</span><span className="font-bold">${fmt(totalVentas)}</span></div>
+                    <div className="flex justify-between mt-1"><span>Efectivo esperado:</span><span className="font-bold">${fmt(efectivoEsperado)}</span></div>
+                    <div className="flex justify-between mt-1"><span>Efectivo contado:</span><span className="font-bold">${fmt(efectivoActual)}</span></div>
+                    <div className={`flex justify-between font-bold mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 ${diferenciaEfectivo >= 0 ? "text-lime-600" : "text-red-600"}`}>
+                      <span>{diferenciaEfectivo >= 0 ? "Sobrante:" : "Faltante:"}</span>
+                      <span>${fmt(Math.abs(diferenciaEfectivo))}</span>
+                    </div>
+                  </div>
+                  {requiereNota && !state.notas.trim() && (
+                    <p className="text-amber-600 dark:text-amber-400 text-xs">
+                      Agrega una nota explicativa (diferencia mayor a $50) antes de cerrar.
+                    </p>
+                  )}
                 </div>
-              </div>
-              {requiereNota && !state.notas && (
-                <p className="text-amber-600 text-xs mt-2">⚠️ Se requiere nota explicativa por diferencia mayor a $50</p>
-              )}
-            </div>
-          }
-          confirmLabel="Cerrar Caja"
-          cancelLabel="Cancelar"
-          danger
-          onCancel={() => dispatch({ type: "SET_CLOSE_CONFIRM_OPEN", payload: false })}
-          onConfirm={handleCerrarCaja}
-        />
+              }
+              confirmLabel="Continuar al paso final"
+              cancelLabel="Cancelar"
+              danger
+              confirmDisabled={requiereNota && !state.notas.trim()}
+              onCancel={() => dispatch({ type: "RESET_CLOSE_CONFIRM" })}
+              onConfirm={() => {
+                if (requiereNota && !state.notas.trim()) {
+                  toast.error("Se requiere una nota explicativa para la diferencia mayor a $50");
+                  return;
+                }
+                dispatch({ type: "SET_CLOSE_CONFIRM_PHRASE", payload: "" });
+                dispatch({ type: "SET_CLOSE_CONFIRM_ACK", payload: false });
+                dispatch({ type: "SET_CLOSE_CONFIRM_STEP", payload: "final" });
+              }}
+            />
+
+            <ConfirmDialog
+              isOpen={state.closeConfirmStep === "final"}
+              title="Paso 2 de 2 — Confirmar cierre definitivo"
+              description={
+                <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+                  <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200">
+                    <p className="font-semibold">Esta acción no se puede deshacer hoy.</p>
+                    <p className="mt-1 text-xs opacity-90">
+                      Al confirmar se guardará el corte y no podrás abrir otro cierre hasta mañana.
+                    </p>
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={state.closeConfirmAck}
+                      onChange={(e) =>
+                        dispatch({ type: "SET_CLOSE_CONFIRM_ACK", payload: e.target.checked })
+                      }
+                      className="mt-1 rounded border-gray-300"
+                    />
+                    <span>Entiendo que solo se permite <strong>un cierre por día</strong> y deseo cerrar la caja ahora.</span>
+                  </label>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Escribe <span className="font-mono font-bold text-red-600 dark:text-red-400">CERRAR</span> para confirmar
+                    </label>
+                    <input
+                      type="text"
+                      value={state.closeConfirmPhrase}
+                      onChange={(e) =>
+                        dispatch({ type: "SET_CLOSE_CONFIRM_PHRASE", payload: e.target.value.toUpperCase() })
+                      }
+                      placeholder="CERRAR"
+                      autoComplete="off"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 font-mono text-sm uppercase"
+                    />
+                  </div>
+                </div>
+              }
+              confirmLabel="Cerrar caja definitivamente"
+              cancelLabel="Volver"
+              danger
+              confirmDisabled={
+                !state.closeConfirmAck ||
+                state.closeConfirmPhrase.trim() !== "CERRAR"
+              }
+              onCancel={() => dispatch({ type: "SET_CLOSE_CONFIRM_STEP", payload: "review" })}
+              onConfirm={handleCerrarCaja}
+            />
+          </>
         )}
       </main>
     </div>
