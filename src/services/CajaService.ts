@@ -209,6 +209,76 @@ export const CajaService = {
     }
   },
 
+  /** Busca en qué caja se registró la venta (por movimiento con orderId) */
+  async findCajaIdByOrderId(orderId: string): Promise<string | null> {
+    try {
+      const cajas = await this.getAllCajas()
+      for (const caja of cajas) {
+        const movs = caja.movimientos
+        if (!movs || typeof movs !== 'object') continue
+        for (const mov of Object.values(movs) as any[]) {
+          if (mov?.orderId === orderId && caja.id) return caja.id
+        }
+      }
+      return null
+    } catch (error) {
+      console.error('Error finding caja by order:', error)
+      return null
+    }
+  },
+
+  /** Resta el monto devuelto de los totales de la caja (mismo método de pago de la venta) */
+  async registrarDevolucionEnCaja(
+    cajaId: string,
+    data: {
+      orderId: string
+      devolucionId: string
+      method: string
+      amount: number
+      createdBy?: string
+    },
+  ) {
+    try {
+      const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
+      const snap = await get(cajaRef)
+      if (!snap.exists()) throw new Error('Caja no encontrada para registrar devolución')
+
+      const caja = snap.val()
+      if (caja?.status === 'closed') {
+        throw new Error('No se puede ajustar una caja ya cerrada')
+      }
+
+      const amt = Math.abs(Number(data.amount || 0))
+      if (amt <= 0) return null
+
+      const method = data.method || 'efectivo'
+      const movRef = ref(database, `${CAJAS_PATH}/${cajaId}/movimientos`)
+      const newMovRef = push(movRef)
+      const movimiento = {
+        id: newMovRef.key || Math.random().toString(36).substr(2, 9),
+        type: 'devolucion',
+        orderId: data.orderId,
+        devolucionId: data.devolucionId,
+        method,
+        amount: -amt,
+        createdBy: data.createdBy || null,
+        createdAt: new Date().toISOString(),
+      }
+
+      const updates: Record<string, any> = {
+        [`totals/${method}`]: increment(-amt),
+        'totals/totalVentas': increment(-amt),
+        [`movimientos/${movimiento.id}`]: movimiento,
+      }
+
+      await update(cajaRef, updates)
+      return movimiento
+    } catch (error) {
+      console.error('Error registering devolucion in caja:', error)
+      throw error
+    }
+  },
+
   async closeCaja(cajaId: string, cierreData?: any) {
     try {
       const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)

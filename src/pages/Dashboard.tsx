@@ -9,8 +9,9 @@ import { Sidebar } from '../components/Sidebar'
 import { OrderService } from '../services/OrderService'
 import { InventoryService } from '../services/InventoryService'
 import { UserService } from '../services/UserService'
-import { DevolucionService, type DevolucionItem } from '../services/DevolucionService'
-import { assertCajaAbierta, restoreStockForDevolucion } from '../utils/devolucionHelpers'
+import { DevolucionService, type Devolucion } from '../services/DevolucionService'
+import { procesarDevolucionCompleta } from '../utils/devolucionHelpers'
+import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } from '../utils/orderTotals'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
 import type { InventoryStats } from '../types/product'
@@ -29,7 +30,8 @@ type OrderRecord = {
   id: string; date?: string; createdAt?: string
   items?: OrderItem[]; method?: string
   subtotal?: number; tax?: number; total?: number
-  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string }
+  totalDevuelto?: number
+  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string; totalDevuelto?: number }
 }
 
 export default function Dashboard() {
@@ -39,6 +41,7 @@ export default function Dashboard() {
   const currency = 'MXN'
 
   const [orders, setOrders] = useState<OrderRecord[]>([])
+  const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
   const [inventoryStats, setInventoryStats] = useState<InventoryStats>({ totalProductos: 0, stockTotal: 0, alertasStock: 0 })
   const [userStats, setUserStats] = useState({ totalUsuarios: 0, usuariosActivos: 0, usuariosInactivos: 0 })
   const [loading, setLoading] = useState(true)
@@ -84,40 +87,6 @@ export default function Dashboard() {
     if (!selectedOrder || !hasDevSel) return
     setIsProcessingDev(true)
     try {
-      await assertCajaAbierta(user?.uid)
-
-      const items = selectedOrder.items || []
-      const devolucionItems: DevolucionItem[] = []
-
-      for (const [idx, qty] of Object.entries(devItems)) {
-        if (qty <= 0) continue
-        const item = items[Number(idx)]
-        if (!item) continue
-        const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
-        devolucionItems.push({
-          productId: item.id || item.productId || item.productoId || '',
-          nombre: getItemName(item),
-          cantidad: qty,
-          precioUnitario: up,
-          subtotal: up * qty,
-        })
-      }
-
-      if (devolucionItems.length === 0) {
-        toast.warning('Selecciona al menos un artículo')
-        return
-      }
-
-      for (const [idx, qty] of Object.entries(devItems)) {
-        if (qty <= 0) continue
-        const item = items[Number(idx)]
-        if (item) await restoreStockForDevolucion(item, qty, selectedOrder.id)
-      }
-
-      const totalOrig = items.reduce((s, i) => s + getItemQuantity(i), 0)
-      const totalDev = devolucionItems.reduce((s, i) => s + i.cantidad, 0)
-      const tipo = totalDev >= totalOrig ? 'total' as const : 'parcial' as const
-
       let empNombre = user?.email || 'Desconocido'
       let empRol = 'Vendedor'
       if (user?.email) {
@@ -127,24 +96,29 @@ export default function Dashboard() {
         } catch { /* ignore */ }
       }
 
-      const dev = await DevolucionService.crearDevolucion({
-        ventaOriginalId: selectedOrder.id,
-        fecha: new Date().toLocaleString('es-SV'),
+      const result = await procesarDevolucionCompleta({
+        order: selectedOrder,
+        devItems,
+        motivo: DEV_MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
         empleado: empNombre,
         empleadoRol: empRol,
-        motivo: DEV_MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
-        items: devolucionItems,
-        totalDevuelto: devTotal,
-        tipo,
+        userId: user?.uid,
       })
 
-      await OrderService.marcarDevolucion(selectedOrder.id, tipo, dev.id)
-      toast.success(`Devolución ${tipo} registrada correctamente`)
+      toast.success(
+        `Devolución ${result.tipo} por $${result.montoDevuelto.toFixed(2)} — ventas y caja actualizadas`,
+      )
       setShowDevolucion(false)
       setSelectedOrder(null)
 
-      const fresh = await OrderService.getAllOrders()
-      setOrders(fresh)
+      const [freshOrders, freshDevs, inventoryData] = await Promise.all([
+        OrderService.getAllOrders(),
+        DevolucionService.getAllDevoluciones(),
+        InventoryService.getInventoryStats(lowStockThreshold),
+      ])
+      setOrders(freshOrders as OrderRecord[])
+      setDevoluciones(freshDevs)
+      setInventoryStats(inventoryData)
     } catch (err) {
       console.error('Error en devolución:', err)
       const msg = err instanceof Error ? err.message : 'Error al procesar la devolución'
@@ -159,15 +133,17 @@ export default function Dashboard() {
     ;(async () => {
       setLoading(true)
       try {
-        const [ordersData, inventoryData, usersData] = await Promise.all([
+        const [ordersData, inventoryData, usersData, devsData] = await Promise.all([
           OrderService.getAllOrders(),
           InventoryService.getInventoryStats(lowStockThreshold),
           UserService.getUserStats(),
+          DevolucionService.getAllDevoluciones(),
         ])
         if (!mounted) return
         setOrders(ordersData as OrderRecord[])
         setInventoryStats(inventoryData)
         setUserStats(usersData)
+        setDevoluciones(devsData)
       } catch (error) { console.error('Error loading dashboard data:', error) }
       finally { if (mounted) setLoading(false) }
     })()
@@ -202,7 +178,7 @@ export default function Dashboard() {
   }
   const parseDate = (value?: string) => { if (!value) return null; const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d }
   const orderDateValue = (order: OrderRecord) => { const d = parseDate(order.date || order.createdAt); return d ? d.getTime() : 0 }
-  const sumTotals = (list: OrderRecord[]) => list.reduce((sum, order) => sum + Number(order.total || 0), 0)
+  const sumTotals = (list: OrderRecord[]) => sumOrderEffectiveTotals(list)
 
   /* ─── Calculations ─── */
   const now = new Date()
@@ -223,6 +199,22 @@ export default function Dashboard() {
   const revenueMonth = sumTotals(ordersThisMonth)
   const monthSalesCount = ordersThisMonth.length
 
+  const devolucionesToday = useMemo(() => {
+    return devoluciones.filter((d) => {
+      const raw = d.createdAt || d.fecha
+      if (!raw) return false
+      const dt = new Date(raw)
+      return !Number.isNaN(dt.getTime()) && isInRange(dt, startOfToday, endOfToday)
+    })
+  }, [devoluciones, startOfToday.getTime(), endOfToday.getTime()])
+
+  const totalDevueltoHoy = useMemo(
+    () => devolucionesToday.reduce((s, d) => s + Number(d.totalDevuelto || 0), 0),
+    [devolucionesToday],
+  )
+
+  const ventasBrutasHoy = ordersToday.reduce((s, o) => s + Number(o.total || 0), 0)
+
   const changePercent = (current: number, previous: number) => previous <= 0 ? null : ((current - previous) / previous) * 100
   const todayChange = changePercent(revenueToday, revenueYesterday)
   const monthChange = changePercent(monthSalesCount, ordersLastMonth.length)
@@ -239,7 +231,8 @@ export default function Dashboard() {
         id: order.id,
         product: `${getItemName(firstItem || {})}${extraCount}`,
         quantity,
-        total: Number(order.total || 0),
+        total: getOrderEffectiveTotal(order),
+        devuelto: getOrderDevuelto(order),
         method: order.method,
         date: order.date || order.createdAt,
         order,
@@ -257,7 +250,7 @@ export default function Dashboard() {
       const dayOrders = orders.filter((o) => isInRange(parseDate(o.date || o.createdAt), start, end))
       days.push({
         label: d.toLocaleDateString('es-MX', { weekday: 'short' }),
-        value: sumTotals(dayOrders),
+        value: sumOrderEffectiveTotals(dayOrders),
         count: dayOrders.length,
         dateKey: `${d.getDate()}/${d.getMonth() + 1}`,
       })
@@ -271,7 +264,7 @@ export default function Dashboard() {
     const map: Record<string, number> = {}
     ordersThisMonth.forEach((o) => {
       const m = o.method || 'efectivo'
-      map[m] = (map[m] || 0) + toNumber(o.total)
+      map[m] = (map[m] || 0) + getOrderEffectiveTotal(o)
     })
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [orders])
@@ -389,9 +382,9 @@ export default function Dashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-          {/* Ventas Hoy */}
-          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-[#8CC63F] to-[#6ba52e] p-4 md:p-5 rounded-2xl text-white shadow-lg shadow-[#8CC63F]/20 relative overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
+          {/* Ventas Hoy (neto) */}
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-gradient-to-br from-[#8CC63F] to-[#6ba52e] p-4 md:p-5 rounded-2xl text-white shadow-lg shadow-[#8CC63F]/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-6 -mt-6" />
             <div className="relative">
               <div className="flex items-center gap-2 mb-3">
@@ -403,10 +396,31 @@ export default function Dashboard() {
                   </span>
                 )}
               </div>
-              <p className="text-lime-100 text-xs font-medium">Ventas Hoy</p>
+              <p className="text-lime-100 text-xs font-medium">Ventas Hoy (neto)</p>
               <p className="text-xl md:text-2xl font-bold mt-0.5">{loading ? '...' : formatCurrency(revenueToday)}</p>
-              <p className="text-lime-200 text-[11px] mt-1">{ordersToday.length} transacciones</p>
+              <p className="text-lime-200 text-[11px] mt-1">
+                {ordersToday.length} ventas
+                {!loading && totalDevueltoHoy > 0 && (
+                  <> · Bruto {formatCurrency(ventasBrutasHoy)}</>
+                )}
+              </p>
             </div>
+          </div>
+
+          {/* Devoluciones Hoy */}
+          <div className="bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-900/50 p-4 md:p-5 rounded-2xl relative overflow-hidden">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 bg-amber-100 dark:bg-amber-950/40 rounded-lg flex items-center justify-center">
+                <RotateCcw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">Devoluciones Hoy</p>
+            <p className="text-xl md:text-2xl font-bold text-amber-700 dark:text-amber-400 mt-0.5">
+              {loading ? '...' : formatCurrency(totalDevueltoHoy)}
+            </p>
+            <p className="text-gray-400 dark:text-gray-500 text-[11px] mt-1">
+              {loading ? '—' : `${devolucionesToday.length} registro${devolucionesToday.length === 1 ? '' : 's'}`}
+            </p>
           </div>
 
           {/* Ventas del Mes */}
@@ -560,6 +574,9 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(sale.total)}</p>
+                      {sale.devuelto > 0 && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">−{formatCurrency(sale.devuelto)} dev.</p>
+                      )}
                       <p className="text-[11px] text-gray-400 dark:text-gray-500">{toPaymentLabel(sale.method)}</p>
                     </div>
                   </button>

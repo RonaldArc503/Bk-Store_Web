@@ -240,7 +240,7 @@ export const InventoryService = {
       return updatedInventario
     } catch (error) {
       console.error('Error agregando stock:', error)
-      throw new Error('Error al agregar stock')
+      throw error instanceof Error ? error : new Error('Error al agregar stock')
     }
   },
 

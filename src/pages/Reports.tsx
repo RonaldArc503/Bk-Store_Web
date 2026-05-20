@@ -22,8 +22,8 @@ import { Input } from "../components/input";
 import { toast } from "react-toastify";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
-import { DevolucionService, type DevolucionItem } from "../services/DevolucionService";
-import { assertCajaAbierta, restoreStockForDevolucion } from "../utils/devolucionHelpers";
+import { procesarDevolucionCompleta } from "../utils/devolucionHelpers";
+import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } from "../utils/orderTotals";
 import { UserService } from "../services/UserService";
 import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../context/SettingsContext";
@@ -60,9 +60,10 @@ type OrderRecord = {
   taxRate?: number;
   method?: string;
   total?: number;
+  totalDevuelto?: number;
   cashReceived?: number;
   changeAmount?: number;
-  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string };
+  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string; totalDevuelto?: number };
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -222,40 +223,6 @@ export default function Reports() {
     if (!selectedOrder || !hasDevSelection) return;
     setIsProcessingDev(true);
     try {
-      await assertCajaAbierta(user?.uid);
-
-      const items = selectedOrder.items || [];
-      const devolucionItems: DevolucionItem[] = [];
-
-      for (const [idx, qty] of Object.entries(devItems)) {
-        if (qty <= 0) continue;
-        const item = items[Number(idx)];
-        if (!item) continue;
-        const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
-        devolucionItems.push({
-          productId: item.id || item.productId || item.productoId || "",
-          nombre: getItemName(item),
-          cantidad: qty,
-          precioUnitario: unitPrice,
-          subtotal: unitPrice * qty,
-        });
-      }
-
-      if (devolucionItems.length === 0) {
-        toast.warning("Selecciona al menos un artículo");
-        return;
-      }
-
-      for (const [idx, qty] of Object.entries(devItems)) {
-        if (qty <= 0) continue;
-        const item = items[Number(idx)];
-        if (item) await restoreStockForDevolucion(item, qty, selectedOrder.id);
-      }
-
-      const totalItemsOriginal = items.reduce((s, i) => s + getItemQuantity(i), 0);
-      const totalDevuelto = devolucionItems.reduce((s, i) => s + i.cantidad, 0);
-      const tipo = totalDevuelto >= totalItemsOriginal ? "total" as const : "parcial" as const;
-
       let empNombre = user?.email || "Desconocido";
       let empRol = "Vendedor";
       if (user?.email) {
@@ -265,20 +232,18 @@ export default function Reports() {
         } catch { /* ignore */ }
       }
 
-      const devolucion = await DevolucionService.crearDevolucion({
-        ventaOriginalId: selectedOrder.id,
-        fecha: new Date().toLocaleString("es-SV"),
+      const result = await procesarDevolucionCompleta({
+        order: selectedOrder,
+        devItems,
+        motivo: MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
         empleado: empNombre,
         empleadoRol: empRol,
-        motivo: MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
-        items: devolucionItems,
-        totalDevuelto: devTotal,
-        tipo,
+        userId: user?.uid,
       });
 
-      await OrderService.marcarDevolucion(selectedOrder.id, tipo, devolucion.id);
-
-      toast.success(`Devolución ${tipo} registrada correctamente`);
+      toast.success(
+        `Devolución ${result.tipo} por ${toMoney(result.montoDevuelto)} — ventas del día y stock actualizados`,
+      );
       setShowDevolucion(false);
       setSelectedOrder(null);
 
@@ -377,13 +342,18 @@ export default function Reports() {
 
       const productList = productNames.join(", ");
 
+      const devuelto = getOrderDevuelto(o);
+      const neto = getOrderEffectiveTotal(o);
       return {
         ticket: o.id.slice(-8).toUpperCase(),
         itemsCount: (o.items || []).reduce((s, i) => s + getItemQuantity(i), 0),
         productNames: productList,
         date: toDateTime(o.date || o.createdAt),
         payment: toPaymentLabel(o.method),
-        total: Number(o.total || 0),
+        total: neto,
+        originalTotal: Number(o.total || 0),
+        devuelto,
+        hasDevolucion: devuelto > 0,
       };
     });
   }, [filteredOrders]);
@@ -400,6 +370,12 @@ export default function Reports() {
       const factor =
         orderSubtotal > 0 && orderTotal > 0 ? orderTotal / orderSubtotal : 1;
 
+      const orderDevuelto = getOrderDevuelto(o);
+      const devFactor =
+        orderSubtotal > 0 && orderDevuelto > 0
+          ? Math.max(0, 1 - orderDevuelto / orderSubtotal)
+          : 1;
+
       items.forEach((item) => {
         const key = getItemKey(item);
         const prev = map.get(key) ?? {
@@ -409,7 +385,7 @@ export default function Reports() {
         };
         const qty = getItemQuantity(item);
         const itemSubtotal = getItemSubtotal(item);
-        const revenueWithTax = itemSubtotal * factor;
+        const revenueWithTax = itemSubtotal * factor * devFactor;
         map.set(key, {
           name: prev.name,
           units: prev.units + qty,
@@ -428,7 +404,7 @@ export default function Reports() {
     const breakdown: Record<string, number> = {};
     filteredOrders.forEach((o) => {
       const key = toPaymentLabel(o.method);
-      breakdown[key] = (breakdown[key] || 0) + Number(o.total || 0);
+      breakdown[key] = (breakdown[key] || 0) + getOrderEffectiveTotal(o);
     });
     return breakdown;
   }, [filteredOrders]);
@@ -451,10 +427,8 @@ export default function Reports() {
   // ── Summary metrics ─────────────────────────────────────────────────────────
 
   const metrics = useMemo(() => {
-    const totalRevenue = filteredOrders.reduce(
-      (s, o) => s + Number(o.total || 0),
-      0,
-    );
+    const totalRevenue = sumOrderEffectiveTotals(filteredOrders);
+    const totalDevoluciones = filteredOrders.reduce((s, o) => s + getOrderDevuelto(o), 0);
     const totalUnits = filteredOrders.reduce(
       (s, o) =>
         s + (o.items || []).reduce((si, i) => si + getItemQuantity(i), 0),
@@ -463,6 +437,7 @@ export default function Reports() {
     return {
       orders: filteredOrders.length,
       revenue: totalRevenue,
+      devoluciones: totalDevoluciones,
       units: totalUnits,
       cortes: filteredCortes.length,
     };
@@ -745,11 +720,18 @@ export default function Reports() {
       bgColor: "bg-blue-50 dark:bg-blue-950/30",
     },
     {
-      label: "Ingresos",
+      label: "Ingresos netos",
       value: toMoney(metrics.revenue),
       icon: <DollarSign className="w-4 h-4" />,
       color: "text-green-600 dark:text-green-400",
       bgColor: "bg-green-50 dark:bg-green-950/30",
+    },
+    {
+      label: "Devoluciones",
+      value: toMoney(metrics.devoluciones),
+      icon: <RotateCcw className="w-4 h-4" />,
+      color: "text-amber-600 dark:text-amber-400",
+      bgColor: "bg-amber-50 dark:bg-amber-950/30",
     },
     {
       label: "Artículos vendidos",
@@ -825,8 +807,13 @@ export default function Reports() {
                     {r.payment}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-sm">
-                  {toMoney(r.total)}
+                <td className="px-4 py-3 text-right text-sm">
+                  <span className="font-semibold">{toMoney(r.total)}</span>
+                  {r.hasDevolucion && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                      −{toMoney(r.devuelto)} dev.
+                    </p>
+                  )}
                 </td>
               </tr>
                 );
@@ -1413,7 +1400,9 @@ export default function Reports() {
 
               <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                 <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">El stock de los productos seleccionados será restaurado automáticamente al inventario.</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Se restaurará el stock, se descontará el monto de las ventas del día y de la caja abierta (mismo método de pago).
+                </p>
               </div>
 
               <div className="flex gap-2 pt-1">

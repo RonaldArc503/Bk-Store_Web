@@ -65,13 +65,54 @@ export const OrderService = {
     }
   },
 
-  async marcarDevolucion(orderId: string, tipo: 'total' | 'parcial', devolucionId: string) {
+  async marcarDevolucion(orderId: string, _tipo: 'total' | 'parcial', devolucionId: string) {
+    return this.aplicarDevolucionAOrden(orderId, devolucionId, 0)
+  },
+
+  /**
+   * Acumula monto devuelto en la orden y actualiza tipo total/parcial.
+   */
+  async aplicarDevolucionAOrden(
+    orderId: string,
+    devolucionId: string,
+    montoDevuelto: number,
+  ): Promise<{ totalDevueltoAcumulado: number; tipo: 'total' | 'parcial' }> {
     try {
-      await update(ref(database, `${ORDERS_PATH}/${orderId}`), {
-        devolucion: { tipo, devolucionId, fecha: new Date().toISOString() },
+      const orderRef = ref(database, `${ORDERS_PATH}/${orderId}`)
+      const snap = await get(orderRef)
+      if (!snap.exists()) throw new Error('Venta no encontrada')
+
+      const order = snap.val() as Record<string, any>
+      const orderTotal = Number(order.total ?? 0)
+      const prevDevuelto = Number(order.totalDevuelto ?? order.devolucion?.totalDevuelto ?? 0)
+      const totalDevueltoAcumulado = Math.round((prevDevuelto + montoDevuelto) * 100) / 100
+      const tipo: 'total' | 'parcial' =
+        totalDevueltoAcumulado >= orderTotal - 0.01 ? 'total' : 'parcial'
+
+      const devolucionIds: string[] = Array.isArray(order.devolucionIds)
+        ? [...order.devolucionIds]
+        : order.devolucion?.devolucionId
+          ? [order.devolucion.devolucionId]
+          : []
+      if (!devolucionIds.includes(devolucionId)) {
+        devolucionIds.push(devolucionId)
+      }
+
+      await update(orderRef, {
+        totalDevuelto: totalDevueltoAcumulado,
+        devolucionIds,
+        devolucion: {
+          tipo,
+          devolucionId,
+          fecha: new Date().toISOString(),
+          montoDevuelto,
+          totalDevuelto: totalDevueltoAcumulado,
+        },
       })
+
+      return { totalDevueltoAcumulado, tipo }
     } catch (error) {
-      console.error('Error marking order as returned:', error)
+      console.error('Error applying devolucion to order:', error)
       throw error
     }
   },
