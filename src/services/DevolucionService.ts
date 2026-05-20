@@ -15,7 +15,7 @@ export interface Devolucion {
   id: string
   ventaOriginalId: string
   fecha: string
-  createdAt?: string
+  createdAt: string
   empleado: string
   empleadoRol: string
   motivo: string
@@ -25,9 +25,10 @@ export interface Devolucion {
 }
 
 export const DevolucionService = {
-  async crearDevolucion(data: Omit<Devolucion, 'id'>): Promise<Devolucion> {
+  async crearDevolucion(data: Omit<Devolucion, 'id'> & { createdAt?: string }): Promise<Devolucion> {
     const devRef = push(ref(database, DEVOLUCIONES_PATH))
-    const devolucion: Devolucion = { ...data, id: devRef.key! }
+    const createdAt = data.createdAt || new Date().toISOString()
+    const devolucion: Devolucion = { ...data, id: devRef.key!, createdAt }
     await set(devRef, devolucion)
     return devolucion
   },
