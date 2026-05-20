@@ -10,6 +10,7 @@ import { OrderService } from '../services/OrderService'
 import { InventoryService } from '../services/InventoryService'
 import { UserService } from '../services/UserService'
 import { DevolucionService, type DevolucionItem } from '../services/DevolucionService'
+import { assertCajaAbierta, restoreStockForDevolucion } from '../utils/devolucionHelpers'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
 import type { InventoryStats } from '../types/product'
@@ -83,6 +84,8 @@ export default function Dashboard() {
     if (!selectedOrder || !hasDevSel) return
     setIsProcessingDev(true)
     try {
+      await assertCajaAbierta(user?.uid)
+
       const items = selectedOrder.items || []
       const devolucionItems: DevolucionItem[] = []
 
@@ -90,16 +93,25 @@ export default function Dashboard() {
         if (qty <= 0) continue
         const item = items[Number(idx)]
         if (!item) continue
-        const productId = item.id || item.productId || item.productoId || ''
         const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
-        devolucionItems.push({ productId, nombre: getItemName(item), cantidad: qty, precioUnitario: up, subtotal: up * qty })
+        devolucionItems.push({
+          productId: item.id || item.productId || item.productoId || '',
+          nombre: getItemName(item),
+          cantidad: qty,
+          precioUnitario: up,
+          subtotal: up * qty,
+        })
+      }
 
-        if (productId) {
-          try {
-            const inv = await InventoryService.getInventarioByProductoId(productId)
-            if (inv?.id) await InventoryService.agregarStock(inv.id, qty, `devolución venta ${selectedOrder.id}`)
-          } catch (e) { console.warn('Stock restore failed', productId, e) }
-        }
+      if (devolucionItems.length === 0) {
+        toast.warning('Selecciona al menos un artículo')
+        return
+      }
+
+      for (const [idx, qty] of Object.entries(devItems)) {
+        if (qty <= 0) continue
+        const item = items[Number(idx)]
+        if (item) await restoreStockForDevolucion(item, qty, selectedOrder.id)
       }
 
       const totalOrig = items.reduce((s, i) => s + getItemQuantity(i), 0)
@@ -112,7 +124,7 @@ export default function Dashboard() {
         try {
           const u = await UserService.getUserByEmail(user.email)
           if (u) { empNombre = u.nombreCompleto || u.usuario; empRol = u.rol || 'Vendedor' }
-        } catch {}
+        } catch { /* ignore */ }
       }
 
       const dev = await DevolucionService.crearDevolucion({
@@ -127,7 +139,7 @@ export default function Dashboard() {
       })
 
       await OrderService.marcarDevolucion(selectedOrder.id, tipo, dev.id)
-      toast.success(`Devolución ${tipo} procesada`)
+      toast.success(`Devolución ${tipo} registrada correctamente`)
       setShowDevolucion(false)
       setSelectedOrder(null)
 
@@ -135,7 +147,8 @@ export default function Dashboard() {
       setOrders(fresh)
     } catch (err) {
       console.error('Error en devolución:', err)
-      toast.error('Error al procesar la devolución')
+      const msg = err instanceof Error ? err.message : 'Error al procesar la devolución'
+      toast.error(msg)
     } finally {
       setIsProcessingDev(false)
     }

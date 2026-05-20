@@ -10,7 +10,23 @@ const RESET_PATHS = [
   'inventario',
   'productos',
   'movimientos',
+  'devoluciones',
   'userActiveCaja',
+]
+
+const BACKUP_PATHS = [
+  'users',
+  'userAuthIndex',
+  'orders',
+  'cajas',
+  'cortes',
+  'cortesByDate',
+  'inventario',
+  'productos',
+  'movimientos',
+  'devoluciones',
+  'userActiveCaja',
+  'settings',
 ]
 
 export type FullBackupPayload = {
@@ -25,6 +41,11 @@ export type FullBackupPayload = {
   }
 }
 
+async function readPath(path: string): Promise<unknown> {
+  const snap = await get(ref(database, path))
+  return snap.exists() ? snap.val() : null
+}
+
 export const MaintenanceService = {
   async clearDataExceptUsers() {
     try {
@@ -37,8 +58,14 @@ export const MaintenanceService = {
 
   async createFullBackup(settingsSnapshot?: unknown): Promise<FullBackupPayload> {
     try {
-      const snapshot = await get(ref(database))
-      const dbData = (snapshot.val() || {}) as Record<string, unknown>
+      const entries = await Promise.all(
+        BACKUP_PATHS.map(async (path) => [path, await readPath(path)] as const),
+      )
+      const dbData: Record<string, unknown> = {}
+      for (const [path, value] of entries) {
+        if (value != null) dbData[path] = value
+      }
+
       return {
         meta: {
           version: 1,
@@ -75,7 +102,9 @@ export const MaintenanceService = {
     const anchor = document.createElement('a')
     anchor.href = url
     anchor.download = fileName
+    document.body.appendChild(anchor)
     anchor.click()
+    document.body.removeChild(anchor)
     URL.revokeObjectURL(url)
   },
 
@@ -139,7 +168,12 @@ export const MaintenanceService = {
       if (!payload.database || typeof payload.database !== 'object') {
         throw new Error('El respaldo no contiene datos de base de datos')
       }
-      await set(ref(database), payload.database)
+
+      await Promise.all(
+        Object.entries(payload.database).map(([path, value]) =>
+          set(ref(database, path), value ?? null),
+        ),
+      )
     } catch (error) {
       console.error('Error restoring full backup:', error)
       throw error instanceof Error ? error : new Error('Error al restaurar respaldo')

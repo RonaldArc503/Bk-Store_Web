@@ -22,8 +22,8 @@ import { Input } from "../components/input";
 import { toast } from "react-toastify";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
-import { InventoryService } from "../services/InventoryService";
 import { DevolucionService, type DevolucionItem } from "../services/DevolucionService";
+import { assertCajaAbierta, restoreStockForDevolucion } from "../utils/devolucionHelpers";
 import { UserService } from "../services/UserService";
 import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../context/SettingsContext";
@@ -222,6 +222,8 @@ export default function Reports() {
     if (!selectedOrder || !hasDevSelection) return;
     setIsProcessingDev(true);
     try {
+      await assertCajaAbierta(user?.uid);
+
       const items = selectedOrder.items || [];
       const devolucionItems: DevolucionItem[] = [];
 
@@ -229,24 +231,25 @@ export default function Reports() {
         if (qty <= 0) continue;
         const item = items[Number(idx)];
         if (!item) continue;
-        const productId = item.id || item.productId || item.productoId || "";
         const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
         devolucionItems.push({
-          productId,
+          productId: item.id || item.productId || item.productoId || "",
           nombre: getItemName(item),
           cantidad: qty,
           precioUnitario: unitPrice,
           subtotal: unitPrice * qty,
         });
+      }
 
-        if (productId) {
-          try {
-            const inv = await InventoryService.getInventarioByProductoId(productId);
-            if (inv?.id) {
-              await InventoryService.agregarStock(inv.id, qty, `devolución venta ${selectedOrder.id}`);
-            }
-          } catch (e) { console.warn("No se pudo restaurar stock para", productId, e); }
-        }
+      if (devolucionItems.length === 0) {
+        toast.warning("Selecciona al menos un artículo");
+        return;
+      }
+
+      for (const [idx, qty] of Object.entries(devItems)) {
+        if (qty <= 0) continue;
+        const item = items[Number(idx)];
+        if (item) await restoreStockForDevolucion(item, qty, selectedOrder.id);
       }
 
       const totalItemsOriginal = items.reduce((s, i) => s + getItemQuantity(i), 0);
@@ -259,7 +262,7 @@ export default function Reports() {
         try {
           const u = await UserService.getUserByEmail(user.email);
           if (u) { empNombre = u.nombreCompleto || u.usuario; empRol = u.rol || "Vendedor"; }
-        } catch {}
+        } catch { /* ignore */ }
       }
 
       const devolucion = await DevolucionService.crearDevolucion({
@@ -275,7 +278,7 @@ export default function Reports() {
 
       await OrderService.marcarDevolucion(selectedOrder.id, tipo, devolucion.id);
 
-      toast.success(`Devolución ${tipo} procesada correctamente`);
+      toast.success(`Devolución ${tipo} registrada correctamente`);
       setShowDevolucion(false);
       setSelectedOrder(null);
 
@@ -283,7 +286,8 @@ export default function Reports() {
       setOrders(freshOrders);
     } catch (err) {
       console.error("Error procesando devolución:", err);
-      toast.error("Error al procesar la devolución");
+      const msg = err instanceof Error ? err.message : "Error al procesar la devolución";
+      toast.error(msg);
     } finally {
       setIsProcessingDev(false);
     }

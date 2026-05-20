@@ -258,7 +258,14 @@ export const UserService = {
         fechaActualizacion: now,
       }
 
-      await set(userRef, updatedUser)
+      await update(userRef, {
+        nombreCompleto: updatedUser.nombreCompleto,
+        rol: updatedUser.rol,
+        estado: updatedUser.estado,
+        email: updatedUser.email,
+        permissions: updatedUser.permissions,
+        fechaActualizacion: updatedUser.fechaActualizacion,
+      })
       await syncAuthIndexEntriesForUser(updatedUser, nextPermissions)
       return updatedUser
     } catch (error) {
@@ -290,7 +297,11 @@ export const UserService = {
         fechaActualizacion: new Date().toISOString().split('T')[0],
       }
 
-      await set(userRef, updatedUser)
+      await update(userRef, {
+        estado: updatedUser.estado,
+        permissions: updatedUser.permissions,
+        fechaActualizacion: updatedUser.fechaActualizacion,
+      })
       await syncAuthIndexEntriesForUser(updatedUser, permissions)
       return updatedUser
     } catch (error) {
@@ -305,18 +316,30 @@ export const UserService = {
   async deleteUser(id: string): Promise<void> {
     try {
       const userRef = ref(database, `${USERS_PATH}/${id}`)
-      const usersByAuthSnapshot = await get(ref(database, AUTH_INDEX_PATH))
-      if (usersByAuthSnapshot.exists()) {
-        const authIndex = usersByAuthSnapshot.val() as Record<string, { userId?: string }>
-        const matchedUids = Object.entries(authIndex)
-          .filter(([, value]) => value?.userId === id)
-          .map(([uid]) => uid)
-        await Promise.all(matchedUids.map((uid) => remove(ref(database, `${AUTH_INDEX_PATH}/${uid}`))))
+      const snapshot = await get(userRef)
+      if (!snapshot.exists()) {
+        throw new Error('Usuario no encontrado')
       }
+
+      try {
+        const usersByAuthSnapshot = await get(ref(database, AUTH_INDEX_PATH))
+        if (usersByAuthSnapshot.exists()) {
+          const authIndex = usersByAuthSnapshot.val() as Record<string, { userId?: string }>
+          const matchedUids = Object.entries(authIndex)
+            .filter(([, value]) => value?.userId === id)
+            .map(([uid]) => uid)
+          await Promise.all(
+            matchedUids.map((uid) => remove(ref(database, `${AUTH_INDEX_PATH}/${uid}`))),
+          )
+        }
+      } catch (indexError) {
+        console.warn('No se pudo limpiar userAuthIndex:', indexError)
+      }
+
       await remove(userRef)
     } catch (error) {
       console.error('Error deleting user:', error)
-      throw new Error('Error al eliminar usuario')
+      throw error instanceof Error ? error : new Error('Error al eliminar usuario')
     }
   },
 

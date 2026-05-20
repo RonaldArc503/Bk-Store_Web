@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { toast } from 'react-toastify'
 import { Users, Plus, Edit2, Power, Trash2, Search, Shield } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { UserModal } from '../components/UserModal'
@@ -92,6 +93,7 @@ export default function UserManagementPage() {
       handleUpdateUser(updatedUser)
     } catch (error) {
       console.error('Error toggling status:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al cambiar estado')
     }
   }
 
@@ -103,9 +105,11 @@ export default function UserManagementPage() {
       setUsers(users.filter((u) => u.id !== id))
       setFilteredUsers(filteredUsers.filter((u) => u.id !== id))
       setDeleteConfirm(null)
-      loadData() // Actualizar stats
+      loadData()
+      toast.success('Usuario eliminado')
     } catch (error) {
       console.error('Error deleting user:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar usuario')
     } finally {
       setDeleteLoading(false)
     }
