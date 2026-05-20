@@ -8,8 +8,6 @@ import {
   DollarSign,
   Archive,
   RotateCcw,
-  AlertTriangle,
-  CheckCircle2,
 } from "lucide-react";
 import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -19,6 +17,7 @@ import autoTable from "jspdf-autotable";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
 import { Button } from "../components/Button";
 import { Input } from "../components/input";
+import { DevolucionModal } from "../components/DevolucionModal";
 import { toast } from "react-toastify";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
@@ -228,6 +227,13 @@ export default function Reports() {
   }, [devItems, selectedOrder, selectedOrderItems]);
 
   const hasDevSelection = Object.values(devItems).some((q) => q > 0);
+
+  const handleDevQtyChange = (idx: number, qty: number) => {
+    const item = selectedOrderItems[idx];
+    const maxQ = item ? getItemQuantity(item) : 0;
+    const next = Math.min(maxQ, Math.max(0, qty));
+    setDevItems((prev) => ({ ...prev, [String(idx)]: next }));
+  };
 
   const processDevolucion = async () => {
     if (!selectedOrder || !hasDevSelection) return;
@@ -1344,109 +1350,23 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Modal de Devolución */}
-      {showDevolucion && selectedOrder && (
-        <div className="fixed inset-0 z-[100] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
-          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                <RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo de devolución</label>
-                <select
-                  value={devMotivo}
-                  onChange={(e) => setDevMotivo(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
-                >
-                  {MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecciona artículos a devolver</p>
-                <div className="space-y-2">
-                  {selectedOrderItems.length === 0 ? (
-                    <p className="text-sm text-amber-600 dark:text-amber-400 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30">
-                      No hay líneas de producto en esta venta.
-                    </p>
-                  ) : (
-                    selectedOrderItems.map((item, idx) => {
-                      const maxQty = getItemQuantity(item);
-                      const currentQty = devItems[String(idx)] || 0;
-                      return (
-                        <div key={`${getItemKey(item)}-${idx}`} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQty} · ${getItemSubtotal(item).toFixed(2)}</p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, currentQty - 1) }));
-                              }}
-                              disabled={currentQty === 0}
-                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
-                            >−</button>
-                            <span className={`w-8 text-center text-sm font-bold ${currentQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{currentQty}</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQty, currentQty + 1) }));
-                              }}
-                              disabled={currentQty >= maxQty || maxQty <= 0}
-                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
-                            >+</button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {hasDevSelection && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
-                  <span className="text-lg font-bold text-amber-700 dark:text-amber-400">${devTotal.toFixed(2)}</span>
-                </div>
-              )}
-
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  Se restaurará el stock, se descontará el monto de las ventas del día y de la caja abierta (mismo método de pago).
-                </p>
-              </div>
-
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => setShowDevolucion(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                >Cancelar</button>
-                <button
-                  onClick={processDevolucion}
-                  disabled={!hasDevSelection || isProcessingDev}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${
-                    hasDevSelection && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
-                  }`}
-                >
-                  {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar Devolución</>}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {selectedOrder && (
+        <DevolucionModal
+          isOpen={showDevolucion}
+          ticketLabel={`Ticket: ${getTicket(selectedOrder.id)} · ${getItemName(selectedOrderItems[0] || {})}${selectedOrderItems.length > 1 ? ` +${selectedOrderItems.length - 1}` : ""}`}
+          items={selectedOrderItems}
+          devItems={devItems}
+          devMotivo={devMotivo}
+          motivos={MOTIVOS}
+          devTotal={devTotal}
+          hasSelection={hasDevSelection}
+          isProcessing={isProcessingDev}
+          formatMoney={toMoney}
+          onClose={() => setShowDevolucion(false)}
+          onMotivoChange={setDevMotivo}
+          onQtyChange={handleDevQtyChange}
+          onConfirm={processDevolucion}
+        />
       )}
     </div>
   );
