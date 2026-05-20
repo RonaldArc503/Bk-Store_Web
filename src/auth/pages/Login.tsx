@@ -27,6 +27,12 @@ function getLoginErrorMessage(err: unknown): string {
     return 'Error de red. Revisa tu conexión a internet'
   }
 
+  if (err instanceof Error && err.message === 'Usuario no autorizado o inactivo') {
+    return 'Tu cuenta no está activa o no está registrada en el sistema'
+  }
+  if (err instanceof Error && err.message.includes('sesión')) {
+    return err.message
+  }
   if (err instanceof Error && err.message) {
     return err.message
   }

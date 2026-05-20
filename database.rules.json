@@ -74,6 +74,20 @@
       "catalog": {
         ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('inventory').val() === true))"
       }
+    },
+    "sesiones": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$sessionId": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+    "config": {
+      "sesionesLimites": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador'"
+      }
     }
   }
 }

@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "../app/firebase";
 import { UserService } from "../services/UserService";
+import { ensureActiveSession } from "../services/SessionService";
 
 export interface AuthResponse {
   user: FirebaseUser;
@@ -29,6 +30,14 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
+async function registerDeviceSession(firebaseUser: FirebaseUser): Promise<void> {
+  const systemUser = await UserService.resolveUserByAuth(firebaseUser.uid, firebaseUser.email)
+  if (!systemUser || systemUser.estado !== 'Activo') {
+    throw new Error('Usuario no autorizado o inactivo')
+  }
+  await ensureActiveSession(firebaseUser.uid, systemUser.rol)
+}
+
 /**
  * Login con email y contrasena
  */
@@ -37,6 +46,7 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
 
   try {
     const res = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+    await registerDeviceSession(res.user);
     const token = await res.user.getIdToken();
     return { user: res.user, token };
   } catch (err: unknown) {
@@ -54,6 +64,7 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
 
       try {
         const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
+        await registerDeviceSession(res.user)
         const token = await res.user.getIdToken()
         return { user: res.user, token }
       } catch (createErr: unknown) {
@@ -63,6 +74,7 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
         }
 
         const signInRes = await signInWithEmailAndPassword(auth, normalizedEmail, password)
+        await registerDeviceSession(signInRes.user)
         const signInToken = await signInRes.user.getIdToken()
         return { user: signInRes.user, token: signInToken }
       }
@@ -78,6 +90,7 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
 export const registerEmail = async (email: string, password: string): Promise<AuthResponse> => {
   const normalizedEmail = normalizeEmail(email)
   const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+  await registerDeviceSession(res.user);
   const token = await res.user.getIdToken();
   return { user: res.user, token };
 };
@@ -87,6 +100,7 @@ export const registerEmail = async (email: string, password: string): Promise<Au
  */
 export const loginGoogle = async (): Promise<AuthResponse> => {
   const res = await signInWithPopup(auth, googleProvider);
+  await registerDeviceSession(res.user);
   const token = await res.user.getIdToken();
   return { user: res.user, token };
 };
