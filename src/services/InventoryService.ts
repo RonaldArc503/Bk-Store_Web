@@ -187,12 +187,18 @@ export const InventoryService = {
       if (!snapshot.exists()) throw new Error('Inventario no encontrado')
 
       const currentInventario = snapshot.val() as Inventario
-      const newStock = currentInventario.stock + cantidad
+      const cantidadNum = Number(cantidad)
+      if (!Number.isFinite(cantidadNum)) throw new Error('Cantidad invalida')
+
       const now = new Date().toISOString().split('T')[0]
 
+      // If cantidad is zero, nothing to change — return current record
+      if (cantidadNum === 0) return { ...currentInventario, id: currentInventario.id }
+
+      const newStock = Number(currentInventario.stock || 0) + cantidadNum
       const updatedInventario: Inventario = { ...currentInventario, stock: newStock, updatedAt: now }
       await set(inventarioRef, updatedInventario)
-      await MovimientosService.registrarEntrada(currentInventario.productoId, cantidad, motivo)
+      await MovimientosService.registrarEntrada(currentInventario.productoId, cantidadNum, motivo)
       return updatedInventario
     } catch (error) {
       console.error('Error agregando stock:', error)

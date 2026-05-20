@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, DollarSign, Package, Users,
   ArrowRight, AlertTriangle, Clock, Receipt, CreditCard, Banknote,
@@ -29,6 +29,42 @@ type OrderRecord = {
   items?: OrderItem[]; method?: string
   subtotal?: number; tax?: number; total?: number
   devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string }
+}
+
+type ErrorBoundaryProps = { children: React.ReactNode; onError?: (err: any) => void }
+type ErrorBoundaryState = { hasError: boolean; error: any }
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: any, info: any) {
+    console.error('ErrorBoundary caught:', error, info)
+    try { this.props.onError && this.props.onError(error) } catch (e) { console.error(e) }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Error en componente</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Ocurrió un error al mostrar la vista. Intenta de nuevo.</p>
+            <div className="flex justify-end">
+              <button onClick={() => this.setState({ hasError: false, error: null })} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children as any
+  }
 }
 
 export default function Dashboard() {
@@ -66,15 +102,21 @@ export default function Dashboard() {
   }
 
   const devTotal = useMemo(() => {
-    if (!selectedOrder) return 0
-    const items = selectedOrder.items || []
-    return Object.entries(devItems).reduce((sum, [idx, qty]) => {
-      if (qty <= 0) return sum
-      const item = items[Number(idx)]
-      if (!item) return sum
-      const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
-      return sum + up * qty
-    }, 0)
+    try {
+      if (!selectedOrder) return 0
+      const items = selectedOrder.items || []
+      return Object.entries(devItems).reduce((sum, [idx, qty]) => {
+        const qn = Number(qty || 0)
+        if (qn <= 0) return sum
+        const item = items[Number(idx)]
+        if (!item) return sum
+        const up = (() => { try { return getItemSubtotal(item) / (getItemQuantity(item) || 1) } catch { return 0 } })()
+        return sum + up * qn
+      }, 0)
+    } catch (e) {
+      console.error('Error calculating devTotal:', e)
+      return 0
+    }
   }, [devItems, selectedOrder])
 
   const hasDevSel = Object.values(devItems).some((q) => q > 0)
@@ -102,6 +144,8 @@ export default function Dashboard() {
         }
       }
 
+      if (devolucionItems.length === 0) throw new Error('No hay artículos seleccionados para devolver')
+
       const totalOrig = items.reduce((s, i) => s + getItemQuantity(i), 0)
       const totalDev = devolucionItems.reduce((s, i) => s + i.cantidad, 0)
       const tipo = totalDev >= totalOrig ? 'total' as const : 'parcial' as const
@@ -117,7 +161,7 @@ export default function Dashboard() {
 
       const dev = await DevolucionService.crearDevolucion({
         ventaOriginalId: selectedOrder.id,
-        fecha: new Date().toLocaleString('es-SV'),
+        fecha: new Date().toISOString(),
         empleado: empNombre,
         empleadoRol: empRol,
         motivo: DEV_MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
@@ -126,7 +170,14 @@ export default function Dashboard() {
         tipo,
       })
 
-      await OrderService.marcarDevolucion(selectedOrder.id, tipo, dev.id)
+      if (!dev || !dev.id) throw new Error('No se pudo crear la devolución')
+
+      try {
+        await OrderService.marcarDevolucion(selectedOrder.id, tipo, dev.id)
+      } catch (errMark) {
+        console.error('Error marcando la orden como devuelta:', errMark)
+        throw errMark
+      }
       toast.success(`Devolución ${tipo} procesada`)
       setShowDevolucion(false)
       setSelectedOrder(null)
@@ -636,65 +687,96 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Modal Devolución */}
+      {/* Modal Devolución (envuelto en ErrorBoundary para evitar crash global) */}
       {showDevolucion && selectedOrder && (
-        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
-          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg"><RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" /></div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
-              </div>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo</label>
-                <select value={devMotivo} onChange={(e) => setDevMotivo(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100">
-                  {DEV_MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Artículos a devolver</p>
-                <div className="space-y-2">
-                  {(selectedOrder.items || []).map((item, idx) => {
-                    const maxQ = getItemQuantity(item)
-                    const curQ = devItems[String(idx)] || 0
-                    return (
-                      <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQ} · {formatCurrency(getItemSubtotal(item))}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, curQ - 1) }))} disabled={curQ === 0} className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40">−</button>
-                          <span className={`w-8 text-center text-sm font-bold ${curQ > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{curQ}</span>
-                          <button onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQ, curQ + 1) }))} disabled={curQ >= maxQ} className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40">+</button>
-                        </div>
-                      </div>
-                    )
-                  })}
+        <ErrorBoundary onError={(err) => console.error('ErrorBoundary caught in Devolucion modal:', err)}>
+          <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
+            <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg"><RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" /></div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
                 </div>
               </div>
-              {hasDevSel && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
-                  <span className="text-lg font-bold text-amber-700 dark:text-amber-400">{formatCurrency(devTotal)}</span>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo</label>
+                  <select value={devMotivo} onChange={(e) => setDevMotivo(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100">
+                    {DEV_MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
                 </div>
-              )}
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">El stock será restaurado automáticamente al inventario.</p>
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setShowDevolucion(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
-                <button onClick={processDev} disabled={!hasDevSel || isProcessingDev} className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${hasDevSel && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'}`}>
-                  {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar</>}
-                </button>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Artículos a devolver</p>
+                  <div className="space-y-2">
+                    {(selectedOrder.items || []).map((item, idx) => {
+                      // defensive extraction
+                      const safeItem = item || {}
+                      const maxQ = (() => { try { return getItemQuantity(safeItem) } catch { return 0 } })()
+                      const curQ = Number(devItems[String(idx)] ?? 0)
+                      return (
+                        <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(safeItem)}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQ} · {formatCurrency((() => { try { return getItemSubtotal(safeItem) } catch { return 0 } })())}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => {
+                                try {
+                                  console.debug('Decrement click', { idx, curQ, maxQ })
+                                  setDevItems((prev) => {
+                                    const prevQ = Number(prev[String(idx)] ?? 0)
+                                    const next = Math.max(0, prevQ - 1)
+                                    return { ...prev, [String(idx)]: next }
+                                  })
+                                } catch (e) { console.error('Error updating devolucion quantity (decrement):', e) }
+                              }}
+                              disabled={curQ === 0}
+                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                            >−</button>
+                            <span className={`w-8 text-center text-sm font-bold ${(curQ > 0) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{curQ}</span>
+                            <button
+                              onClick={() => {
+                                try {
+                                  console.debug('Increment click', { idx, curQ, maxQ })
+                                  const cap = Number(maxQ) || 0
+                                  setDevItems((prev) => {
+                                    const prevQ = Number(prev[String(idx)] ?? 0)
+                                    const next = Math.min(cap, prevQ + 1)
+                                    return { ...prev, [String(idx)]: next }
+                                  })
+                                } catch (e) { console.error('Error updating devolucion quantity (increment):', e) }
+                              }}
+                              disabled={curQ >= (Number(maxQ) || 0)}
+                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                            >+</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                {hasDevSel && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
+                    <span className="text-lg font-bold text-amber-700 dark:text-amber-400">{formatCurrency(devTotal)}</span>
+                  </div>
+                )}
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-blue-700 dark:text-blue-300">El stock será restaurado automáticamente al inventario.</p>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setShowDevolucion(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
+                  <button onClick={processDev} disabled={!hasDevSel || isProcessingDev} className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${hasDevSel && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'}`}>
+                    {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar</>}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </ErrorBoundary>
       )}
     </div>
   )
