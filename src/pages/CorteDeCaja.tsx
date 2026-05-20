@@ -26,7 +26,12 @@ import {
 } from "lucide-react";
 import { CorteService, type CorteRecord } from "../services/CorteService";
 import { useAuth } from "../hooks/useAuth";
-import { CajaService } from "../services/CajaService";
+import {
+  CajaService,
+  getLocalDateKey,
+  getCajaDayKey,
+  isCajaFromToday,
+} from "../services/CajaService";
 import { toast } from "react-toastify";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useSettings } from "../context/SettingsContext";
@@ -89,6 +94,19 @@ function toDateKeyFromIso(iso: string) {
   } catch {
     return iso.slice(0, 10);
   }
+}
+
+type CorteWithDateKey = CorteRecord & { dateKey?: string };
+
+/** Fecha del corte en YYYY-MM-DD (zona local). Prioriza dateKey guardado en Firebase. */
+function getCorteDateKey(corte: CorteWithDateKey): string {
+  if (corte.dateKey) return corte.dateKey;
+  return toDateKeyFromIso(corte.createdAt || new Date().toISOString());
+}
+
+/** El corte pertenece estrictamente al día calendario actual (no ayer ni mañana). */
+function isCorteFromToday(corte: CorteWithDateKey): boolean {
+  return getCorteDateKey(corte) === getLocalDateKey();
 }
 
 // Firebase guarda remesas/retiros como objeto, no como array
@@ -912,9 +930,10 @@ export default function CorteDeCaja() {
     try { cajas = await CajaService.getAllCajas(); } catch (e) { console.error("Error loading cajas:", e); }
     try { cortes = await CorteService.getAllCortes(); } catch (e) { console.error("Error loading cortes:", e); }
     const todayC = await CorteService.getTodayCorte();
+    const corteEsDeHoy = todayC ? isCorteFromToday(todayC as CorteWithDateKey) : false;
     dispatch({ type: "SET_TIMELINE_ENTRIES", payload: buildTimeline(cortes, cajas) });
-    dispatch({ type: "SET_TODAY_CLOSED", payload: !!todayC });
-    dispatch({ type: "SET_TODAY_CORTE", payload: todayC });
+    dispatch({ type: "SET_TODAY_CLOSED", payload: corteEsDeHoy });
+    dispatch({ type: "SET_TODAY_CORTE", payload: corteEsDeHoy ? todayC : null });
     dispatch({ type: "SET_LOADING_HISTORY", payload: false });
   }, [buildTimeline]);
 
@@ -1127,20 +1146,36 @@ export default function CorteDeCaja() {
     }
   };
 
+  const todayCorteIsToday =
+    !!state.todayCorte?.id &&
+    state.todayClosed &&
+    isCorteFromToday(state.todayCorte as CorteWithDateKey);
+
+  const canShowReopenTodayButton = canReopenCaja && todayCorteIsToday;
+
   const handleReopenCaja = async () => {
     if (!canReopenCaja) {
       toast.error("No tienes permisos para reabrir la caja");
       return;
     }
-    if (!state.todayClosed || !state.todayCorte?.id) {
-      toast.warning("No hay un cierre de hoy para reabrir");
+    if (!state.todayCorte?.id) {
+      toast.warning("No hay un cierre registrado para reabrir");
       return;
     }
 
-    const todayKey = toDateKeyFromIso(new Date().toISOString());
-    const corteDay = toDateKeyFromIso(state.todayCorte.createdAt || new Date().toISOString());
-    if (todayKey !== corteDay) {
-      toast.error("Solo se puede reabrir una caja dentro del mismo dia");
+    const todayKey = getLocalDateKey();
+    const corteDay = getCorteDateKey(state.todayCorte as CorteWithDateKey);
+
+    if (corteDay > todayKey) {
+      toast.error("No se puede reabrir un cierre con fecha futura");
+      return;
+    }
+    if (corteDay < todayKey) {
+      toast.error("Solo se puede reabrir el cierre del día de hoy, no de días anteriores");
+      return;
+    }
+    if (!state.todayClosed) {
+      toast.warning("No hay un cierre de hoy activo para reabrir");
       return;
     }
 
@@ -1151,7 +1186,13 @@ export default function CorteDeCaja() {
       );
 
       if (!cajaToReopen?.id) {
-        toast.error("No se encontro la caja cerrada asociada al cierre de hoy");
+        toast.error("No se encontró la caja cerrada asociada al cierre de hoy");
+        return;
+      }
+
+      const cajaDay = getCajaDayKey(cajaToReopen);
+      if (cajaDay !== todayKey || !isCajaFromToday(cajaToReopen)) {
+        toast.error("La caja asociada no es del día de hoy. No se puede reabrir.");
         return;
       }
 
@@ -1353,18 +1394,19 @@ export default function CorteDeCaja() {
                   Solo lectura
                 </div>
               )}
-              {state.todayClosed && canReopenCaja && (
+              {canShowReopenTodayButton && (
                 <button
                   onClick={handleReopenCaja}
+                  title="Solo disponible para el cierre realizado hoy"
                   className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition"
                 >
-                  Reabrir Caja (hoy)
+                  Reabrir caja de hoy
                 </button>
               )}
             </div>
           </div>
 
-          {state.todayClosed && state.todayCorte && (
+          {todayCorteIsToday && state.todayCorte && (
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <div>
@@ -1376,7 +1418,7 @@ export default function CorteDeCaja() {
             </div>
           )}
 
-          {state.todayCorte && (
+          {todayCorteIsToday && state.todayCorte && (
             <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar className="w-5 h-5 text-lime-500" /> Resumen del Día</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
