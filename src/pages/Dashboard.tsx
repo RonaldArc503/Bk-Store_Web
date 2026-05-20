@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Component } from 'react'
 import {
   TrendingUp, TrendingDown, DollarSign, Package, Users,
   ArrowRight, AlertTriangle, Clock, Receipt, CreditCard, Banknote,
@@ -39,7 +39,7 @@ type OrderRecord = {
 type ErrorBoundaryProps = { children: React.ReactNode; onError?: (err: any) => void }
 type ErrorBoundaryState = { hasError: boolean; error: any }
 
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = { hasError: false, error: null }
