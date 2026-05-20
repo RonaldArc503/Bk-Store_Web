@@ -1,6 +1,8 @@
-import { get, ref, set } from 'firebase/database'
+import { get, ref, remove, set } from 'firebase/database'
 import { database } from '../app/firebase'
 import * as XLSX from 'xlsx'
+
+const DELETE_BATCH_SIZE = 25
 
 const RESET_PATHS = [
   'orders',
@@ -46,13 +48,68 @@ async function readPath(path: string): Promise<unknown> {
   return snap.exists() ? snap.val() : null
 }
 
+/**
+ * Borra un nodo de RTDB respetando reglas que solo permiten .write en hijos ($id).
+ * No usar set(path, null) en la raíz del módulo — Firebase lo rechaza.
+ */
+async function clearDatabasePath(path: string): Promise<number> {
+  const nodeRef = ref(database, path)
+  const snap = await get(nodeRef)
+  if (!snap.exists()) return 0
+
+  const value = snap.val()
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const keys = Object.keys(value as Record<string, unknown>)
+    for (let i = 0; i < keys.length; i += DELETE_BATCH_SIZE) {
+      const chunk = keys.slice(i, i + DELETE_BATCH_SIZE)
+      await Promise.all(
+        chunk.map((key) => remove(ref(database, `${path}/${key}`))),
+      )
+    }
+    return keys.length
+  }
+
+  await remove(nodeRef)
+  return 1
+}
+
+async function writeDatabasePath(path: string, value: unknown): Promise<void> {
+  if (value == null) {
+    await clearDatabasePath(path)
+    return
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    for (let i = 0; i < entries.length; i += DELETE_BATCH_SIZE) {
+      const chunk = entries.slice(i, i + DELETE_BATCH_SIZE)
+      await Promise.all(
+        chunk.map(([key, child]) =>
+          set(ref(database, `${path}/${key}`), child ?? null),
+        ),
+      )
+    }
+    return
+  }
+
+  await set(ref(database, path), value)
+}
+
 export const MaintenanceService = {
-  async clearDataExceptUsers() {
+  async clearDataExceptUsers(): Promise<{ deletedByPath: Record<string, number> }> {
+    const deletedByPath: Record<string, number> = {}
     try {
-      await Promise.all(RESET_PATHS.map((path) => set(ref(database, path), null)))
+      for (const path of RESET_PATHS) {
+        deletedByPath[path] = await clearDatabasePath(path)
+      }
+      return { deletedByPath }
     } catch (error) {
       console.error('Error clearing data except users:', error)
-      throw error instanceof Error ? error : new Error('Error al borrar datos')
+      const msg =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo borrar. Verifica que tu usuario sea Administrador o tenga permiso de Datos en Configuración.'
+      throw new Error(msg)
     }
   },
 
@@ -169,11 +226,9 @@ export const MaintenanceService = {
         throw new Error('El respaldo no contiene datos de base de datos')
       }
 
-      await Promise.all(
-        Object.entries(payload.database).map(([path, value]) =>
-          set(ref(database, path), value ?? null),
-        ),
-      )
+      for (const [path, value] of Object.entries(payload.database)) {
+        await writeDatabasePath(path, value ?? null)
+      }
     } catch (error) {
       console.error('Error restoring full backup:', error)
       throw error instanceof Error ? error : new Error('Error al restaurar respaldo')

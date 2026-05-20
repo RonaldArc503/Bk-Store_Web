@@ -917,10 +917,19 @@ export default function ConfiguracionPage() {
     if (isDataResetLoading) return
     setIsDataResetLoading(true)
     try {
-      await MaintenanceService.clearDataExceptUsers()
-      toast.success('Datos eliminados correctamente')
+      const result = await MaintenanceService.clearDataExceptUsers()
+      const total = Object.values(result.deletedByPath).reduce((s, n) => s + n, 0)
+      toast.success(
+        total > 0
+          ? `Datos eliminados (${total} registros). Los usuarios se conservaron.`
+          : 'No había datos de prueba que borrar. Los usuarios se conservaron.',
+      )
+      setIsDataResetOpen(false)
     } catch (err) {
-      toast.error('Error al borrar datos')
+      console.error(err)
+      const msg =
+        err instanceof Error ? err.message : 'Error al borrar datos'
+      toast.error(msg)
     } finally {
       setIsDataResetLoading(false)
     }
