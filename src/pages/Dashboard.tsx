@@ -1,5 +1,4 @@
-import * as React from 'react'
-import { useEffect, useMemo, useState, Component } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, DollarSign, Package, Users,
   ArrowRight, AlertTriangle, Clock, Receipt, CreditCard, Banknote,
@@ -12,7 +11,12 @@ import { OrderService } from '../services/OrderService'
 import { InventoryService } from '../services/InventoryService'
 import { UserService } from '../services/UserService'
 import { DevolucionService, type Devolucion } from '../services/DevolucionService'
-import { normalizeOrderItems, procesarDevolucionCompleta } from '../utils/devolucionHelpers'
+import {
+  normalizeOrderItems,
+  procesarDevolucionCompleta,
+  getItemQuantity as devItemQty,
+  getItemSubtotal as devItemSubtotal,
+} from '../utils/devolucionHelpers'
 import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } from '../utils/orderTotals'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
@@ -34,42 +38,6 @@ type OrderRecord = {
   subtotal?: number; tax?: number; total?: number
   totalDevuelto?: number
   devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string; totalDevuelto?: number }
-}
-
-type ErrorBoundaryProps = { children: React.ReactNode; onError?: (err: any) => void }
-type ErrorBoundaryState = { hasError: boolean; error: any }
-
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props)
-    this.state = { hasError: false, error: null }
-  }
-
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error }
-  }
-
-  componentDidCatch(error: any, info: any) {
-    console.error('ErrorBoundary caught:', error, info)
-    try { this.props.onError && this.props.onError(error) } catch (e) { console.error(e) }
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-lg">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Error en componente</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Ocurrió un error al mostrar la vista. Intenta de nuevo.</p>
-            <div className="flex justify-end">
-              <button onClick={() => this.setState({ hasError: false, error: null })} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800">Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )
-    }
-    return this.props.children as any
-  }
 }
 
 export default function Dashboard() {
@@ -116,6 +84,7 @@ export default function Dashboard() {
     setDevMotivo('defectuoso')
     setShowDevolucion(true)
   }
+
   const devTotal = useMemo(() => {
     if (!selectedOrder) return 0
     const items = selectedOrderItems
@@ -123,7 +92,7 @@ export default function Dashboard() {
       if (qty <= 0) return sum
       const item = items[Number(idx)]
       if (!item) return sum
-      const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
+      const up = devItemSubtotal(item) / (devItemQty(item) || 1)
       return sum + up * qty
     }, 0)
   }, [devItems, selectedOrder, selectedOrderItems])
@@ -132,7 +101,7 @@ export default function Dashboard() {
 
   const handleDevQtyChange = (idx: number, qty: number) => {
     const item = selectedOrderItems[idx]
-    const maxQ = item ? getItemQuantity(item) : 0
+    const maxQ = item ? devItemQty(item) : 0
     const next = Math.min(maxQ, Math.max(0, qty))
     setDevItems((prev) => ({ ...prev, [String(idx)]: next }))
   }
