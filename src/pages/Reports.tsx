@@ -22,7 +22,7 @@ import { Input } from "../components/input";
 import { toast } from "react-toastify";
 import { OrderService } from "../services/OrderService";
 import { CorteService, type CorteRecord } from "../services/CorteService";
-import { procesarDevolucionCompleta } from "../utils/devolucionHelpers";
+import { normalizeOrderItems, procesarDevolucionCompleta } from "../utils/devolucionHelpers";
 import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } from "../utils/orderTotals";
 import { UserService } from "../services/UserService";
 import { useAuth } from "../hooks/useAuth";
@@ -196,10 +196,20 @@ export default function Reports() {
     { value: "otro", label: "Otro" },
   ];
 
+  const selectedOrderItems = useMemo(
+    () => (selectedOrder ? normalizeOrderItems(selectedOrder.items) : []),
+    [selectedOrder],
+  );
+
   const openDevolucionModal = () => {
     if (!selectedOrder) return;
+    const items = normalizeOrderItems(selectedOrder.items);
+    if (items.length === 0) {
+      toast.warning("Esta venta no tiene productos registrados para devolver");
+      return;
+    }
     const initial: Record<string, number> = {};
-    (selectedOrder.items || []).forEach((_, idx) => { initial[String(idx)] = 0; });
+    items.forEach((_, idx) => { initial[String(idx)] = 0; });
     setDevItems(initial);
     setDevMotivo("defectuoso");
     setShowDevolucion(true);
@@ -207,7 +217,7 @@ export default function Reports() {
 
   const devTotal = useMemo(() => {
     if (!selectedOrder) return 0;
-    const items = selectedOrder.items || [];
+    const items = selectedOrderItems;
     return Object.entries(devItems).reduce((sum, [idx, qty]) => {
       if (qty <= 0) return sum;
       const item = items[Number(idx)];
@@ -215,7 +225,7 @@ export default function Reports() {
       const unitPrice = getItemSubtotal(item) / (getItemQuantity(item) || 1);
       return sum + unitPrice * qty;
     }, 0);
-  }, [devItems, selectedOrder]);
+  }, [devItems, selectedOrder, selectedOrderItems]);
 
   const hasDevSelection = Object.values(devItems).some((q) => q > 0);
 
@@ -233,7 +243,7 @@ export default function Reports() {
       }
 
       const result = await procesarDevolucionCompleta({
-        order: selectedOrder,
+        order: { ...selectedOrder, items: selectedOrderItems },
         devItems,
         motivo: MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
         empleado: empNombre,
@@ -1207,7 +1217,7 @@ export default function Reports() {
         </Card>
       </main>
 
-      {selectedOrder && (
+      {selectedOrder && !showDevolucion && (
         <div
           className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
           onClick={() => setSelectedOrder(null)}
@@ -1286,7 +1296,7 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedOrder.items || []).map((item, idx) => (
+                    {selectedOrderItems.map((item, idx) => (
                       <tr key={`${getItemKey(item)}-${idx}`} className="border-t border-gray-100 dark:border-gray-800">
                         <td className="px-3 py-2">{getItemName(item)}</td>
                         <td className="px-3 py-2 text-center">{getItemQuantity(item)}</td>
@@ -1336,8 +1346,8 @@ export default function Reports() {
 
       {/* Modal de Devolución */}
       {showDevolucion && selectedOrder && (
-        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
-          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
+          <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
               <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
                 <RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" />
@@ -1363,31 +1373,45 @@ export default function Reports() {
               <div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecciona artículos a devolver</p>
                 <div className="space-y-2">
-                  {(selectedOrder.items || []).map((item, idx) => {
-                    const maxQty = getItemQuantity(item);
-                    const currentQty = devItems[String(idx)] || 0;
-                    return (
-                      <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQty} · ${getItemSubtotal(item).toFixed(2)}</p>
+                  {selectedOrderItems.length === 0 ? (
+                    <p className="text-sm text-amber-600 dark:text-amber-400 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30">
+                      No hay líneas de producto en esta venta.
+                    </p>
+                  ) : (
+                    selectedOrderItems.map((item, idx) => {
+                      const maxQty = getItemQuantity(item);
+                      const currentQty = devItems[String(idx)] || 0;
+                      return (
+                        <div key={`${getItemKey(item)}-${idx}`} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(item)}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQty} · ${getItemSubtotal(item).toFixed(2)}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, currentQty - 1) }));
+                              }}
+                              disabled={currentQty === 0}
+                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                            >−</button>
+                            <span className={`w-8 text-center text-sm font-bold ${currentQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{currentQty}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQty, currentQty + 1) }));
+                              }}
+                              disabled={currentQty >= maxQty || maxQty <= 0}
+                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
+                            >+</button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.max(0, currentQty - 1) }))}
-                            disabled={currentQty === 0}
-                            className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
-                          >−</button>
-                          <span className={`w-8 text-center text-sm font-bold ${currentQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{currentQty}</span>
-                          <button
-                            onClick={() => setDevItems((p) => ({ ...p, [String(idx)]: Math.min(maxQty, currentQty + 1) }))}
-                            disabled={currentQty >= maxQty}
-                            className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
-                          >+</button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
 

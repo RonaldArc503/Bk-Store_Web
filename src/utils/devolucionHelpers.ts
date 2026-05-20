@@ -33,6 +33,24 @@ const toNumber = (value: unknown) => {
   return Number.isFinite(n) ? n : 0
 }
 
+/** Firebase a veces guarda items como objeto { "0": {...}, "1": {...} } en lugar de array. */
+export function normalizeOrderItems(items: unknown): OrderItemLike[] {
+  if (!items) return []
+  if (Array.isArray(items)) return items.filter((i) => i != null) as OrderItemLike[]
+  if (typeof items === 'object') {
+    return Object.entries(items as Record<string, unknown>)
+      .sort(([a], [b]) => {
+        const na = Number(a)
+        const nb = Number(b)
+        if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb
+        return a.localeCompare(b)
+      })
+      .map(([, value]) => value as OrderItemLike)
+      .filter((i) => i != null)
+  }
+  return []
+}
+
 export function getItemQuantity(item: OrderItemLike) {
   return toNumber(item.quantity ?? item.cantidad ?? item.qty ?? 0)
 }
@@ -89,7 +107,7 @@ export function buildDevolucionItems(
   order: OrderForDevolucion,
   devItems: Record<string, number>,
 ): { items: DevolucionItem[]; montoDevuelto: number } {
-  const lineItems = order.items || []
+  const lineItems = normalizeOrderItems(order.items)
   const devolucionItems: DevolucionItem[] = []
   let montoDevuelto = 0
 
@@ -153,9 +171,10 @@ export async function procesarDevolucionCompleta(
     )
   }
 
+  const lineItems = normalizeOrderItems(order.items)
   for (const [idx, qty] of Object.entries(devItems)) {
     if (qty <= 0) continue
-    const item = (order.items || [])[Number(idx)]
+    const item = lineItems[Number(idx)]
     if (item) await restoreStockForDevolucion(item, qty, order.id)
   }
 
