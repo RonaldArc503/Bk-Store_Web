@@ -13,9 +13,10 @@ export type OrderItemLike = {
 }
 
 export async function assertCajaAbierta(userId?: string): Promise<void> {
-  const active = await CajaService.getActiveCaja(userId)
+  await CajaService.closeStaleOpenCajas()
+  const active = await CajaService.getTodayOpenCaja(userId)
   if (!active?.id || active.status !== 'open') {
-    throw new Error('La caja debe estar abierta para procesar devoluciones')
+    throw new Error('Debes abrir la caja del día actual para procesar devoluciones')
   }
 }
 

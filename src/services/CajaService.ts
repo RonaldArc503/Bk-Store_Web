@@ -4,6 +4,28 @@ import { database } from '../app/firebase'
 const CAJAS_PATH = 'cajas'
 const USER_ACTIVE_PATH = 'userActiveCaja'
 
+/** Clave YYYY-MM-DD en zona horaria local */
+export function getLocalDateKey(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function getCajaDayKey(caja: { apertura?: { fecha?: string }; createdAt?: string }): string {
+  const iso = caja.apertura?.fecha || caja.createdAt || ''
+  if (!iso) return ''
+  try {
+    return getLocalDateKey(new Date(iso))
+  } catch {
+    return iso.slice(0, 10)
+  }
+}
+
+export function isCajaFromToday(caja: { apertura?: { fecha?: string }; createdAt?: string }): boolean {
+  return getCajaDayKey(caja) === getLocalDateKey()
+}
+
 export const CajaService = {
   async openCaja(aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string }) {
     try {
@@ -54,24 +76,59 @@ export const CajaService = {
   },
 
   /**
-   * Obtener la caja activa para un usuario. Si `userId` es provisto intenta
-   * resolver la caja activa a partir del mapeo `userActiveCaja/<userId>`. Si no
-   * existe, intenta buscar una caja con status 'open' creada por el usuario.
-   * Si no se proporciona `userId`, devuelve la primera caja abierta encontrada.
+   * Cierra cajas con status `open` cuyo día de apertura es anterior al día actual.
+   * Evita que una caja vieja bloquee la apertura del día.
    */
-  async getActiveCaja(userId?: string) {
+  async closeStaleOpenCajas(): Promise<number> {
+    const todayKey = getLocalDateKey()
+    try {
+      const snapAll = await get(ref(database, CAJAS_PATH))
+      if (!snapAll.exists()) return 0
+      const data = snapAll.val() as Record<string, any>
+      let closed = 0
+
+      for (const [key, caja] of Object.entries(data)) {
+        if (caja?.status !== 'open') continue
+        const dayKey = getCajaDayKey(caja)
+        if (!dayKey || dayKey >= todayKey) continue
+
+        await update(ref(database, `${CAJAS_PATH}/${key}`), {
+          status: 'closed',
+          closedAt: new Date().toISOString(),
+          cierreData: { autoClosed: true, reason: 'stale_open_caja', staleDayKey: dayKey },
+        })
+
+        const createdBy = caja.apertura?.createdBy
+        if (createdBy) {
+          try {
+            await remove(ref(database, `${USER_ACTIVE_PATH}/${createdBy}`))
+          } catch (err) {
+            console.warn('Error clearing stale userActiveCaja mapping', err)
+          }
+        }
+        closed++
+      }
+      return closed
+    } catch (error) {
+      console.error('Error closing stale open cajas:', error)
+      return 0
+    }
+  },
+
+  /**
+   * Caja abierta del día actual (zona horaria local). Ignora cajas `open` de días anteriores.
+   */
+  async getTodayOpenCaja(userId?: string) {
     try {
       const snapAll = await get(ref(database, CAJAS_PATH))
       if (!snapAll.exists()) return null
       const data = snapAll.val()
-      const cajas = Object.values(data) as any[]
-      const openCajas = cajas
-        .filter((c) => c?.status === 'open')
+      const openCajas = (Object.values(data) as any[])
+        .filter((c) => c?.status === 'open' && isCajaFromToday(c))
         .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
 
       if (openCajas.length === 0) return null
 
-      // If we have a userId, try to read mapping first.
       if (userId) {
         try {
           const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
@@ -79,7 +136,6 @@ export const CajaService = {
           if (mappedId) {
             const mapped = openCajas.find((c) => c?.id === mappedId)
             if (mapped) return mapped
-
             try {
               await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
             } catch (cleanupError) {
@@ -90,17 +146,20 @@ export const CajaService = {
           console.warn('Error reading user active caja mapping', err)
         }
 
-        // Preferred fallback: open caja created by this user.
         const ownOpenCaja = openCajas.find((c) => c?.apertura?.createdBy === userId)
         if (ownOpenCaja) return ownOpenCaja
       }
 
-      // Final fallback: return latest global open caja.
       return openCajas[0] || null
     } catch (error) {
-      console.error('Error getting active caja:', error)
+      console.error('Error getting today open caja:', error)
       return null
     }
+  },
+
+  /** @deprecated Usar getTodayOpenCaja; solo devuelve caja abierta del día actual */
+  async getActiveCaja(userId?: string) {
+    return this.getTodayOpenCaja(userId)
   },
 
   async getCajaById(id: string) {

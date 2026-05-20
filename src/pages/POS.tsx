@@ -126,9 +126,10 @@ export default function POS() {
     let mounted = true
     ;(async () => {
       try {
+        await CajaService.closeStaleOpenCajas()
         const [prods, activeCaja] = await Promise.all([
           InventoryService.getProducts(),
-          CajaService.getActiveCaja(user.uid),
+          CajaService.getTodayOpenCaja(user.uid),
         ])
         if (!mounted) return
 
@@ -342,9 +343,9 @@ export default function POS() {
 
     setIsProcessingPayment(true)
     try {
-      const activeCaja = await CajaService.getActiveCaja(user.uid)
+      const activeCaja = await CajaService.getTodayOpenCaja(user.uid)
       if (!activeCaja || !activeCaja.id || activeCaja.status === 'closed') {
-        throw new Error('No hay una caja abierta para el usuario actual')
+        throw new Error('No hay una caja abierta hoy para el usuario actual')
       }
 
       // Decrement inventory for each sold item (rollback if any fail)

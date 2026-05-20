@@ -36,7 +36,7 @@
     "movimientos": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true)",
       "$movementId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
       }
     },
     "cajas": {

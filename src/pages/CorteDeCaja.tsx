@@ -910,11 +910,12 @@ export default function CorteDeCaja() {
         if (mounted) dispatch({ type: "SET_LOADING_HISTORY", payload: false });
         return;
       }
+      try { await CajaService.closeStaleOpenCajas(); } catch (e) { console.error("Error closing stale cajas:", e); }
       let active: any = null;
-      try { active = await CajaService.getActiveCaja(user?.uid); } catch (e) { console.error("Error getting active caja:", e); }
+      try { active = await CajaService.getTodayOpenCaja(user?.uid); } catch (e) { console.error("Error getting active caja:", e); }
       await reloadData();
       if (!mounted) return;
-      if (active && active.status !== "closed") {
+      if (active && active.status === "open") {
         dispatch({
           type: "LOAD_CAJA_DATA",
           payload: {
@@ -952,13 +953,12 @@ export default function CorteDeCaja() {
     const todayKey = toDateKeyFromIso(now.toISOString());
     if (autoCloseAttemptedDayRef.current === todayKey) return;
 
-    const active = await CajaService.getActiveCaja(user.uid);
+    await CajaService.closeStaleOpenCajas();
+
+    const active = await CajaService.getTodayOpenCaja(user.uid);
     if (!active || active.status !== "open") return;
 
-    const activeDateSource = active.apertura?.fecha || active.createdAt || now.toISOString();
-    const activeDayKey = toDateKeyFromIso(activeDateSource);
-    const isStaleFromPreviousDay = activeDayKey < todayKey;
-    if (now.getHours() < 23 && !isStaleFromPreviousDay) return;
+    if (now.getHours() < 23) return;
 
     const remesas = remesasToArray(active.remesas);
     const ventasDia = {
@@ -1032,7 +1032,8 @@ export default function CorteDeCaja() {
     if (!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0) { toast.warning("Ingrese un monto de apertura válido"); return; }
     if (!state.aperturaUsuario.trim()) { toast.warning("El nombre del usuario responsable es obligatorio"); return; }
     try {
-      const alreadyOpen = await CajaService.getActiveCaja(user?.uid);
+      await CajaService.closeStaleOpenCajas();
+      const alreadyOpen = await CajaService.getTodayOpenCaja(user?.uid);
       if (alreadyOpen && alreadyOpen.status === "open") {
         dispatch({
           type: "LOAD_CAJA_DATA",
@@ -1079,7 +1080,8 @@ export default function CorteDeCaja() {
     if (!canManageCaja) { toast.error("No tienes permisos para abrir la caja"); return; }
     if (state.todayClosed) { toast.warning("Ya se realizó un cierre hoy."); return; }
     try {
-      const active = await CajaService.getActiveCaja(user?.uid);
+      await CajaService.closeStaleOpenCajas();
+      const active = await CajaService.getTodayOpenCaja(user?.uid);
       if (active && active.status === "open") {
         dispatch({
           type: "LOAD_CAJA_DATA",
@@ -1181,9 +1183,9 @@ export default function CorteDeCaja() {
     if (!state.isAperturaSaved || !state.activeCajaId) { toast.error("No hay una caja activa para cerrar"); return; }
     if (requiereNota && !state.notas.trim()) { toast.error("Se requiere una nota explicativa para la diferencia mayor a $50"); return; }
 
-    const active = await CajaService.getActiveCaja(user?.uid);
+    const active = await CajaService.getTodayOpenCaja(user?.uid);
     if (!active || !active.id || active.status !== "open") {
-      toast.error("No se encontró una caja activa real para cerrar");
+      toast.error("No se encontró una caja abierta hoy para cerrar");
       dispatch({ type: "SET_CAJA_OPEN", payload: false });
       dispatch({ type: "SET_APERTURA_SAVED", payload: false });
       dispatch({ type: "SET_ACTIVE_CAJA_ID", payload: null });
