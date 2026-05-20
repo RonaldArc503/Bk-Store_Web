@@ -4,6 +4,28 @@ import { database } from '../app/firebase'
 const CAJAS_PATH = 'cajas'
 const USER_ACTIVE_PATH = 'userActiveCaja'
 
+/** Clave YYYY-MM-DD en zona horaria local */
+export function getLocalDateKey(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function getCajaDayKey(caja: { apertura?: { fecha?: string }; createdAt?: string }): string {
+  const iso = caja.apertura?.fecha || caja.createdAt || ''
+  if (!iso) return ''
+  try {
+    return getLocalDateKey(new Date(iso))
+  } catch {
+    return iso.slice(0, 10)
+  }
+}
+
+export function isCajaFromToday(caja: { apertura?: { fecha?: string }; createdAt?: string }): boolean {
+  return getCajaDayKey(caja) === getLocalDateKey()
+}
+
 export const CajaService = {
   async openCaja(aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string }) {
     try {
@@ -54,53 +76,90 @@ export const CajaService = {
   },
 
   /**
-   * Obtener la caja activa para un usuario. Si `userId` es provisto intenta
-   * resolver la caja activa a partir del mapeo `userActiveCaja/<userId>`. Si no
-   * existe, intenta buscar una caja con status 'open' creada por el usuario.
-   * Si no se proporciona `userId`, devuelve la primera caja abierta encontrada.
+   * Cierra cajas con status `open` cuyo día de apertura es anterior al día actual.
+   * Evita que una caja vieja bloquee la apertura del día.
    */
-  async getActiveCaja(userId?: string) {
+  async closeStaleOpenCajas(): Promise<number> {
+    const todayKey = getLocalDateKey()
     try {
-      if (!userId) return null
+      const snapAll = await get(ref(database, CAJAS_PATH))
+      if (!snapAll.exists()) return 0
+      const data = snapAll.val() as Record<string, any>
+      let closed = 0
 
-      // If we have a userId, try to read mapping first
-      try {
-        const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
-        const mappedId = mapSnap.exists() ? mapSnap.val() : null
-        if (mappedId) {
-          const mappedCajaRef = ref(database, `${CAJAS_PATH}/${mappedId}`)
-          const snap = await get(mappedCajaRef)
-          if (snap.exists()) {
-            const mappedCaja = snap.val()
-            if (mappedCaja?.status === 'open') {
-              return mappedCaja
-            }
-          }
+      for (const [key, caja] of Object.entries(data)) {
+        if (caja?.status !== 'open') continue
+        const dayKey = getCajaDayKey(caja)
+        if (!dayKey || dayKey >= todayKey) continue
 
+        await update(ref(database, `${CAJAS_PATH}/${key}`), {
+          status: 'closed',
+          closedAt: new Date().toISOString(),
+          cierreData: { autoClosed: true, reason: 'stale_open_caja', staleDayKey: dayKey },
+        })
+
+        const createdBy = caja.apertura?.createdBy
+        if (createdBy) {
           try {
-            await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
-          } catch (cleanupError) {
-            console.warn('Error removing stale active caja mapping', cleanupError)
+            await remove(ref(database, `${USER_ACTIVE_PATH}/${createdBy}`))
+          } catch (err) {
+            console.warn('Error clearing stale userActiveCaja mapping', err)
           }
         }
-      } catch (err) {
-        console.warn('Error reading user active caja mapping', err)
+        closed++
       }
+      return closed
+    } catch (error) {
+      console.error('Error closing stale open cajas:', error)
+      return 0
+    }
+  },
 
-      // Fallback: scan for any open caja (optionally created by userId)
+  /**
+   * Caja abierta del día actual (zona horaria local). Ignora cajas `open` de días anteriores.
+   */
+  async getTodayOpenCaja(userId?: string) {
+    try {
       const snapAll = await get(ref(database, CAJAS_PATH))
       if (!snapAll.exists()) return null
       const data = snapAll.val()
-      const cajas = Object.values(data) as any[]
+      const openCajas = (Object.values(data) as any[])
+        .filter((c) => c?.status === 'open' && isCajaFromToday(c))
+        .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
 
-      const found = cajas.find((c) => c.status === 'open' && c.apertura?.createdBy === userId)
-      if (found) return found
+      if (openCajas.length === 0) return null
 
-      return null
+      if (userId) {
+        try {
+          const mapSnap = await get(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+          const mappedId = mapSnap.exists() ? mapSnap.val() : null
+          if (mappedId) {
+            const mapped = openCajas.find((c) => c?.id === mappedId)
+            if (mapped) return mapped
+            try {
+              await remove(ref(database, `${USER_ACTIVE_PATH}/${userId}`))
+            } catch (cleanupError) {
+              console.warn('Error removing stale active caja mapping', cleanupError)
+            }
+          }
+        } catch (err) {
+          console.warn('Error reading user active caja mapping', err)
+        }
+
+        const ownOpenCaja = openCajas.find((c) => c?.apertura?.createdBy === userId)
+        if (ownOpenCaja) return ownOpenCaja
+      }
+
+      return openCajas[0] || null
     } catch (error) {
-      console.error('Error getting active caja:', error)
+      console.error('Error getting today open caja:', error)
       return null
     }
+  },
+
+  /** @deprecated Usar getTodayOpenCaja; solo devuelve caja abierta del día actual */
+  async getActiveCaja(userId?: string) {
+    return this.getTodayOpenCaja(userId)
   },
 
   async getCajaById(id: string) {
@@ -109,7 +168,15 @@ export const CajaService = {
     return snap.val()
   },
 
-  async addSaleToCaja(cajaId: string, sale: { orderId?: string; method: string; amount: number; items?: any[]; createdBy?: string }) {
+  async addSaleToCaja(cajaId: string, sale: {
+    orderId?: string
+    method: string
+    amount: number
+    items?: any[]
+    cashReceived?: number | null
+    changeAmount?: number | null
+    createdBy?: string
+  }) {
     try {
       const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
       const movRef = ref(database, `${CAJAS_PATH}/${cajaId}/movimientos`)
@@ -120,6 +187,8 @@ export const CajaService = {
         method: sale.method,
         amount: sale.amount,
         items: sale.items || [],
+        cashReceived: typeof sale.cashReceived === 'undefined' ? null : sale.cashReceived,
+        changeAmount: typeof sale.changeAmount === 'undefined' ? null : sale.changeAmount,
         createdBy: sale.createdBy || null,
         createdAt: new Date().toISOString(),
       }
@@ -136,6 +205,76 @@ export const CajaService = {
       return movimiento
     } catch (error) {
       console.error('Error adding sale to caja:', error)
+      throw error
+    }
+  },
+
+  /** Busca en qué caja se registró la venta (por movimiento con orderId) */
+  async findCajaIdByOrderId(orderId: string): Promise<string | null> {
+    try {
+      const cajas = await this.getAllCajas()
+      for (const caja of cajas) {
+        const movs = caja.movimientos
+        if (!movs || typeof movs !== 'object') continue
+        for (const mov of Object.values(movs) as any[]) {
+          if (mov?.orderId === orderId && caja.id) return caja.id
+        }
+      }
+      return null
+    } catch (error) {
+      console.error('Error finding caja by order:', error)
+      return null
+    }
+  },
+
+  /** Resta el monto devuelto de los totales de la caja (mismo método de pago de la venta) */
+  async registrarDevolucionEnCaja(
+    cajaId: string,
+    data: {
+      orderId: string
+      devolucionId: string
+      method: string
+      amount: number
+      createdBy?: string
+    },
+  ) {
+    try {
+      const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
+      const snap = await get(cajaRef)
+      if (!snap.exists()) throw new Error('Caja no encontrada para registrar devolución')
+
+      const caja = snap.val()
+      if (caja?.status === 'closed') {
+        throw new Error('No se puede ajustar una caja ya cerrada')
+      }
+
+      const amt = Math.abs(Number(data.amount || 0))
+      if (amt <= 0) return null
+
+      const method = data.method || 'efectivo'
+      const movRef = ref(database, `${CAJAS_PATH}/${cajaId}/movimientos`)
+      const newMovRef = push(movRef)
+      const movimiento = {
+        id: newMovRef.key || Math.random().toString(36).substr(2, 9),
+        type: 'devolucion',
+        orderId: data.orderId,
+        devolucionId: data.devolucionId,
+        method,
+        amount: -amt,
+        createdBy: data.createdBy || null,
+        createdAt: new Date().toISOString(),
+      }
+
+      const updates: Record<string, any> = {
+        [`totals/${method}`]: increment(-amt),
+        'totals/totalVentas': increment(-amt),
+        [`movimientos/${movimiento.id}`]: movimiento,
+      }
+
+      await update(cajaRef, updates)
+      return movimiento
+    } catch (error) {
+      console.error('Error registering devolucion in caja:', error)
       throw error
     }
   },
@@ -161,6 +300,39 @@ export const CajaService = {
       return true
     } catch (error) {
       console.error('Error closing caja:', error)
+      throw error
+    }
+  },
+
+  async reopenCaja(cajaId: string) {
+    try {
+      const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
+      const snap = await get(cajaRef)
+      if (!snap.exists()) {
+        throw new Error('Caja no encontrada')
+      }
+
+      const caja = snap.val()
+      if (caja?.status !== 'closed') {
+        return caja
+      }
+
+      await update(cajaRef, {
+        status: 'open',
+        cierreData: null,
+        closedAt: null,
+        reopenedAt: new Date().toISOString(),
+      })
+
+      const createdBy = caja.apertura?.createdBy
+      if (createdBy) {
+        await set(ref(database, `${USER_ACTIVE_PATH}/${createdBy}`), cajaId)
+      }
+
+      const reopenedSnap = await get(cajaRef)
+      return reopenedSnap.exists() ? reopenedSnap.val() : { ...caja, status: 'open' }
+    } catch (error) {
+      console.error('Error reopening caja:', error)
       throw error
     }
   },

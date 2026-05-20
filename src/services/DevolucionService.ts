@@ -15,6 +15,7 @@ export interface Devolucion {
   id: string
   ventaOriginalId: string
   fecha: string
+  createdAt?: string
   empleado: string
   empleadoRol: string
   motivo: string

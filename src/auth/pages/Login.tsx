@@ -4,6 +4,36 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { loginEmail } from '../auth.service'
 
+function getLoginErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message === 'Credenciales invalidas') {
+    return err.message
+  }
+
+  const code =
+    err && typeof err === 'object' && 'code' in err
+      ? String((err as { code?: string }).code ?? '')
+      : ''
+
+  if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+    return 'Correo o contraseña incorrectos'
+  }
+  if (code === 'auth/user-disabled') {
+    return 'Esta cuenta está deshabilitada'
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Demasiados intentos. Intenta de nuevo en unos minutos'
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Error de red. Revisa tu conexión a internet'
+  }
+
+  if (err instanceof Error && err.message) {
+    return err.message
+  }
+
+  return 'Error al iniciar sesión'
+}
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
@@ -23,8 +53,7 @@ export default function LoginPage() {
       login(data as { user: { uid: string; email: string | null; displayName: string | null }; token: string })
       navigate('/dashboard')
     } catch (err: unknown) {
-      const error = err as { message?: string }
-      setError(error.message || 'Error al iniciar sesión')
+      setError(getLoginErrorMessage(err))
     } finally {
       setLoading(false)
     }

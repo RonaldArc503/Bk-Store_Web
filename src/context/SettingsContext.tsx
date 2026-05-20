@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { CatalogService } from '../services/CatalogService'
+import { SettingsSyncService } from '../services/SettingsSyncService'
 
 export interface InventoryCatalogItem {
   id: string
@@ -36,6 +37,14 @@ export interface StoreSettings {
   ui: {
     sidebarCollapsed: boolean
   }
+  backupAutomation: {
+    enabled: boolean
+    scheduleType: 'monthly' | 'weekly'
+    monthlyDay: number
+    weeklyDay: 0 | 1 | 2 | 3 | 4 | 5 | 6
+    format: 'json' | 'xlsx'
+    lastRunKey?: string
+  }
 }
 
 const STORAGE_KEY = 'bk-store-settings'
@@ -60,6 +69,14 @@ const defaultSettings: StoreSettings = {
   },
   ui: {
     sidebarCollapsed: false,
+  },
+  backupAutomation: {
+    enabled: false,
+    scheduleType: 'monthly',
+    monthlyDay: 30,
+    weeklyDay: 5,
+    format: 'json',
+    lastRunKey: '',
   },
 }
 
@@ -133,6 +150,10 @@ function loadSettings(): StoreSettings {
       inventory: { ...mergedInventory, productTypes, materials },
       printing: { ...defaultSettings.printing, ...(parsed.printing || {}) },
       ui: { ...defaultSettings.ui, ...(parsed.ui || {}) },
+      backupAutomation: {
+        ...defaultSettings.backupAutomation,
+        ...((parsed as { backupAutomation?: Partial<StoreSettings['backupAutomation']> }).backupAutomation || {}),
+      },
     }
   } catch {
     return defaultSettings
@@ -153,6 +174,7 @@ interface SettingsContextValue {
   updateInventoryCatalog: (key: 'productTypes' | 'materials', next: InventoryCatalogItem[]) => void
   updatePrinting: (patch: Partial<StoreSettings['printing']>) => void
   updateUI: (patch: Partial<StoreSettings['ui']>) => void
+  updateBackupAutomation: (patch: Partial<StoreSettings['backupAutomation']>) => void
   undoLastChange: () => void
   resetSettings: () => void
 }
@@ -165,21 +187,56 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [undoSnapshot, setUndoSnapshot] = useState<StoreSettings | null>(null)
   const canUndo = undoSnapshot !== null
 
-  // On mount, load catalog from Firebase and override localStorage if Firebase has data.
+  // On mount, load shared settings from Firebase and override localStorage if Firebase has data.
   useEffect(() => {
     setLastSavedAt(Date.now())
     ;(async () => {
       try {
-        const remote = await CatalogService.getCatalog()
-        if (!remote) return
+        const [remoteCatalog, remoteBackupAutomation] = await Promise.all([
+          CatalogService.getCatalog(),
+          SettingsSyncService.getBackupAutomation(),
+        ])
+
+        if (!remoteCatalog && !remoteBackupAutomation) return
+
         setSettings((prev) => {
           const next: StoreSettings = {
             ...prev,
             inventory: {
               ...prev.inventory,
-              productTypes: remote.productTypes.length > 0 ? remote.productTypes : prev.inventory.productTypes,
-              materials: remote.materials.length > 0 ? remote.materials : prev.inventory.materials,
+              productTypes:
+                remoteCatalog && remoteCatalog.productTypes.length > 0
+                  ? remoteCatalog.productTypes
+                  : prev.inventory.productTypes,
+              materials:
+                remoteCatalog && remoteCatalog.materials.length > 0
+                  ? remoteCatalog.materials
+                  : prev.inventory.materials,
             },
+            backupAutomation: remoteBackupAutomation
+              ? {
+                  ...prev.backupAutomation,
+                  ...remoteBackupAutomation,
+                  monthlyDay: Math.min(
+                    31,
+                    Math.max(
+                      1,
+                      Number(
+                        remoteBackupAutomation.monthlyDay ?? prev.backupAutomation.monthlyDay,
+                      ),
+                    ),
+                  ),
+                  weeklyDay: Math.min(
+                    6,
+                    Math.max(
+                      0,
+                      Number(
+                        remoteBackupAutomation.weeklyDay ?? prev.backupAutomation.weeklyDay,
+                      ),
+                    ),
+                  ) as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+                }
+              : prev.backupAutomation,
           }
           persist(next)
           return next
@@ -267,6 +324,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const updateBackupAutomation = useCallback(
+    (patch: Partial<StoreSettings['backupAutomation']>) => {
+      setSettings((prev) => {
+        setUndoSnapshot(prev)
+        const next = { ...prev, backupAutomation: { ...prev.backupAutomation, ...patch } }
+        persist(next)
+        setLastSavedAt(Date.now())
+        SettingsSyncService.setBackupAutomation(next.backupAutomation).catch(() => {})
+        return next
+      })
+    },
+    [],
+  )
+
   const undoLastChange = useCallback(() => {
     setSettings((prev) => {
       if (!undoSnapshot) return prev
@@ -284,6 +355,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     persist(defaultSettings)
     setLastSavedAt(Date.now())
     CatalogService.setCatalog({ productTypes: [], materials: [] }).catch(() => {})
+    SettingsSyncService.setBackupAutomation(defaultSettings.backupAutomation).catch(() => {})
   }, [])
 
   return (
@@ -298,6 +370,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateInventoryCatalog,
         updatePrinting,
         updateUI,
+        updateBackupAutomation,
         undoLastChange,
         resetSettings,
       }}

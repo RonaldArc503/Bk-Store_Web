@@ -2,14 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, DollarSign, Package, Users,
   ArrowRight, AlertTriangle, Clock, Receipt, CreditCard, Banknote,
-  BarChart3, ShoppingBag, CalendarDays, RotateCcw, CheckCircle2,
+  BarChart3, ShoppingBag, CalendarDays, RotateCcw,
 } from 'lucide-react'
 import { toast } from 'react-toastify'
 import { Sidebar } from '../components/Sidebar'
+import { DevolucionModal } from '../components/DevolucionModal'
 import { OrderService } from '../services/OrderService'
 import { InventoryService } from '../services/InventoryService'
 import { UserService } from '../services/UserService'
-import { DevolucionService, type DevolucionItem } from '../services/DevolucionService'
+import { DevolucionService, type Devolucion } from '../services/DevolucionService'
+import { normalizeOrderItems, procesarDevolucionCompleta } from '../utils/devolucionHelpers'
+import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } from '../utils/orderTotals'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
 import type { InventoryStats } from '../types/product'
@@ -28,7 +31,8 @@ type OrderRecord = {
   id: string; date?: string; createdAt?: string
   items?: OrderItem[]; method?: string
   subtotal?: number; tax?: number; total?: number
-  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string }
+  totalDevuelto?: number
+  devolucion?: { tipo: 'total' | 'parcial'; devolucionId: string; fecha: string; totalDevuelto?: number }
 }
 
 type ErrorBoundaryProps = { children: React.ReactNode; onError?: (err: any) => void }
@@ -74,6 +78,7 @@ export default function Dashboard() {
   const currency = 'MXN'
 
   const [orders, setOrders] = useState<OrderRecord[]>([])
+  const [devoluciones, setDevoluciones] = useState<Devolucion[]>([])
   const [inventoryStats, setInventoryStats] = useState<InventoryStats>({ totalProductos: 0, stockTotal: 0, alertasStock: 0 })
   const [userStats, setUserStats] = useState({ totalUsuarios: 0, usuariosActivos: 0, usuariosInactivos: 0 })
   const [loading, setLoading] = useState(true)
@@ -92,101 +97,85 @@ export default function Dashboard() {
     { value: 'otro', label: 'Otro' },
   ]
 
+  const selectedOrderItems = useMemo(
+    () => (selectedOrder ? normalizeOrderItems(selectedOrder.items) : []),
+    [selectedOrder],
+  )
+
   const openDevModal = () => {
     if (!selectedOrder) return
+    const items = normalizeOrderItems(selectedOrder.items)
+    if (items.length === 0) {
+      toast.warning('Esta venta no tiene productos registrados para devolver')
+      return
+    }
     const init: Record<string, number> = {}
-    ;(selectedOrder.items || []).forEach((_, i) => { init[String(i)] = 0 })
+    items.forEach((_, i) => { init[String(i)] = 0 })
     setDevItems(init)
     setDevMotivo('defectuoso')
     setShowDevolucion(true)
   }
-
   const devTotal = useMemo(() => {
-    try {
-      if (!selectedOrder) return 0
-      const items = selectedOrder.items || []
-      return Object.entries(devItems).reduce((sum, [idx, qty]) => {
-        const qn = Number(qty || 0)
-        if (qn <= 0) return sum
-        const item = items[Number(idx)]
-        if (!item) return sum
-        const up = (() => { try { return getItemSubtotal(item) / (getItemQuantity(item) || 1) } catch { return 0 } })()
-        return sum + up * qn
-      }, 0)
-    } catch (e) {
-      console.error('Error calculating devTotal:', e)
-      return 0
-    }
-  }, [devItems, selectedOrder])
+    if (!selectedOrder) return 0
+    const items = selectedOrderItems
+    return Object.entries(devItems).reduce((sum, [idx, qty]) => {
+      if (qty <= 0) return sum
+      const item = items[Number(idx)]
+      if (!item) return sum
+      const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
+      return sum + up * qty
+    }, 0)
+  }, [devItems, selectedOrder, selectedOrderItems])
 
   const hasDevSel = Object.values(devItems).some((q) => q > 0)
+
+  const handleDevQtyChange = (idx: number, qty: number) => {
+    const item = selectedOrderItems[idx]
+    const maxQ = item ? getItemQuantity(item) : 0
+    const next = Math.min(maxQ, Math.max(0, qty))
+    setDevItems((prev) => ({ ...prev, [String(idx)]: next }))
+  }
 
   const processDev = async () => {
     if (!selectedOrder || !hasDevSel) return
     setIsProcessingDev(true)
     try {
-      const items = selectedOrder.items || []
-      const devolucionItems: DevolucionItem[] = []
-
-      for (const [idx, qty] of Object.entries(devItems)) {
-        if (qty <= 0) continue
-        const item = items[Number(idx)]
-        if (!item) continue
-        const productId = item.id || item.productId || item.productoId || ''
-        const up = getItemSubtotal(item) / (getItemQuantity(item) || 1)
-        devolucionItems.push({ productId, nombre: getItemName(item), cantidad: qty, precioUnitario: up, subtotal: up * qty })
-
-        if (productId) {
-          try {
-            const inv = await InventoryService.getInventarioByProductoId(productId)
-            if (inv?.id) await InventoryService.agregarStock(inv.id, qty, `devolución venta ${selectedOrder.id}`)
-          } catch (e) { console.warn('Stock restore failed', productId, e) }
-        }
-      }
-
-      if (devolucionItems.length === 0) throw new Error('No hay artículos seleccionados para devolver')
-
-      const totalOrig = items.reduce((s, i) => s + getItemQuantity(i), 0)
-      const totalDev = devolucionItems.reduce((s, i) => s + i.cantidad, 0)
-      const tipo = totalDev >= totalOrig ? 'total' as const : 'parcial' as const
-
       let empNombre = user?.email || 'Desconocido'
       let empRol = 'Vendedor'
       if (user?.email) {
         try {
           const u = await UserService.getUserByEmail(user.email)
           if (u) { empNombre = u.nombreCompleto || u.usuario; empRol = u.rol || 'Vendedor' }
-        } catch {}
+        } catch { /* ignore */ }
       }
 
-      const dev = await DevolucionService.crearDevolucion({
-        ventaOriginalId: selectedOrder.id,
-        fecha: new Date().toISOString(),
+      const result = await procesarDevolucionCompleta({
+        order: { ...selectedOrder, items: selectedOrderItems },
+        devItems,
+        motivo: DEV_MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
         empleado: empNombre,
         empleadoRol: empRol,
-        motivo: DEV_MOTIVOS.find((m) => m.value === devMotivo)?.label || devMotivo,
-        items: devolucionItems,
-        totalDevuelto: devTotal,
-        tipo,
+        userId: user?.uid,
       })
 
-      if (!dev || !dev.id) throw new Error('No se pudo crear la devolución')
-
-      try {
-        await OrderService.marcarDevolucion(selectedOrder.id, tipo, dev.id)
-      } catch (errMark) {
-        console.error('Error marcando la orden como devuelta:', errMark)
-        throw errMark
-      }
-      toast.success(`Devolución ${tipo} procesada`)
+      toast.success(
+        `Devolución ${result.tipo} por $${result.montoDevuelto.toFixed(2)} — ventas y caja actualizadas`,
+      )
       setShowDevolucion(false)
       setSelectedOrder(null)
 
-      const fresh = await OrderService.getAllOrders()
-      setOrders(fresh)
+      const [freshOrders, freshDevs, inventoryData] = await Promise.all([
+        OrderService.getAllOrders(),
+        DevolucionService.getAllDevoluciones(),
+        InventoryService.getInventoryStats(lowStockThreshold),
+      ])
+      setOrders(freshOrders as OrderRecord[])
+      setDevoluciones(freshDevs)
+      setInventoryStats(inventoryData)
     } catch (err) {
       console.error('Error en devolución:', err)
-      toast.error('Error al procesar la devolución')
+      const msg = err instanceof Error ? err.message : 'Error al procesar la devolución'
+      toast.error(msg)
     } finally {
       setIsProcessingDev(false)
     }
@@ -197,15 +186,17 @@ export default function Dashboard() {
     ;(async () => {
       setLoading(true)
       try {
-        const [ordersData, inventoryData, usersData] = await Promise.all([
+        const [ordersData, inventoryData, usersData, devsData] = await Promise.all([
           OrderService.getAllOrders(),
           InventoryService.getInventoryStats(lowStockThreshold),
           UserService.getUserStats(),
+          DevolucionService.getAllDevoluciones(),
         ])
         if (!mounted) return
         setOrders(ordersData as OrderRecord[])
         setInventoryStats(inventoryData)
         setUserStats(usersData)
+        setDevoluciones(devsData)
       } catch (error) { console.error('Error loading dashboard data:', error) }
       finally { if (mounted) setLoading(false) }
     })()
@@ -213,7 +204,10 @@ export default function Dashboard() {
   }, [lowStockThreshold])
 
   /* ─── Helpers ─── */
-  const formatCurrency = (value: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(value)
+  const formatCurrency = (value: number) => {
+    const n = Number.isFinite(value) ? value : 0
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(n)
+  }
   const formatNumber = (value: number) => new Intl.NumberFormat('es-MX').format(value)
   const toNumber = (value: unknown) => { const n = Number(value); return Number.isFinite(n) ? n : 0 }
   const toPaymentLabel = (method?: string) => {
@@ -240,7 +234,7 @@ export default function Dashboard() {
   }
   const parseDate = (value?: string) => { if (!value) return null; const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d }
   const orderDateValue = (order: OrderRecord) => { const d = parseDate(order.date || order.createdAt); return d ? d.getTime() : 0 }
-  const sumTotals = (list: OrderRecord[]) => list.reduce((sum, order) => sum + Number(order.total || 0), 0)
+  const sumTotals = (list: OrderRecord[]) => sumOrderEffectiveTotals(list)
 
   /* ─── Calculations ─── */
   const now = new Date()
@@ -261,6 +255,22 @@ export default function Dashboard() {
   const revenueMonth = sumTotals(ordersThisMonth)
   const monthSalesCount = ordersThisMonth.length
 
+  const devolucionesToday = useMemo(() => {
+    return devoluciones.filter((d) => {
+      const raw = d.createdAt || d.fecha
+      if (!raw) return false
+      const dt = new Date(raw)
+      return !Number.isNaN(dt.getTime()) && isInRange(dt, startOfToday, endOfToday)
+    })
+  }, [devoluciones, startOfToday.getTime(), endOfToday.getTime()])
+
+  const totalDevueltoHoy = useMemo(
+    () => devolucionesToday.reduce((s, d) => s + Number(d.totalDevuelto || 0), 0),
+    [devolucionesToday],
+  )
+
+  const ventasBrutasHoy = ordersToday.reduce((s, o) => s + Number(o.total || 0), 0)
+
   const changePercent = (current: number, previous: number) => previous <= 0 ? null : ((current - previous) / previous) * 100
   const todayChange = changePercent(revenueToday, revenueYesterday)
   const monthChange = changePercent(monthSalesCount, ordersLastMonth.length)
@@ -269,7 +279,7 @@ export default function Dashboard() {
   const recentSales = useMemo(() => {
     const sorted = [...orders].sort((a, b) => orderDateValue(b) - orderDateValue(a))
     return sorted.slice(0, 8).map((order) => {
-      const items = order.items || []
+      const items = normalizeOrderItems(order.items)
       const quantity = items.reduce((sum, item) => sum + getItemQuantity(item), 0)
       const firstItem = items[0]
       const extraCount = items.length > 1 ? ` +${items.length - 1}` : ''
@@ -277,7 +287,8 @@ export default function Dashboard() {
         id: order.id,
         product: `${getItemName(firstItem || {})}${extraCount}`,
         quantity,
-        total: Number(order.total || 0),
+        total: getOrderEffectiveTotal(order),
+        devuelto: getOrderDevuelto(order),
         method: order.method,
         date: order.date || order.createdAt,
         order,
@@ -295,7 +306,7 @@ export default function Dashboard() {
       const dayOrders = orders.filter((o) => isInRange(parseDate(o.date || o.createdAt), start, end))
       days.push({
         label: d.toLocaleDateString('es-MX', { weekday: 'short' }),
-        value: sumTotals(dayOrders),
+        value: sumOrderEffectiveTotals(dayOrders),
         count: dayOrders.length,
         dateKey: `${d.getDate()}/${d.getMonth() + 1}`,
       })
@@ -309,7 +320,7 @@ export default function Dashboard() {
     const map: Record<string, number> = {}
     ordersThisMonth.forEach((o) => {
       const m = o.method || 'efectivo'
-      map[m] = (map[m] || 0) + toNumber(o.total)
+      map[m] = (map[m] || 0) + getOrderEffectiveTotal(o)
     })
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [orders])
@@ -427,9 +438,9 @@ export default function Dashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-          {/* Ventas Hoy */}
-          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-[#8CC63F] to-[#6ba52e] p-4 md:p-5 rounded-2xl text-white shadow-lg shadow-[#8CC63F]/20 relative overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
+          {/* Ventas Hoy (neto) */}
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-gradient-to-br from-[#8CC63F] to-[#6ba52e] p-4 md:p-5 rounded-2xl text-white shadow-lg shadow-[#8CC63F]/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-6 -mt-6" />
             <div className="relative">
               <div className="flex items-center gap-2 mb-3">
@@ -441,10 +452,31 @@ export default function Dashboard() {
                   </span>
                 )}
               </div>
-              <p className="text-lime-100 text-xs font-medium">Ventas Hoy</p>
+              <p className="text-lime-100 text-xs font-medium">Ventas Hoy (neto)</p>
               <p className="text-xl md:text-2xl font-bold mt-0.5">{loading ? '...' : formatCurrency(revenueToday)}</p>
-              <p className="text-lime-200 text-[11px] mt-1">{ordersToday.length} transacciones</p>
+              <p className="text-lime-200 text-[11px] mt-1">
+                {ordersToday.length} ventas
+                {!loading && totalDevueltoHoy > 0 && (
+                  <> · Bruto {formatCurrency(ventasBrutasHoy)}</>
+                )}
+              </p>
             </div>
+          </div>
+
+          {/* Devoluciones Hoy */}
+          <div className="bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-900/50 p-4 md:p-5 rounded-2xl relative overflow-hidden">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 bg-amber-100 dark:bg-amber-950/40 rounded-lg flex items-center justify-center">
+                <RotateCcw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">Devoluciones Hoy</p>
+            <p className="text-xl md:text-2xl font-bold text-amber-700 dark:text-amber-400 mt-0.5">
+              {loading ? '...' : formatCurrency(totalDevueltoHoy)}
+            </p>
+            <p className="text-gray-400 dark:text-gray-500 text-[11px] mt-1">
+              {loading ? '—' : `${devolucionesToday.length} registro${devolucionesToday.length === 1 ? '' : 's'}`}
+            </p>
           </div>
 
           {/* Ventas del Mes */}
@@ -598,6 +630,9 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(sale.total)}</p>
+                      {sale.devuelto > 0 && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">−{formatCurrency(sale.devuelto)} dev.</p>
+                      )}
                       <p className="text-[11px] text-gray-400 dark:text-gray-500">{toPaymentLabel(sale.method)}</p>
                     </div>
                   </button>
@@ -611,8 +646,8 @@ export default function Dashboard() {
         <div className="h-6 md:h-0" />
       </main>
 
-      {/* Order Detail Modal */}
-      {selectedOrder && (
+      {/* Order Detail Modal (oculto mientras el modal de devolución está abierto) */}
+      {selectedOrder && !showDevolucion && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setSelectedOrder(null)}>
           <div
             className="w-full sm:max-w-2xl bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 max-h-[85vh] overflow-y-auto"
@@ -652,7 +687,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedOrder.items || []).map((item, idx) => (
+                    {selectedOrderItems.map((item, idx) => (
                       <tr key={`${getItemKey(item)}-${idx}`} className="border-t border-gray-100 dark:border-gray-800">
                         <td className="px-4 py-2.5 text-gray-900 dark:text-white">{getItemName(item)}</td>
                         <td className="px-4 py-2.5 text-center text-gray-600 dark:text-gray-300">{getItemQuantity(item)}</td>
@@ -686,97 +721,23 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      {/* Modal Devolución (envuelto en ErrorBoundary para evitar crash global) */}
-      {showDevolucion && selectedOrder && (
-        <ErrorBoundary onError={(err) => console.error('ErrorBoundary caught in Devolucion modal:', err)}>
-          <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDevolucion(false)}>
-            <div className="w-full sm:max-w-lg bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg"><RotateCcw className="w-5 h-5 text-amber-600 dark:text-amber-400" /></div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Procesar Devolución</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Ticket: {getTicket(selectedOrder.id)}</p>
-                </div>
-              </div>
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Motivo</label>
-                  <select value={devMotivo} onChange={(e) => setDevMotivo(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100">
-                    {DEV_MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Artículos a devolver</p>
-                  <div className="space-y-2">
-                    {(selectedOrder.items || []).map((item, idx) => {
-                      // defensive extraction
-                      const safeItem = item || {}
-                      const maxQ = (() => { try { return getItemQuantity(safeItem) } catch { return 0 } })()
-                      const curQ = Number(devItems[String(idx)] ?? 0)
-                      return (
-                        <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{getItemName(safeItem)}</p>
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400">Comprados: {maxQ} · {formatCurrency((() => { try { return getItemSubtotal(safeItem) } catch { return 0 } })())}</p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => {
-                                try {
-                                  console.debug('Decrement click', { idx, curQ, maxQ })
-                                  setDevItems((prev) => {
-                                    const prevQ = Number(prev[String(idx)] ?? 0)
-                                    const next = Math.max(0, prevQ - 1)
-                                    return { ...prev, [String(idx)]: next }
-                                  })
-                                } catch (e) { console.error('Error updating devolucion quantity (decrement):', e) }
-                              }}
-                              disabled={curQ === 0}
-                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
-                            >−</button>
-                            <span className={`w-8 text-center text-sm font-bold ${(curQ > 0) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{curQ}</span>
-                            <button
-                              onClick={() => {
-                                try {
-                                  console.debug('Increment click', { idx, curQ, maxQ })
-                                  const cap = Number(maxQ) || 0
-                                  setDevItems((prev) => {
-                                    const prevQ = Number(prev[String(idx)] ?? 0)
-                                    const next = Math.min(cap, prevQ + 1)
-                                    return { ...prev, [String(idx)]: next }
-                                  })
-                                } catch (e) { console.error('Error updating devolucion quantity (increment):', e) }
-                              }}
-                              disabled={curQ >= (Number(maxQ) || 0)}
-                              className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-lg font-bold disabled:opacity-40"
-                            >+</button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-                {hasDevSel && (
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                    <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Total a devolver</span>
-                    <span className="text-lg font-bold text-amber-700 dark:text-amber-400">{formatCurrency(devTotal)}</span>
-                  </div>
-                )}
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                  <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                  <p className="text-xs text-blue-700 dark:text-blue-300">El stock será restaurado automáticamente al inventario.</p>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => setShowDevolucion(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
-                  <button onClick={processDev} disabled={!hasDevSel || isProcessingDev} className={`flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors ${hasDevSel && !isProcessingDev ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'}`}>
-                    {isProcessingDev ? 'Procesando...' : <><CheckCircle2 className="w-4 h-4" />Confirmar</>}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ErrorBoundary>
+      {selectedOrder && (
+        <DevolucionModal
+          isOpen={showDevolucion}
+          ticketLabel={`Ticket: ${getTicket(selectedOrder.id)} · ${getItemName(selectedOrderItems[0] || {})}${selectedOrderItems.length > 1 ? ` +${selectedOrderItems.length - 1}` : ''}`}
+          items={selectedOrderItems}
+          devItems={devItems}
+          devMotivo={devMotivo}
+          motivos={DEV_MOTIVOS}
+          devTotal={devTotal}
+          hasSelection={hasDevSel}
+          isProcessing={isProcessingDev}
+          formatMoney={formatCurrency}
+          onClose={() => setShowDevolucion(false)}
+          onMotivoChange={setDevMotivo}
+          onQtyChange={handleDevQtyChange}
+          onConfirm={processDev}
+        />
       )}
     </div>
   )

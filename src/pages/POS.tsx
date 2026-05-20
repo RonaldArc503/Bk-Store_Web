@@ -36,6 +36,7 @@ type ProductDB = {
   categoria: string
   stock: number
   precioUnitario: number
+  precioTresUnidades: number
   precioMediaDocena: number
   precioDocena: number
 }
@@ -58,11 +59,17 @@ export default function POS() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
+  const [cashReceivedInput, setCashReceivedInput] = useState('')
   const [lastOrderInfo, setLastOrderInfo] = useState<any>(null)
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
   const [showSaleSuccess, setShowSaleSuccess] = useState(false)
-  const [lastSuccessfulOrder, setLastSuccessfulOrder] = useState<{ orderId: string; total: number } | null>(null)
-  const successTimerRef = useRef<number | null>(null)
+  const [lastSuccessfulOrder, setLastSuccessfulOrder] = useState<{
+    orderId: string
+    total: number
+    method: string
+    cashReceived: number | null
+    changeAmount: number | null
+  } | null>(null)
 
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
@@ -106,14 +113,6 @@ export default function POS() {
   }, [settings.printing.paperSize])
 
   useEffect(() => {
-    return () => {
-      if (successTimerRef.current !== null) {
-        window.clearTimeout(successTimerRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
     if (!authReady) {
       setCajaOpen(null)
       return
@@ -127,9 +126,10 @@ export default function POS() {
     let mounted = true
     ;(async () => {
       try {
+        await CajaService.closeStaleOpenCajas()
         const [prods, activeCaja] = await Promise.all([
           InventoryService.getProducts(),
-          CajaService.getActiveCaja(user.uid),
+          CajaService.getTodayOpenCaja(user.uid),
         ])
         if (!mounted) return
 
@@ -143,6 +143,7 @@ export default function POS() {
             categoria: p.tipo || 'General',
             stock: p.stock,
             precioUnitario: p.precioUnitario || 0,
+            precioTresUnidades: p.precioTresUnidades || 0,
             precioMediaDocena: p.precioMediaDocena || 0,
             precioDocena: p.precioDocena || 0,
           }))
@@ -160,14 +161,20 @@ export default function POS() {
 
   const calculateItemTotal = (item: CartItemLocal) => {
     const qty = item.quantity
-    const dozens = Math.floor(qty / 12)
-    const halfDozens = Math.floor((qty % 12) / 6)
-    const units = qty % 6
-    return (
-      dozens * (item.precioDocena || 0) +
-      halfDozens * (item.precioMediaDocena || 0) +
-      units * (item.precioUnitario || 0)
-    )
+    const unitPrice = item.precioUnitario || 0
+    const specialTiers = [
+      { quantity: 12, price: item.precioDocena },
+      { quantity: 6, price: item.precioMediaDocena },
+      { quantity: 3, price: item.precioTresUnidades },
+    ].filter((tier) => Number(tier.price) > 0)
+
+    const bestTier = specialTiers.find((tier) => qty >= tier.quantity)
+    if (!bestTier) return qty * unitPrice
+
+    if (qty === bestTier.quantity) return Number(bestTier.price)
+
+    const remaining = qty - bestTier.quantity
+    return Number(bestTier.price) + remaining * unitPrice
   }
 
   const getAvailableStock = (productId: string) => {
@@ -210,6 +217,23 @@ export default function POS() {
     }
     const label = qty === 1 ? `${product.nombre} agregado` : `${qty}x ${product.nombre} agregados`
     toast.success(label, { autoClose: 1000, hideProgressBar: true })
+  }
+
+  const setSpecialQuantity = (product: ProductDB, qty: 3 | 6 | 12) => {
+    if (qty > product.stock) {
+      toast.warning('Stock insuficiente para este producto')
+      return
+    }
+
+    setCart((prev) => {
+      const exists = prev.some((item) => item.id === product.id)
+      if (exists) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, quantity: qty } : item
+        )
+      }
+      return [...prev, { ...product, quantity: qty }]
+    })
   }
 
   const updateQuantity = (id: string, delta: number) => {
@@ -262,6 +286,8 @@ export default function POS() {
       toast.warning(`Stock insuficiente para ${invalidItem.nombre}`)
       return
     }
+    setSelectedPaymentMethod(null)
+    setCashReceivedInput('')
     setIsPaymentModalOpen(true)
   }
 
@@ -270,6 +296,21 @@ export default function POS() {
     if (!authReady || !user?.uid) {
       toast.error('Sesion invalida. Inicia sesion nuevamente.')
       return
+    }
+
+    let cashReceived = 0
+    let changeAmount = 0
+    if (selectedPaymentMethod === 'efectivo') {
+      cashReceived = Number(cashReceivedInput)
+      if (!Number.isFinite(cashReceived) || cashReceivedInput.trim() === '') {
+        toast.error('Ingresa el monto recibido en efectivo.')
+        return
+      }
+      if (cashReceived < cartTotal) {
+        toast.error('El monto recibido es menor al total de la venta.')
+        return
+      }
+      changeAmount = Number((cartTotal - cashReceived).toFixed(2))
     }
 
     const orderId = OrderService.reserveOrderId()
@@ -282,17 +323,19 @@ export default function POS() {
       id: orderId,
       date: new Date().toISOString(),
       items: cart.map((i) => ({
+        lineTotal: calculateItemTotal(i),
         id: i.id,
         name: i.nombre || '',
         codigo: i.codigo || null,
         quantity: i.quantity,
-        unitPrice: i.precioUnitario || 0,
-        lineTotal: calculateItemTotal(i),
+        unitPrice: i.quantity > 0 ? calculateItemTotal(i) / i.quantity : 0,
       })),
       subtotal: cartTotal,
       tax: 0,
       total: cartTotal,
       method: selectedPaymentMethod,
+      cashReceived: selectedPaymentMethod === 'efectivo' ? cashReceived : null,
+      changeAmount: selectedPaymentMethod === 'efectivo' ? changeAmount : null,
       createdBy: user.uid,
     }
 
@@ -300,9 +343,9 @@ export default function POS() {
 
     setIsProcessingPayment(true)
     try {
-      const activeCaja = await CajaService.getActiveCaja(user.uid)
+      const activeCaja = await CajaService.getTodayOpenCaja(user.uid)
       if (!activeCaja || !activeCaja.id || activeCaja.status === 'closed') {
-        throw new Error('No hay una caja abierta para el usuario actual')
+        throw new Error('No hay una caja abierta hoy para el usuario actual')
       }
 
       // Decrement inventory for each sold item (rollback if any fail)
@@ -321,6 +364,8 @@ export default function POS() {
         method: selectedPaymentMethod || 'efectivo',
         amount: order.total,
         items: order.items,
+        cashReceived: order.cashReceived,
+        changeAmount: order.changeAmount,
         createdBy: user.uid,
       })
 
@@ -334,6 +379,7 @@ export default function POS() {
             categoria: p.tipo || 'General',
             stock: p.stock,
             precioUnitario: p.precioUnitario || 0,
+            precioTresUnidades: p.precioTresUnidades || 0,
             precioMediaDocena: p.precioMediaDocena || 0,
             precioDocena: p.precioDocena || 0,
           }))
@@ -350,15 +396,15 @@ export default function POS() {
       setCart([])
       setIsCartOpen(false)
       setSelectedPaymentMethod(null)
-      setLastSuccessfulOrder({ orderId, total: Number(order.total || 0) })
+      setCashReceivedInput('')
+      setLastSuccessfulOrder({
+        orderId,
+        total: Number(order.total || 0),
+        method: String(order.method || 'efectivo'),
+        cashReceived: order.cashReceived,
+        changeAmount: order.changeAmount,
+      })
       setShowSaleSuccess(true)
-
-      if (successTimerRef.current !== null) {
-        window.clearTimeout(successTimerRef.current)
-      }
-      successTimerRef.current = window.setTimeout(() => {
-        setShowSaleSuccess(false)
-      }, 2200)
 
       if (settings.notifications.sales) {
         toast.success('Venta registrada correctamente')
@@ -407,13 +453,13 @@ export default function POS() {
     const fs = paperSize === '58mm' ? 6 : 7
     let y = 8
 
-    doc.setFontSize(paperSize === '58mm' ? 10 : 14)
+    doc.setFontSize(fs + 1)
     doc.setFont('helvetica', 'bold')
-    doc.text('Bikini Store', center, y, { align: 'center' })
+    doc.text('BIKINI STORE', center, y, { align: 'center' })
     y += 4
-    doc.setFontSize(fs)
+    doc.setFontSize(fs + 1)
     doc.setFont('helvetica', 'normal')
-    doc.text('Sistema de Punto de Venta', center, y, { align: 'center' })
+    doc.text('SISTEMA DE PUNTO DE VENTA', center, y, { align: 'center' })
     y += 5
 
     doc.setFontSize(fs)
@@ -428,6 +474,8 @@ export default function POS() {
     doc.text(`Empleado: ${empName}`, left, y)
     y += 3.5
     doc.text(`Cargo: ${empRol}`, left, y)
+    y += 3.5
+    doc.text('NOMBRE: Consumidor Final', left, y)
     y += 3
 
     doc.setDrawColor(0)
@@ -458,7 +506,7 @@ export default function POS() {
       doc.text(`${qty}`, left, y)
       doc.text(displayName, left + 8, y)
       y += lineHeight
-      doc.setFontSize(fs - 1)
+      doc.setFontSize(fs)
       doc.text(`  P.Unit: $${unitPrice.toFixed(2)}`, left, y)
       doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: 'right' })
       doc.setFontSize(fs)
@@ -484,7 +532,7 @@ export default function POS() {
     doc.line(left, y, right, y)
     y += 4
 
-    doc.setFontSize(paperSize === '58mm' ? 9 : 11)
+    doc.setFontSize(fs)
     doc.setFont('helvetica', 'bold')
     doc.text('TOTAL:', left, y)
     doc.text(`$${total.toFixed(2)}`, right, y, { align: 'right' })
@@ -493,20 +541,25 @@ export default function POS() {
     doc.setFontSize(fs)
     doc.setFont('helvetica', 'normal')
     const method = paymentLabels[orderInfo.method] || orderInfo.method || 'Efectivo'
-    doc.text(`Método de pago: ${method}`, left, y)
+    doc.text(`Metodo de pago: ${method}`, left, y)
     y += 3.5
-    doc.text(`Pagado: $${total.toFixed(2)}`, left, y)
+    if (orderInfo.method === 'efectivo') {
+      const cashReceived = Number(orderInfo.cashReceived ?? total)
+      const changeAmount = Number(orderInfo.changeAmount ?? total - cashReceived)
+      const formattedChange = changeAmount < 0 ? `-$${Math.abs(changeAmount).toFixed(2)}` : `$${changeAmount.toFixed(2)}`
+      doc.text(`Efectivo: $${cashReceived.toFixed(2)}`, left, y)
+      y += 3.5
+      doc.text(`Cambio: ${formattedChange}`, left, y)
+    } else {
+      doc.text(`Pagado: $${total.toFixed(2)}`, left, y)
+    }
     y += 4
 
     doc.setLineWidth(0.3)
     doc.line(left, y, right, y)
     y += 3.5
     doc.setFontSize(fs)
-    doc.text('¡Gracias por su compra!', center, y, { align: 'center' })
-    y += 3
-    doc.setFontSize(fs - 1)
-    doc.text('IVA incluido en todos los precios', center, y, { align: 'center' })
-
+    doc.text('Gracias por tu preferencia', center, y, { align: 'center' })
     return doc
   }
 
@@ -588,7 +641,7 @@ export default function POS() {
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">{item.nombre}</h4>
-                  {item.quantity >= 6 && <span className="text-[10px] bg-[#8CC63F]/10 text-[#8CC63F] px-2 py-0.5 rounded mt-1 inline-block">Precio por Volumen</span>}
+                  {[3, 6, 12].includes(item.quantity) && <span className="text-[10px] bg-[#8CC63F]/10 text-[#8CC63F] px-2 py-0.5 rounded mt-1 inline-block">Precio por Volumen</span>}
                 </div>
                 <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 shrink-0 ml-2">
                   <Trash2 size={16} />
@@ -605,6 +658,29 @@ export default function POS() {
                   </button>
                 </div>
                 <span className="font-bold text-gray-900 dark:text-gray-100 text-base">${calculateItemTotal(item).toFixed(2)}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {[3, 6, 12].map((pack) => {
+                  const disabled = item.stock < pack
+                  const active = item.quantity === pack
+                  return (
+                    <button
+                      key={pack}
+                      type="button"
+                      onClick={() => !disabled && setSpecialQuantity(item, pack as 3 | 6 | 12)}
+                      disabled={disabled}
+                      className={`rounded-md border py-1.5 text-xs font-semibold transition-colors ${
+                        disabled
+                          ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                          : active
+                          ? 'bg-lime-100 text-lime-800 border-lime-300 dark:bg-lime-900/35 dark:text-lime-200 dark:border-lime-700'
+                          : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700'
+                      }`}
+                    >
+                      {pack}U
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ))
@@ -751,9 +827,21 @@ export default function POS() {
                       </p>
                       <p className="text-2xl font-bold leading-tight text-lime-800 dark:text-lime-100">${displayPrice(product.precioUnitario || 0).toFixed(2)}</p>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="mt-3 grid grid-cols-3 gap-2">
                       <button
-                        onClick={() => { if (!isOutOfStock && stock >= 6) addToCart(product, 6) }}
+                        onClick={() => { if (!isOutOfStock && stock >= 3) setSpecialQuantity(product, 3) }}
+                        disabled={isOutOfStock || stock < 3}
+                        className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                          isOutOfStock || stock < 3
+                            ? 'bg-gray-100 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
+                            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-lime-50 hover:border-lime-300 dark:hover:bg-lime-900/20 dark:hover:border-lime-700 cursor-pointer active:scale-95'
+                        }`}
+                      >
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400">3 unidades</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${(product.precioTresUnidades || product.precioUnitario * 3).toFixed(2)}</p>
+                      </button>
+                      <button
+                        onClick={() => { if (!isOutOfStock && stock >= 6) setSpecialQuantity(product, 6) }}
                         disabled={isOutOfStock || stock < 6}
                         className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
                           isOutOfStock || stock < 6
@@ -765,7 +853,7 @@ export default function POS() {
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">${displayPrice(product.precioMediaDocena || 0).toFixed(2)}</p>
                       </button>
                       <button
-                        onClick={() => { if (!isOutOfStock && stock >= 12) addToCart(product, 12) }}
+                        onClick={() => { if (!isOutOfStock && stock >= 12) setSpecialQuantity(product, 12) }}
                         disabled={isOutOfStock || stock < 12}
                         className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
                           isOutOfStock || stock < 12
@@ -877,9 +965,28 @@ export default function POS() {
               ))}
             </div>
 
+            {selectedPaymentMethod === 'efectivo' && (
+              <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50">
+                <label htmlFor="cash-received" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                  Monto recibido en efectivo
+                </label>
+                <input
+                  id="cash-received"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cashReceivedInput}
+                  onChange={(e) => setCashReceivedInput(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                />
+                <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">Total venta: ${cartTotal.toFixed(2)}</p>
+              </div>
+            )}
+
             <div className="flex gap-3">
-              <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
-              <button onClick={processPayment} disabled={!selectedPaymentMethod || isProcessingPayment} className={`flex-1 py-3 rounded-xl text-white transition-colors ${selectedPaymentMethod && !isProcessingPayment ? 'bg-[#8CC63F] hover:bg-[#7ab535]' : 'bg-gray-300 dark:bg-gray-700 dark:text-gray-500'}`}>
+              <button onClick={() => { setIsPaymentModalOpen(false); setSelectedPaymentMethod(null); setCashReceivedInput('') }} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
+              <button onClick={processPayment} disabled={!selectedPaymentMethod || isProcessingPayment || (selectedPaymentMethod === 'efectivo' && (cashReceivedInput.trim() === '' || Number(cashReceivedInput) < cartTotal))} className={`flex-1 py-3 rounded-xl text-white transition-colors ${selectedPaymentMethod && !isProcessingPayment && !(selectedPaymentMethod === 'efectivo' && (cashReceivedInput.trim() === '' || Number(cashReceivedInput) < cartTotal)) ? 'bg-[#8CC63F] hover:bg-[#7ab535]' : 'bg-gray-300 dark:bg-gray-700 dark:text-gray-500'}`}>
                 Confirmar Pago
               </button>
             </div>
@@ -888,8 +995,14 @@ export default function POS() {
       )}
 
       {showSaleSuccess && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/35 backdrop-blur-sm px-4">
-          <div className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 border border-lime-200 dark:border-lime-700 shadow-2xl p-6 text-center">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/35 backdrop-blur-sm px-4"
+          onClick={() => setShowSaleSuccess(false)}
+        >
+          <div
+            className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 border border-lime-200 dark:border-lime-700 shadow-2xl p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
               <div className="absolute -top-8 -left-8 w-24 h-24 bg-lime-200/50 rounded-full animate-ping" />
               <div className="absolute -bottom-6 -right-8 w-20 h-20 bg-lime-300/40 rounded-full animate-ping [animation-delay:250ms]" />
@@ -902,15 +1015,43 @@ export default function POS() {
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                 Orden {lastSuccessfulOrder?.orderId || ''} registrada correctamente.
               </p>
-              <p className="mt-1 text-lg font-bold text-lime-600 dark:text-lime-400">
-                Total: ${Number(lastSuccessfulOrder?.total || 0).toFixed(2)}
-              </p>
-              <button
-                onClick={() => setShowSaleSuccess(false)}
-                className="mt-5 px-5 py-2 rounded-lg bg-lime-500 hover:bg-lime-600 text-white font-semibold transition-colors"
-              >
-                Entendido
-              </button>
+              {(() => {
+                const total = Number(lastSuccessfulOrder?.total || 0)
+                const method = String(lastSuccessfulOrder?.method || 'efectivo')
+                const efectivo =
+                  Number(lastSuccessfulOrder?.cashReceived ?? 0) > 0
+                    ? Number(lastSuccessfulOrder?.cashReceived)
+                    : total
+                const hasSavedChange =
+                  lastSuccessfulOrder?.changeAmount !== null &&
+                  typeof lastSuccessfulOrder?.changeAmount !== 'undefined'
+                const cambio = hasSavedChange
+                  ? Number(lastSuccessfulOrder?.changeAmount)
+                  : Number((total - efectivo).toFixed(2))
+                const cambioText = cambio < 0 ? `-$${Math.abs(cambio).toFixed(2)}` : `$${cambio.toFixed(2)}`
+                return (
+                  <div className="mt-3 rounded-xl border border-lime-200 dark:border-lime-800 bg-lime-50/70 dark:bg-lime-900/20 p-3 text-left space-y-1.5">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                      Total: <span className="text-lime-700 dark:text-lime-300">${total.toFixed(2)}</span>
+                    </p>
+                    {method === 'efectivo' ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Efectivo: <span className="text-lime-700 dark:text-lime-300">${efectivo.toFixed(2)}</span>
+                        </p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Cambio: <span className="text-lime-700 dark:text-lime-300">{cambioText}</span>
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                        Pagado: <span className="text-lime-700 dark:text-lime-300">${total.toFixed(2)}</span>
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
+              <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">Toca fuera de esta ventana para cerrar</p>
             </div>
           </div>
         </div>
@@ -922,29 +1063,33 @@ export default function POS() {
         const tBase = Math.round((tTotal / 1.13) * 100) / 100
         const tIva = Math.round((tTotal - tBase) * 100) / 100
         const tMethod = paymentLabels[lastOrderInfo.method] || lastOrderInfo.method || 'Efectivo'
+        const tCashReceived = Number(lastOrderInfo.cashReceived || 0)
+        const tChangeAmount = Number(lastOrderInfo.changeAmount || 0)
+        const showCashBreakdown = lastOrderInfo.method === 'efectivo' && tCashReceived > 0
         const tTicketId = String(lastOrderInfo.orderId || lastOrderInfo.id || '').slice(-8).toUpperCase()
         return (
           <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <div className="w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
-              <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm">
+              <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm text-xs">
                 {/* Header */}
                 <div className="text-center mb-4">
                   <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2"><Store size={20} /></div>
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">Bikini Store</h2>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Sistema de Punto de Venta</p>
+                  <h2 className="text-sm font-bold uppercase text-gray-900 dark:text-white">Bikini Store</h2>
+                  <p className="text-sm uppercase text-gray-400 dark:text-gray-500 mt-0.5">Sistema de Punto de Venta</p>
                 </div>
 
                 {/* Info */}
-                <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-[11px] text-gray-500 dark:text-gray-400 mb-3 px-1">
+                <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs text-gray-500 dark:text-gray-400 mb-3 px-1">
                   <p>Doc N°: <span className="font-medium text-gray-700 dark:text-gray-300">{tTicketId}</span></p>
                   <p className="text-right">Caja: <span className="font-medium text-gray-700 dark:text-gray-300">1</span></p>
                   <p className="col-span-2">Fecha: <span className="font-medium text-gray-700 dark:text-gray-300">{lastOrderInfo.date}</span></p>
                   <p className="col-span-2">Empleado: <span className="font-medium text-gray-700 dark:text-gray-300">{empleadoInfo.nombre || user?.email || 'Cajero'}{empleadoInfo.rol ? ` (${empleadoInfo.rol})` : ''}</span></p>
+                  <p className="col-span-2">NAME: <span className="font-medium text-gray-700 dark:text-gray-300">Final Consumer</span></p>
                 </div>
 
                 {/* Items table */}
                 <div className="border-t border-gray-200 dark:border-gray-700">
-                  <div className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
+                  <div className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
                     <span>Cant.</span>
                     <span>Artículo</span>
                     <span className="text-right">P. Unit.</span>
@@ -978,7 +1123,7 @@ export default function POS() {
                 </div>
 
                 {/* Total */}
-                <div className="flex justify-between items-center font-bold text-lg mt-3 pt-3 border-t-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-1">
+                <div className="flex justify-between items-center font-bold text-xs mt-3 pt-3 border-t-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-1">
                   <span>TOTAL</span>
                   <span>${tTotal.toFixed(2)}</span>
                 </div>
@@ -986,19 +1131,33 @@ export default function POS() {
                 {/* Payment info */}
                 <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg text-xs space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Método de pago</span>
+                    <span className="text-gray-500 dark:text-gray-400">Metodo de pago</span>
                     <span className="font-semibold text-gray-800 dark:text-gray-200">{tMethod}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Pagado</span>
-                    <span className="font-semibold text-[#8CC63F]">${tTotal.toFixed(2)}</span>
-                  </div>
+                  {showCashBreakdown ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Efectivo</span>
+                        <span className="font-semibold text-[#8CC63F]">${tCashReceived.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Cambio</span>
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">
+                          {tChangeAmount < 0 ? `-$${Math.abs(tChangeAmount).toFixed(2)}` : `$${tChangeAmount.toFixed(2)}`}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 dark:text-gray-400">Pagado</span>
+                      <span className="font-semibold text-[#8CC63F]">${tTotal.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer */}
-                <p className="text-center text-[10px] text-gray-400 dark:text-gray-500 mt-3">¡Gracias por su compra! · IVA incluido en todos los precios</p>
+                <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-3">Thank you for shopping with us</p>
               </div>
-
               <div className="mt-3 flex gap-2">
                 <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
                 <button onClick={() => saveTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />Descargar PDF</button>
