@@ -185,6 +185,7 @@ export function normalizePermissions(raw: unknown, role?: UserRole): UserPermiss
   merged.modules.corteReopen = sanitizeAccess(merged.modules.corteReopen)
   merged.modules.inventory = sanitizeAccess(merged.modules.inventory)
   merged.modules.users = false
+  merged.configSections.data = false
   if (merged.modules.corte !== 'full') {
     merged.modules.corteReopen = 'none'
   }
@@ -217,8 +218,10 @@ export function hasModulePermission(
 export function hasConfigSectionPermission(
   permissions: UserPermissions | null | undefined,
   section: ConfigSectionKey,
+  role?: UserRole,
 ): boolean {
   if (!permissions) return false
   if (!permissions.modules.configuracion) return false
+  if (section === 'data' && role !== 'Administrador') return false
   return permissions.configSections[section] === true
 }

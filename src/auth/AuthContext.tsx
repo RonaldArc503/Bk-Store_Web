@@ -257,8 +257,9 @@ function AuthProvider({ children }: AuthProviderProps) {
   )
 
   const hasConfigSectionAccess = useCallback(
-    (section: ConfigSectionKey) => hasConfigSectionPermission(permissions, section),
-    [permissions],
+    (section: ConfigSectionKey) =>
+      hasConfigSectionPermission(permissions, section, systemUser?.rol),
+    [permissions, systemUser?.rol],
   )
 
   const value: AuthContextType = {

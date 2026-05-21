@@ -325,7 +325,6 @@ export function UserPermissionsModal({
                           { key: 'interfaz', label: 'Interfaz' },
                           { key: 'inventory', label: 'Inventario' },
                           { key: 'printing', label: 'Impresion' },
-                          { key: 'data', label: 'Datos' },
                         ].map((section) => (
                           <label
                             key={section.key}
@@ -351,6 +350,9 @@ export function UserPermissionsModal({
                           </label>
                         ))}
                       </div>
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        La seccion Datos (backups, importar y limpiar sistema) solo esta disponible para Administrador.
+                      </p>
                     </div>
                   </div>
                 </section>

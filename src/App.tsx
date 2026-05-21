@@ -11,7 +11,7 @@ import { MaintenanceService } from './services/MaintenanceService'
 import { toast } from 'react-toastify'
 
 function AppContent() {
-  const { isAuthenticated, authReady, hasModuleAccess } = useAuth()
+  const { isAuthenticated, authReady, hasModuleAccess, systemUser } = useAuth()
   const { settings, updateBackupAutomation } = useSettings()
   const location = useLocation()
   const autoBackupRunningRef = useRef(false)
@@ -41,6 +41,7 @@ function AppContent() {
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) return
+    if (systemUser?.rol !== 'Administrador') return
     const cfg = settings.backupAutomation
     if (!cfg.enabled) return
 
@@ -91,6 +92,7 @@ function AppContent() {
   }, [
     authReady,
     isAuthenticated,
+    systemUser?.rol,
     location.pathname,
     settings,
     settings.backupAutomation,
