@@ -863,8 +863,8 @@ function DataSection({
         </SettingRow>
         <SettingRow
           icon={<Database className="w-5 h-5 shrink-0 text-red-500 dark:text-red-400" />}
-          title="Borrar datos de prueba"
-          description="Elimina ventas, cajas, cortes, inventario y movimientos. Conserva usuarios."
+          title="Limpiar sistema"
+          description="Elimina ventas, cajas, cortes, inventario, devoluciones y movimientos. Conserva usuarios y accesos."
           border={false}
         >
           <button
@@ -873,7 +873,7 @@ function DataSection({
             disabled={loading}
             className="px-3 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition disabled:opacity-50"
           >
-            {loading ? 'Borrando...' : 'Borrar datos'}
+            {loading ? 'Limpiando...' : 'Limpiar sistema'}
           </button>
         </SettingRow>
       </SettingCard>
@@ -887,7 +887,9 @@ export default function ConfiguracionPage() {
   const { settings, resetSettings, lastSavedAt, updateBackupAutomation } = useSettings()
   const { hasConfigSectionAccess } = useAuth()
   const [showReset, setShowReset] = useState(false)
-  const [isDataResetOpen, setIsDataResetOpen] = useState(false)
+  const [clearSystemStep, setClearSystemStep] = useState<'none' | 'review' | 'final'>('none')
+  const [clearSystemAck, setClearSystemAck] = useState(false)
+  const [clearSystemPhrase, setClearSystemPhrase] = useState('')
   const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false)
   const [isDataResetLoading, setIsDataResetLoading] = useState(false)
   const [isBackupLoading, setIsBackupLoading] = useState(false)
@@ -913,6 +915,12 @@ export default function ConfiguracionPage() {
     setShowReset(false)
   }
 
+  const resetClearSystemConfirm = () => {
+    setClearSystemStep('none')
+    setClearSystemAck(false)
+    setClearSystemPhrase('')
+  }
+
   const handleClearData = async () => {
     if (isDataResetLoading) return
     setIsDataResetLoading(true)
@@ -921,14 +929,14 @@ export default function ConfiguracionPage() {
       const total = Object.values(result.deletedByPath).reduce((s, n) => s + n, 0)
       toast.success(
         total > 0
-          ? `Datos eliminados (${total} registros). Los usuarios se conservaron.`
-          : 'No había datos de prueba que borrar. Los usuarios se conservaron.',
+          ? `Sistema limpiado (${total} registros eliminados). Los usuarios se conservaron.`
+          : 'No había datos operativos que eliminar. Los usuarios se conservaron.',
       )
-      setIsDataResetOpen(false)
+      resetClearSystemConfirm()
     } catch (err) {
       console.error(err)
       const msg =
-        err instanceof Error ? err.message : 'Error al borrar datos'
+        err instanceof Error ? err.message : 'Error al limpiar el sistema'
       toast.error(msg)
     } finally {
       setIsDataResetLoading(false)
@@ -1027,7 +1035,11 @@ export default function ConfiguracionPage() {
             {canViewPrinting && <PrintingSection />}
             {canViewData && (
               <DataSection
-                onReset={() => setIsDataResetOpen(true)}
+                onReset={() => {
+                  setClearSystemAck(false)
+                  setClearSystemPhrase('')
+                  setClearSystemStep('review')
+                }}
                 onDownloadBackupJson={() => {
                   void handleDownloadBackupJson()
                 }}
@@ -1076,15 +1088,85 @@ export default function ConfiguracionPage() {
         </div>
 
         <ConfirmDialog
-          isOpen={isDataResetOpen}
-          title="Borrar datos de prueba"
-          description="Se eliminarán ventas, cajas, cortes, inventario y movimientos. Los usuarios se conservarán."
-          confirmLabel="Borrar datos"
+          isOpen={clearSystemStep === 'review'}
+          title="Paso 1 de 2 — Limpiar sistema"
+          description={
+            <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <p>
+                Esta acción <strong>borra toda la información operativa</strong> del sistema.
+                No se puede deshacer.
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-gray-600 dark:text-gray-400">
+                <li>Ventas y órdenes</li>
+                <li>Cajas, cortes y devoluciones</li>
+                <li>Inventario, productos y movimientos de stock</li>
+                <li>Historial de caja activa por usuario</li>
+              </ul>
+              <p className="text-emerald-700 dark:text-emerald-400 text-xs">
+                Se conservan: usuarios, roles, permisos e índice de acceso.
+              </p>
+              <p className="text-amber-700 dark:text-amber-400 text-xs">
+                Recomendación: descarga un backup antes de continuar.
+              </p>
+            </div>
+          }
+          confirmLabel="Continuar al paso final"
           cancelLabel="Cancelar"
           danger
-          onCancel={() => setIsDataResetOpen(false)}
+          onCancel={resetClearSystemConfirm}
           onConfirm={() => {
-            setIsDataResetOpen(false)
+            setClearSystemAck(false)
+            setClearSystemPhrase('')
+            setClearSystemStep('final')
+          }}
+        />
+        <ConfirmDialog
+          isOpen={clearSystemStep === 'final'}
+          title="Paso 2 de 2 — Confirmar limpieza"
+          description={
+            <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200">
+                <p className="font-semibold">Se eliminará toda la información del sistema.</p>
+                <p className="mt-1 text-xs opacity-90">
+                  Ventas, inventario, cajas, cortes y movimientos quedarán en blanco.
+                </p>
+              </div>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clearSystemAck}
+                  onChange={(e) => setClearSystemAck(e.target.checked)}
+                  className="mt-1 rounded border-gray-300"
+                />
+                <span>
+                  Entiendo que esta acción es <strong>irreversible</strong> y deseo limpiar el sistema.
+                </span>
+              </label>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Escribe <span className="font-mono font-bold text-red-600 dark:text-red-400">LIMPIAR</span> para confirmar
+                </label>
+                <input
+                  type="text"
+                  value={clearSystemPhrase}
+                  onChange={(e) => setClearSystemPhrase(e.target.value.toUpperCase())}
+                  placeholder="LIMPIAR"
+                  autoComplete="off"
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 font-mono text-sm uppercase"
+                />
+              </div>
+            </div>
+          }
+          confirmLabel={isDataResetLoading ? 'Limpiando...' : 'Limpiar sistema'}
+          cancelLabel="Volver"
+          danger
+          confirmDisabled={
+            isDataResetLoading ||
+            !clearSystemAck ||
+            clearSystemPhrase.trim() !== 'LIMPIAR'
+          }
+          onCancel={() => setClearSystemStep('review')}
+          onConfirm={() => {
             void handleClearData()
           }}
         />
