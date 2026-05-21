@@ -42,6 +42,7 @@ export default function UserManagementPage() {
         UserService.getUsers(),
         UserService.getUserStats(),
       ])
+      await UserService.syncAllEmailIndexes().catch(() => {})
       setUsers(usersData)
       setFilteredUsers(usersData)
       setStats(statsData)

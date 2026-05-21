@@ -20,9 +20,27 @@ import {
   normalizePermissions,
   type UserPermissions,
 } from '../auth/permissions'
+import { ensureFirebaseAuthAccount } from '../utils/firebaseSecondaryAuth'
 
 const USERS_PATH = 'users'
 const AUTH_INDEX_PATH = 'userAuthIndex'
+const USERS_BY_EMAIL_PATH = 'usersByEmail'
+
+function emailToKey(email: string): string {
+  return email.trim().toLowerCase().replace(/\./g, ',')
+}
+
+async function syncEmailIndex(userId: string, email: string | undefined | null): Promise<void> {
+  const normalized = (email || '').trim().toLowerCase()
+  if (!normalized) return
+  await set(ref(database, `${USERS_BY_EMAIL_PATH}/${emailToKey(normalized)}`), { userId })
+}
+
+async function removeEmailIndex(email: string | undefined | null): Promise<void> {
+  const normalized = (email || '').trim().toLowerCase()
+  if (!normalized) return
+  await remove(ref(database, `${USERS_BY_EMAIL_PATH}/${emailToKey(normalized)}`))
+}
 
 async function writeUserAuthIndex(uid: string, user: SystemUser, permissions?: UserPermissions): Promise<void> {
   const normalized = normalizePermissions(permissions ?? user.permissions, user.rol)
@@ -47,6 +65,22 @@ async function syncAuthIndexEntriesForUser(user: SystemUser, permissions?: UserP
 }
 
 export const UserService = {
+  /**
+   * Sincroniza el indice usersByEmail a partir de la lista de usuarios (solo admin).
+   */
+  async syncAllEmailIndexes(): Promise<number> {
+    const users = await this.getUsers()
+    let synced = 0
+    await Promise.all(
+      users.map(async (user) => {
+        if (!user.email?.trim()) return
+        await syncEmailIndex(user.id, user.email)
+        synced += 1
+      }),
+    )
+    return synced
+  },
+
   /**
    * Obtener todos los usuarios desde Firebase
    */
@@ -104,9 +138,15 @@ export const UserService = {
    */
   async getUserByEmail(email: string): Promise<SystemUser | null> {
     try {
-      const users = await this.getUsers()
       const normalized = email.trim().toLowerCase()
-      return users.find(u => (u.email || '').trim().toLowerCase() === normalized) || null
+      const indexSnapshot = await get(ref(database, `${USERS_BY_EMAIL_PATH}/${emailToKey(normalized)}`))
+      if (!indexSnapshot.exists()) {
+        return null
+      }
+
+      const userId = (indexSnapshot.val() as { userId?: string }).userId
+      if (!userId) return null
+      return this.getUserById(userId)
     } catch (error) {
       console.error('Error fetching user by email:', error)
       throw new Error('Error al obtener usuario')
@@ -126,7 +166,6 @@ export const UserService = {
           const indexedUser = await this.getUserById(indexVal.userId)
           if (indexedUser) {
             const permissions = normalizePermissions(indexedUser.permissions, indexedUser.rol)
-            await writeUserAuthIndex(uid, indexedUser, permissions)
             return { ...indexedUser, permissions }
           }
         }
@@ -221,6 +260,11 @@ export const UserService = {
         passwordIterations: password.iterations,
       })
 
+      if (newUser.email) {
+        await syncEmailIndex(id, newUser.email)
+        await ensureFirebaseAuthAccount(newUser.email, input.contraseña)
+      }
+
       return newUser
     } catch (error) {
       console.error('Error creating user:', error)
@@ -266,6 +310,12 @@ export const UserService = {
         permissions: updatedUser.permissions,
         fechaActualizacion: updatedUser.fechaActualizacion,
       })
+
+      if ((currentUser.email || '').trim().toLowerCase() !== (updatedUser.email || '').trim().toLowerCase()) {
+        await removeEmailIndex(currentUser.email)
+        await syncEmailIndex(updatedUser.id, updatedUser.email)
+      }
+
       await syncAuthIndexEntriesForUser(updatedUser, nextPermissions)
       return updatedUser
     } catch (error) {
@@ -321,6 +371,8 @@ export const UserService = {
         throw new Error('Usuario no encontrado')
       }
 
+      const currentUser = snapshot.val() as SystemUser
+
       try {
         const usersByAuthSnapshot = await get(ref(database, AUTH_INDEX_PATH))
         if (usersByAuthSnapshot.exists()) {
@@ -336,6 +388,7 @@ export const UserService = {
         console.warn('No se pudo limpiar userAuthIndex:', indexError)
       }
 
+      await removeEmailIndex(currentUser.email)
       await remove(userRef)
     } catch (error) {
       console.error('Error deleting user:', error)

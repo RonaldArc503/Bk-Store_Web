@@ -18,6 +18,7 @@ const RESET_PATHS = [
 
 const BACKUP_PATHS = [
   'users',
+  'usersByEmail',
   'userAuthIndex',
   'orders',
   'cajas',
