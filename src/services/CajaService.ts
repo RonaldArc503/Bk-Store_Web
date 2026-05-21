@@ -27,7 +27,13 @@ export function isCajaFromToday(caja: { apertura?: { fecha?: string }; createdAt
 }
 
 export const CajaService = {
-  async openCaja(aperturaInfo: { monto: number; fecha: string; usuario: string; createdBy?: string }) {
+  async openCaja(aperturaInfo: {
+    monto: number
+    fecha: string
+    usuario: string
+    createdBy?: string
+    auto?: boolean
+  }) {
     try {
       const cajasRef = ref(database, CAJAS_PATH)
       const newRef = push(cajasRef)
@@ -41,6 +47,9 @@ export const CajaService = {
       }
       if (aperturaInfo.createdBy) {
         apertura.createdBy = aperturaInfo.createdBy
+      }
+      if (aperturaInfo.auto) {
+        apertura.auto = true
       }
 
       const caja = {

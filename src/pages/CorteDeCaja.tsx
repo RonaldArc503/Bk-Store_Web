@@ -142,6 +142,8 @@ interface TimelineDayGroup {
 
 interface CorteState {
   isCajaOpen: boolean;
+  closePrepMode: boolean;
+  aperturaAuto: boolean;
   retiros: { id: number; monto: number; motivo?: string }[];
   efectivoContado: string;
   transferenciasContado: string;
@@ -174,6 +176,9 @@ interface CorteState {
 
 type CorteAction =
   | { type: "SET_CAJA_OPEN"; payload: boolean }
+  | { type: "SET_CLOSE_PREP_MODE"; payload: boolean }
+  | { type: "SET_APERTURA_AUTO"; payload: boolean }
+  | { type: "APPLY_CLOSE_AUTOFILL"; payload: { efectivoEsperado: number; ventasDia: CorteState["ventasDia"] } }
   | { type: "SET_RETIROS"; payload: { id: number; monto: number; motivo?: string }[] }
   | { type: "ADD_RETIRO"; payload: { id: number; monto: number; motivo?: string } }
   | { type: "REMOVE_RETIRO"; payload: number }
@@ -205,6 +210,8 @@ type CorteAction =
 
 const initialState: CorteState = {
   isCajaOpen: false,
+  closePrepMode: false,
+  aperturaAuto: false,
   retiros: [],
   efectivoContado: "0.00",
   transferenciasContado: "0.00",
@@ -233,6 +240,16 @@ const initialState: CorteState = {
 function corteReducer(state: CorteState, action: CorteAction): CorteState {
   switch (action.type) {
     case "SET_CAJA_OPEN": return { ...state, isCajaOpen: action.payload };
+    case "SET_CLOSE_PREP_MODE": return { ...state, closePrepMode: action.payload };
+    case "SET_APERTURA_AUTO": return { ...state, aperturaAuto: action.payload };
+    case "APPLY_CLOSE_AUTOFILL":
+      return {
+        ...state,
+        efectivoContado: action.payload.efectivoEsperado.toFixed(2),
+        transferenciasContado: action.payload.ventasDia.transferencia.toFixed(2),
+        qrContado: action.payload.ventasDia.qr.toFixed(2),
+        tarjetaContado: action.payload.ventasDia.tarjeta.toFixed(2),
+      };
     case "SET_RETIROS": return { ...state, retiros: action.payload };
     case "ADD_RETIRO": return { ...state, retiros: [...state.retiros, action.payload] };
     case "REMOVE_RETIRO": return { ...state, retiros: state.retiros.filter((r) => r.id !== action.payload) };
@@ -261,6 +278,7 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
         closeConfirmStep: "none",
         closeConfirmPhrase: "",
         closeConfirmAck: false,
+        closePrepMode: false,
       };
     case "SET_HISTORY_FILTER_MONTH": return { ...state, historyFilterMonth: action.payload };
     case "SET_PREVIEW_DATA": return { ...state, previewData: action.payload };
@@ -269,6 +287,8 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
       return {
         ...state,
         isAperturaSaved: false,
+        aperturaAuto: false,
+        closePrepMode: false,
         aperturaMonto: "",
         aperturaFecha: localDatetimeString(),
         activeCajaId: null,
@@ -291,6 +311,8 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
         activeCajaId: action.payload.activeCajaId,
         isAperturaSaved: true,
         isCajaOpen: true,
+        aperturaAuto: Boolean(action.payload.aperturaAuto),
+        closePrepMode: false,
       };
     default: return state;
   }
@@ -303,7 +325,19 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
 function AperturaForm({ state, dispatch, onSave }: any) {
   return (
     <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-      <h3 className="font-bold mb-4 text-lg">Información de Apertura</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h3 className="font-bold text-lg">Información de Apertura</h3>
+        {state.aperturaAuto && (
+          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300">
+            Apertura automática — efectivo del cierre anterior
+          </span>
+        )}
+      </div>
+      {state.aperturaAuto && (
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          El monto de apertura coincide con el efectivo que quedó registrado al cerrar el día anterior.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         <div>
           <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Monto de Apertura *</label>
@@ -313,7 +347,7 @@ function AperturaForm({ state, dispatch, onSave }: any) {
             value={state.aperturaMonto}
             onChange={(e) => dispatch({ type: "SET_APERTURA_MONTO", payload: e.target.value })}
             placeholder="0.00"
-            disabled={state.isAperturaSaved}
+            disabled={state.isAperturaSaved || state.aperturaAuto}
           />
         </div>
         <div>
@@ -323,7 +357,7 @@ function AperturaForm({ state, dispatch, onSave }: any) {
             className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 text-sm bg-white dark:bg-gray-800"
             value={state.aperturaFecha}
             onChange={(e) => dispatch({ type: "SET_APERTURA_FECHA", payload: e.target.value })}
-            disabled={state.isAperturaSaved}
+            disabled={state.isAperturaSaved || state.aperturaAuto}
           />
         </div>
         <div>
@@ -338,7 +372,7 @@ function AperturaForm({ state, dispatch, onSave }: any) {
             }`}
             value={state.aperturaUsuario}
             onChange={(e) => dispatch({ type: "SET_APERTURA_USUARIO", payload: e.target.value })}
-            disabled={state.isAperturaSaved}
+            disabled={state.isAperturaSaved || state.aperturaAuto}
           />
           {!state.isAperturaSaved && !state.aperturaUsuario.trim() && (
             <p className="text-[11px] text-red-500 mt-1">Este campo es obligatorio</p>
@@ -346,7 +380,11 @@ function AperturaForm({ state, dispatch, onSave }: any) {
         </div>
       </div>
       <div className="mt-4 flex gap-3">
-        {!state.isAperturaSaved ? (
+        {state.aperturaAuto && state.isAperturaSaved ? (
+          <div className="flex items-center gap-2 px-4 py-2 bg-lime-50 dark:bg-lime-900/30 rounded-lg text-lime-700 dark:text-lime-300 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-lime-500" /> Caja abierta automáticamente
+          </div>
+        ) : !state.isAperturaSaved ? (
           <button
             onClick={onSave}
             disabled={!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0 || !state.aperturaUsuario.trim()}
@@ -401,21 +439,43 @@ function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) 
   const [newRetiro, setNewRetiro] = useState({ monto: "", motivo: "" });
 
   const handleAdd = () => {
+    if (!newRetiro.motivo.trim()) {
+      toast.warning("Debe justificar el retiro (ej: depósito en banco, pago a proveedor)");
+      return;
+    }
     if (!newRetiro.monto || parseFloat(newRetiro.monto) <= 0) {
       toast.warning("Ingrese un monto válido");
       return;
     }
-    onAddRetiro({ id: Date.now(), monto: parseFloat(newRetiro.monto), motivo: newRetiro.motivo || "Sin motivo" });
+    onAddRetiro({
+      id: Date.now(),
+      monto: parseFloat(newRetiro.monto),
+      motivo: newRetiro.motivo.trim(),
+    });
     setNewRetiro({ monto: "", motivo: "" });
   };
 
   return (
-    <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
-      <h3 className="font-bold mb-2 text-lg">Retiros de Caja</h3>
-      <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">Registre los retiros realizados durante el día (gastos, pagos, etc.)</p>
+    <div className="border border-orange-200 dark:border-orange-900/50 rounded-2xl p-4 md:p-6 bg-orange-50/50 dark:bg-orange-950/20">
+      <h3 className="font-bold mb-2 text-lg text-orange-900 dark:text-orange-200">Retiro de efectivo al cierre</h3>
+      <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+        Registre el efectivo que sale de caja antes de cerrar (depósito bancario, remesa, etc.).
+        El <strong>efectivo contado</strong> al cierre será el que queda en caja después del retiro.
+        Mañana la apertura usará ese monto restante.
+      </p>
       <div className="flex flex-col sm:flex-row items-end gap-3 md:gap-4 mb-4">
         <div className="flex-1 w-full">
-          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Monto</label>
+          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Motivo del retiro *</label>
+          <input
+            type="text"
+            placeholder="Ej: Depósito en banco, pago proveedor..."
+            className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
+            value={newRetiro.motivo}
+            onChange={(e) => setNewRetiro({ ...newRetiro, motivo: e.target.value })}
+          />
+        </div>
+        <div className="w-full sm:w-40">
+          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Monto *</label>
           <input
             type="number" min="0" step="0.01" placeholder="0.00"
             className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
@@ -423,17 +483,12 @@ function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) 
             onChange={(e) => setNewRetiro({ ...newRetiro, monto: e.target.value })}
           />
         </div>
-        <div className="flex-1 w-full">
-          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Motivo</label>
-          <input
-            type="text" placeholder="Ej: Pago a proveedor, gasto menor..."
-            className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
-            value={newRetiro.motivo}
-            onChange={(e) => setNewRetiro({ ...newRetiro, motivo: e.target.value })}
-          />
-        </div>
-        <button onClick={handleAdd} className="flex items-center gap-2 text-gray-900 dark:text-gray-100 whitespace-nowrap bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded-lg">
-          <Plus size={18} /> Agregar
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="flex items-center gap-2 text-gray-900 dark:text-gray-100 whitespace-nowrap bg-white dark:bg-gray-800 border border-orange-200 dark:border-orange-800 px-4 py-3 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30"
+        >
+          <Plus size={18} /> Agregar retiro
         </button>
       </div>
       {state.retiros.length > 0 && (
@@ -464,23 +519,15 @@ function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) 
 }
 
 function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEfectivo }: any) {
-  const handleQuickFill = () => {
-    dispatch({ type: "SET_EFECTIVO_CONTADO", payload: efectivoEsperado.toFixed(2) });
-    dispatch({ type: "SET_TRANSFERENCIAS_CONTADO", payload: ventasDia.transferencia.toFixed(2) });
-    dispatch({ type: "SET_QR_CONTADO", payload: ventasDia.qr.toFixed(2) });
-    dispatch({ type: "SET_TARJETA_CONTADO", payload: ventasDia.tarjeta.toFixed(2) });
-    toast.info("Campos de conteo completados automáticamente");
-  };
-
-  const diferenciaPorcentaje = efectivoEsperado > 0 ? (diferenciaEfectivo / efectivoEsperado) * 100 : 0;
-
   return (
     <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="font-bold text-lg">Cierre de Caja</h3>
-        <button onClick={handleQuickFill} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-sm hover:bg-blue-100">
-          <CheckCircle2 size={16} /> Completar automático
-        </button>
+        <div>
+          <h3 className="font-bold text-lg">Conteo de cierre</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Valores sugeridos según ventas y retiros. Ajuste el efectivo contado si el conteo físico difiere.
+          </p>
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 mb-6">
         <div>
@@ -502,7 +549,7 @@ function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEf
             </div>
             <div className={`flex justify-between font-bold mt-1 pt-1 border-t border-blue-200 ${diferenciaEfectivo >= 0 ? "text-lime-600" : "text-red-600"}`}>
               <span>Diferencia:</span>
-              <span>{diferenciaEfectivo >= 0 ? "+" : ""}${fmt(diferenciaEfectivo)} ({diferenciaPorcentaje.toFixed(1)}%)</span>
+              <span>{diferenciaEfectivo >= 0 ? "+" : ""}${fmt(diferenciaEfectivo)} ({efectivoEsperado > 0 ? ((diferenciaEfectivo / efectivoEsperado) * 100).toFixed(1) : "0.0"}%)</span>
             </div>
           </div>
         </div>
@@ -901,12 +948,19 @@ function PrintVoucher({ corte, onClose }: { corte: CorteRecord; onClose: () => v
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export default function CorteDeCaja() {
-  const { user, authReady, hasModuleAccess } = useAuth();
+  const { user, authReady, hasModuleAccess, systemUser } = useAuth();
   const { settings } = useSettings();
   const canManageCaja = hasModuleAccess("corte", "full");
   const canReopenCaja = hasModuleAccess("corteReopen", "full");
+  const responsableNombre =
+    systemUser?.nombreCompleto ||
+    systemUser?.usuario ||
+    user?.displayName ||
+    user?.email ||
+    "Usuario de Caja";
   const reminderShown = useRef(false);
   const autoCloseAttemptedDayRef = useRef<string | null>(null);
+  const autoOpenAttemptedDayRef = useRef<string | null>(null);
   const [state, dispatch] = useReducer(corteReducer, initialState);
 
   const buildTimeline = useCallback((cortes: CorteRecord[], cajas: any[]): TimelineEntry[] => {
@@ -956,7 +1010,8 @@ export default function CorteDeCaja() {
           payload: {
             aperturaMonto: active.apertura?.monto,
             aperturaFecha: active.apertura?.fecha ? localDatetimeString(new Date(active.apertura.fecha)) : localDatetimeString(),
-            aperturaUsuario: active.apertura?.usuario ?? user?.displayName ?? "Usuario de Caja",
+            aperturaUsuario: active.apertura?.usuario ?? responsableNombre,
+            aperturaAuto: Boolean(active.apertura?.auto),
             ventasDia: {
               efectivo: Number(active.totals?.efectivo ?? 0),
               transferencia: Number(active.totals?.transferencia ?? 0),
@@ -967,10 +1022,56 @@ export default function CorteDeCaja() {
             activeCajaId: active.id || null,
           },
         });
+        return;
+      }
+
+      const todayKey = getLocalDateKey();
+      const todayC = await CorteService.getTodayCorte();
+      const corteEsDeHoy = todayC ? isCorteFromToday(todayC as CorteWithDateKey) : false;
+      if (corteEsDeHoy || !canManageCaja) return;
+      if (autoOpenAttemptedDayRef.current === todayKey) return;
+
+      const prevCorte = await CorteService.getPreviousCorteForApertura();
+      if (prevCorte) {
+        autoOpenAttemptedDayRef.current = todayKey;
+        const montoApertura = Number(prevCorte.efectivoContado ?? 0);
+        try {
+          const createdCaja = await CajaService.openCaja({
+            monto: montoApertura,
+            fecha: new Date().toISOString(),
+            usuario: responsableNombre,
+            createdBy: user.uid,
+            auto: true,
+          });
+          dispatch({
+            type: "LOAD_CAJA_DATA",
+            payload: {
+              aperturaMonto: montoApertura,
+              aperturaFecha: localDatetimeString(),
+              aperturaUsuario: responsableNombre,
+              aperturaAuto: true,
+              ventasDia: { efectivo: 0, transferencia: 0, qr: 0, tarjeta: 0 },
+              retiros: [],
+              activeCajaId: createdCaja.id || null,
+            },
+          });
+          await reloadData();
+          toast.success(
+            `Caja abierta automáticamente con $${fmt(montoApertura)} (efectivo del cierre anterior)`,
+          );
+        } catch (err) {
+          console.error("Error en apertura automática", err);
+          autoOpenAttemptedDayRef.current = null;
+          dispatch({ type: "SET_CAJA_OPEN", payload: true });
+        }
+      } else {
+        autoOpenAttemptedDayRef.current = todayKey;
+        dispatch({ type: "SET_APERTURA_USUARIO", payload: responsableNombre });
+        dispatch({ type: "SET_CAJA_OPEN", payload: true });
       }
     })();
     return () => { mounted = false; };
-  }, [authReady, user?.uid, reloadData]);
+  }, [authReady, user?.uid, reloadData, canManageCaja, responsableNombre]);
 
   useEffect(() => {
     if (!settings.notifications.cashRegister) return;
@@ -1234,10 +1335,51 @@ export default function CorteDeCaja() {
   const diferenciaEfectivo = efectivoActual - efectivoEsperado;
   const requiereNota = Math.abs(diferenciaEfectivo) > 50;
 
+  useEffect(() => {
+    if (!state.closePrepMode) return;
+    dispatch({
+      type: "APPLY_CLOSE_AUTOFILL",
+      payload: { efectivoEsperado, ventasDia: state.ventasDia },
+    });
+  }, [
+    state.closePrepMode,
+    totalRetiros,
+    state.aperturaMonto,
+    state.ventasDia.efectivo,
+    state.ventasDia.transferencia,
+    state.ventasDia.qr,
+    state.ventasDia.tarjeta,
+    efectivoEsperado,
+  ]);
+
+  const handleStartClosePrep = () => {
+    if (!canManageCaja) return;
+    if (state.todayClosed || !state.isAperturaSaved || !state.activeCajaId) return;
+    dispatch({ type: "SET_CLOSE_PREP_MODE", payload: true });
+    dispatch({
+      type: "APPLY_CLOSE_AUTOFILL",
+      payload: { efectivoEsperado, ventasDia: state.ventasDia },
+    });
+  };
+
+  const handleCancelClosePrep = () => {
+    dispatch({ type: "SET_CLOSE_PREP_MODE", payload: false });
+    dispatch({ type: "RESET_CLOSE_CONFIRM" });
+  };
+
   const handleCerrarCaja = async () => {
     if (!canManageCaja) { toast.error("No tienes permisos para cerrar la caja"); return; }
     if (state.todayClosed) return;
     if (!state.isAperturaSaved || !state.activeCajaId) { toast.error("No hay una caja activa para cerrar"); return; }
+    if (!state.closePrepMode) {
+      toast.warning("Inicie el proceso de cierre antes de confirmar");
+      return;
+    }
+    const retiroSinMotivo = state.retiros.some((r) => !String(r.motivo || "").trim());
+    if (retiroSinMotivo) {
+      toast.error("Todos los retiros deben tener un motivo justificado");
+      return;
+    }
     if (requiereNota && !state.notas.trim()) { toast.error("Se requiere una nota explicativa para la diferencia mayor a $50"); return; }
 
     const active = await CajaService.getTodayOpenCaja(user?.uid);
@@ -1284,6 +1426,7 @@ export default function CorteDeCaja() {
       dispatch({ type: "SET_ACTIVE_CAJA_ID", payload: null });
       dispatch({ type: "SET_TODAY_CLOSED", payload: true });
       dispatch({ type: "SET_TODAY_CORTE", payload: created.corte as CorteRecord });
+      dispatch({ type: "SET_CLOSE_PREP_MODE", payload: false });
       dispatch({ type: "RESET_CLOSE_CONFIRM" });
       await reloadData();
       toast.success("Cierre de caja guardado correctamente");
@@ -1526,11 +1669,34 @@ export default function CorteDeCaja() {
             <>
               <VentasResumen ventasDia={state.ventasDia} />
 
-              {canManageCaja && (
+              {canManageCaja && !state.todayClosed && !state.closePrepMode && (
+                <button
+                  type="button"
+                  onClick={handleStartClosePrep}
+                  disabled={!state.isAperturaSaved || !state.activeCajaId}
+                  className="w-full py-3.5 rounded-xl border-2 border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 font-bold hover:bg-red-100 dark:hover:bg-red-950/50 transition disabled:opacity-50"
+                >
+                  Iniciar cierre de caja
+                </button>
+              )}
+
+              {canManageCaja && state.closePrepMode && !state.todayClosed && (
                 <>
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 px-4 py-3">
+                    <p className="text-sm text-red-800 dark:text-red-200">
+                      Paso 1: registre retiros de efectivo (si aplica) y revise el conteo antes de cerrar.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCancelClosePrep}
+                      className="shrink-0 text-sm text-gray-600 dark:text-gray-400 hover:underline"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+
                   <RetirosForm
                     state={state}
-                    dispatch={dispatch}
                     totalRetiros={totalRetiros}
                     onAddRetiro={async (retiro: any) => {
                       dispatch({ type: "ADD_RETIRO", payload: retiro });
@@ -1556,15 +1722,21 @@ export default function CorteDeCaja() {
                   />
 
                   <button
+                    type="button"
                     onClick={() => {
+                      const sinMotivo = state.retiros.some((r) => !String(r.motivo || "").trim());
+                      if (sinMotivo) {
+                        toast.error("Todos los retiros deben tener motivo");
+                        return;
+                      }
                       dispatch({ type: "SET_CLOSE_CONFIRM_PHRASE", payload: "" });
                       dispatch({ type: "SET_CLOSE_CONFIRM_ACK", payload: false });
                       dispatch({ type: "SET_CLOSE_CONFIRM_STEP", payload: "review" });
                     }}
-                    disabled={state.todayClosed || !state.isAperturaSaved || !state.activeCajaId}
-                    className="w-full mt-4 md:mt-6 bg-red-600 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
+                    disabled={!state.isAperturaSaved || !state.activeCajaId}
+                    className="w-full mt-2 bg-red-600 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
                   >
-                    {state.todayClosed ? "Cierre ya realizado hoy" : (!state.isAperturaSaved || !state.activeCajaId) ? "Guarde apertura para cerrar" : "Cerrar Caja"}
+                    Continuar — confirmar cierre de caja
                   </button>
                 </>
               )}
@@ -1593,8 +1765,14 @@ export default function CorteDeCaja() {
                   <p>Revisa los montos antes de continuar. <strong>Solo se permite un cierre por día.</strong></p>
                   <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
                     <div className="flex justify-between"><span>Total ventas del día:</span><span className="font-bold">${fmt(totalVentas)}</span></div>
-                    <div className="flex justify-between mt-1"><span>Efectivo esperado:</span><span className="font-bold">${fmt(efectivoEsperado)}</span></div>
-                    <div className="flex justify-between mt-1"><span>Efectivo contado:</span><span className="font-bold">${fmt(efectivoActual)}</span></div>
+                    {totalRetiros > 0 && (
+                      <div className="flex justify-between mt-1 text-orange-600 dark:text-orange-400">
+                        <span>Retiros de efectivo:</span>
+                        <span className="font-bold">-${fmt(totalRetiros)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between mt-1"><span>Efectivo esperado en caja:</span><span className="font-bold">${fmt(efectivoEsperado)}</span></div>
+                    <div className="flex justify-between mt-1"><span>Efectivo contado (queda mañana):</span><span className="font-bold">${fmt(efectivoActual)}</span></div>
                     <div className={`flex justify-between font-bold mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 ${diferenciaEfectivo >= 0 ? "text-lime-600" : "text-red-600"}`}>
                       <span>{diferenciaEfectivo >= 0 ? "Sobrante:" : "Faltante:"}</span>
                       <span>${fmt(Math.abs(diferenciaEfectivo))}</span>

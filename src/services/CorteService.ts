@@ -28,6 +28,7 @@ export interface CorteRecord {
   notas: string
   createdBy: string | null
   createdAt: string
+  dateKey?: string
 }
 
 type SaveCorteInput = Omit<CorteRecord, 'id'>
@@ -114,6 +115,17 @@ export const CorteService = {
   async hasTodayCorte(): Promise<boolean> {
     const corte = await this.getTodayCorte()
     return corte !== null
+  },
+
+  /** Último cierre registrado antes del día calendario actual (para apertura automática). */
+  async getPreviousCorteForApertura(): Promise<CorteRecord | null> {
+    const today = toDateKey(new Date())
+    const cortes = await this.getAllCortes()
+    for (const corte of cortes) {
+      const key = corte.dateKey || (corte.createdAt ? toDateKey(new Date(corte.createdAt)) : '')
+      if (key && key < today) return corte
+    }
+    return null
   },
 
   async getAllCortes(): Promise<CorteRecord[]> {
