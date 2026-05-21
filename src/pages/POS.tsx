@@ -586,7 +586,7 @@ export default function POS() {
 
   if (cajaOpen === null) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+      <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="pos" />
         <main className="flex-1 flex items-center justify-center pt-20 md:pt-0">
           <p className="text-gray-500 dark:text-gray-400 animate-pulse">Verificando estado de caja…</p>
@@ -597,7 +597,7 @@ export default function POS() {
 
   if (!cajaOpen) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+      <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="pos" />
         <main className="flex-1 flex items-center justify-center p-6 pt-20 md:pt-6">
           <div className="max-w-md text-center">
@@ -713,7 +713,7 @@ export default function POS() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+    <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="pos" />
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0">

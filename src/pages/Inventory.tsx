@@ -131,7 +131,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+    <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="inventario" />
 
       <main className="flex-1 overflow-auto md:p-8 p-4 pt-20 md:pt-0">

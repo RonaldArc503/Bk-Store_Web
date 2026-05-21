@@ -1507,7 +1507,7 @@ export default function CorteDeCaja() {
 
   if (!state.isCajaOpen) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+      <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
         <Sidebar activeItem="corte" />
         <div className="flex-1 p-4 md:p-8 pt-20 md:pt-8 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-4 md:pb-6 gap-4">
@@ -1611,7 +1611,7 @@ export default function CorteDeCaja() {
     : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+    <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="corte" />
       <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8">
         <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">

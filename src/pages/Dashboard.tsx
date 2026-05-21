@@ -385,7 +385,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+    <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="dashboard" />
 
       <main className="flex-1 overflow-auto p-4 pt-20 md:pt-6 md:p-6 lg:p-8">

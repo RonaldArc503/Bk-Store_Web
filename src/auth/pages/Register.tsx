@@ -61,7 +61,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen app-page-bg flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-transparent dark:border-gray-800 p-8 w-full max-w-md">
         {/* Logo Section */}
         <div className="flex flex-col items-center mb-8">

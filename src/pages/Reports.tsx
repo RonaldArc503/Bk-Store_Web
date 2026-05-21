@@ -1018,7 +1018,7 @@ export default function Reports() {
   const activeReport = REPORT_TYPES.find((r) => r.id === selectedReport)!;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
+    <div className="min-h-screen app-page-bg text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
       <Sidebar activeItem="reportes" />
 
       <main className="flex-1 p-4 md:p-6 pt-20 md:pt-6 space-y-5">

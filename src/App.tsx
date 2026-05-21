@@ -98,7 +98,7 @@ function AppContent() {
   ])
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950">
+    <div className="min-h-screen app-page-bg">
       <Suspense fallback={<Loader />}>
         <Routes>
           {routes.map((route) => (

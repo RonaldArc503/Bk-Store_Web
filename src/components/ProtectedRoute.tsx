@@ -68,7 +68,7 @@ export function ProtectedRoute({
     )
 
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 md:flex">
+      <div className="min-h-screen app-page-bg md:flex">
         <Sidebar />
         <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8">
           <div className="max-w-2xl rounded-xl border border-amber-200 dark:border-amber-900/60 bg-white dark:bg-gray-900 p-6">

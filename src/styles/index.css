@@ -28,5 +28,11 @@
     /* ocultar elementos no deseados */
     .no-print, header, nav, .sidebar { display: none !important; }
   }
+}
 
+@layer utilities {
+  /* Fondo de páginas en tema claro: más contraste con tarjetas blancas */
+  .app-page-bg {
+    @apply bg-gray-100 dark:bg-gray-950;
+  }
 }
