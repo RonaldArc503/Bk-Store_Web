@@ -5,4 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: process.env.DEPLOY_TARGET === 'github' ? '/Bk-Store_Web/' : '/',
+  build: {
+    sourcemap: false,
+  },
 })

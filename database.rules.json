@@ -3,7 +3,7 @@
     ".read": false,
     ".write": false,
     "userAuthIndex": {
-      ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('users').val() === true || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))",
+      ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('users').val() === true)",
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('users').val() === true)",
         ".write": "auth != null && (auth.uid === $uid || root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('users').val() === true)"
@@ -18,61 +18,65 @@
     "orders": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')",
       "$orderId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true)"
       }
     },
     "inventario": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')",
       "$itemId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')"
       }
     },
     "productos": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')",
       "$productId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')"
       }
     },
     "movimientos": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true)",
       "$movementId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('inventory').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true)"
       }
     },
     "cajas": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true)",
       "$cajaId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')"
       }
     },
     "userActiveCaja": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')",
       "$userId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')"
       }
     },
     "cortes": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true)",
       "$corteId": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full')"
       }
     },
     "cortesByDate": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'view' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true)",
       "$dateKey": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('corte').val() === 'full')"
       }
     },
     "devoluciones": {
       ".read": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full')",
       "$id": {
-        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('data').val() === true))"
+        ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('pos').val() === 'full' || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('reports').val() === true || root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('dashboard').val() === true)"
       }
     },
     "settings": {
       ".read": "auth != null",
       "catalog": {
         ".write": "auth != null && (root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador' || (root.child('userAuthIndex').child(auth.uid).child('permissions').child('modules').child('configuracion').val() === true && root.child('userAuthIndex').child(auth.uid).child('permissions').child('configSections').child('inventory').val() === true))"
+      },
+      "backupAutomation": {
+        ".read": "auth != null && root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador'",
+        ".write": "auth != null && root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador'"
       }
     },
     "sesiones": {
