@@ -15,10 +15,15 @@
   Pencil,
   Check,
   X,
+  Sparkles,
+  Upload,
 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
+import { AppBrandMark } from '../components/AppBrandLogo'
 import { useTheme } from '../context/ThemeContext'
 import { useSettings, type InventoryCatalogItem, type StoreSettings } from '../context/SettingsContext'
+import { BRAND_PRESET_OPTIONS, MAX_BRAND_IMAGE_BYTES, getResolvedBranding } from '../constants/branding'
+import { BrandingService } from '../services/BrandingService'
 import { useAuth } from '../hooks/useAuth'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
@@ -881,11 +886,162 @@ function DataSection({
   )
 }
 
+function BrandingSection() {
+  const { settings, updateBranding } = useSettings()
+  const branding = getResolvedBranding(settings)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  const handleImageUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecciona un archivo de imagen valido')
+      return
+    }
+    if (file.size > MAX_BRAND_IMAGE_BYTES) {
+      toast.error('La imagen no puede superar 5 MB')
+      return
+    }
+
+    setUploading(true)
+    try {
+      if (branding.customImageUrl) {
+        await BrandingService.deleteBrandImageByUrl(branding.customImageUrl)
+      }
+      const url = await BrandingService.uploadBrandImage(file)
+      updateBranding({ iconMode: 'custom', customImageUrl: url })
+      toast.success('Logo actualizado')
+    } catch (error) {
+      console.error(error)
+      toast.error('No se pudo subir la imagen')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <SettingsSection
+      icon={<Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400" />}
+      title="Marca del sistema"
+    >
+      <SettingCard>
+        <div className="p-5 border-b border-gray-50 dark:border-gray-800">
+          <p className="text-sm font-medium text-gray-900 dark:text-white mb-3">Vista previa</p>
+          <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 p-4">
+            <AppBrandMark
+              titleClassName="font-bold text-gray-900 dark:text-white"
+              subtitleClassName="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
+            />
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4 border-b border-gray-50 dark:border-gray-800">
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1.5">
+              Nombre del sistema
+            </label>
+            <input
+              type="text"
+              value={branding.appName}
+              onChange={(e) => updateBranding({ appName: e.target.value })}
+              maxLength={60}
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              placeholder="Nombre de tu tienda"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1.5">
+              Subtitulo
+            </label>
+            <input
+              type="text"
+              value={branding.subtitle}
+              onChange={(e) => updateBranding({ subtitle: e.target.value })}
+              maxLength={120}
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              placeholder="Sistema de Inventario y Punto de Venta"
+            />
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4 border-b border-gray-50 dark:border-gray-800">
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">Iconos por defecto</p>
+            <div className="grid grid-cols-5 gap-2">
+              {BRAND_PRESET_OPTIONS.map((option) => {
+                const Icon = option.icon
+                const selected = branding.iconMode === 'preset' && branding.presetIcon === option.id
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => updateBranding({ iconMode: 'preset', presetIcon: option.id })}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 transition ${
+                      selected
+                        ? 'border-lime-500 bg-lime-50 dark:bg-lime-950/30'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-lime-300 dark:hover:border-lime-700'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-lime-500 to-lime-600 dark:from-lime-600 dark:to-lime-700 flex items-center justify-center">
+                      <Icon className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-[10px] text-gray-600 dark:text-gray-300">{option.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">Imagen personalizada</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              PNG, JPG o WEBP. Maximo 5 MB. Se muestra en login, menu e impresiones.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void handleImageUpload(file)
+              }}
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-lime-600 hover:bg-lime-700 text-white transition disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                {uploading ? 'Subiendo...' : 'Subir imagen'}
+              </button>
+              {branding.iconMode === 'custom' && branding.customImageUrl ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void BrandingService.deleteBrandImageByUrl(branding.customImageUrl)
+                    updateBranding({ iconMode: 'preset', customImageUrl: '' })
+                  }}
+                  className="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Quitar imagen
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </SettingCard>
+    </SettingsSection>
+  )
+}
+
 /* --- Pagina principal --- */
 
 export default function ConfiguracionPage() {
   const { settings, resetSettings, lastSavedAt, updateBackupAutomation } = useSettings()
-  const { hasConfigSectionAccess } = useAuth()
+  const { hasConfigSectionAccess, systemUser } = useAuth()
   const [showReset, setShowReset] = useState(false)
   const [clearSystemStep, setClearSystemStep] = useState<'none' | 'review' | 'final'>('none')
   const [clearSystemAck, setClearSystemAck] = useState(false)
@@ -901,8 +1057,9 @@ export default function ConfiguracionPage() {
   const canViewInventory = hasConfigSectionAccess('inventory')
   const canViewPrinting = hasConfigSectionAccess('printing')
   const canViewData = hasConfigSectionAccess('data')
+  const canViewBranding = systemUser?.rol === 'Administrador'
   const hasVisibleSections =
-    canViewNotifications || canViewInterface || canViewInventory || canViewPrinting || canViewData
+    canViewNotifications || canViewInterface || canViewInventory || canViewPrinting || canViewData || canViewBranding
 
   useEffect(() => {
     setSavedPulse(true)
@@ -1024,6 +1181,7 @@ export default function ConfiguracionPage() {
                 No tienes secciones habilitadas en Configuracion.
               </div>
             )}
+            {canViewBranding && <BrandingSection />}
             {canViewInterface && (
               <>
                 <ThemeSection />

@@ -26,6 +26,7 @@ import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } fro
 import { UserService } from "../services/UserService";
 import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../context/SettingsContext";
+import { getResolvedBranding } from "../constants/branding";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,6 +182,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const { settings } = useSettings();
+  const branding = getResolvedBranding(settings);
   const { user } = useAuth();
 
   const [showDevolucion, setShowDevolucion] = useState(false);
@@ -472,7 +474,7 @@ export default function Reports() {
     // Header
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("Bikini Store", 105, 18, { align: "center" });
+    doc.text(branding.appName, 105, 18, { align: "center" });
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text("Calle Principal #123, San Salvador | Tel: 2222-2222", 105, 24, {
@@ -658,7 +660,7 @@ export default function Reports() {
     let y = 8;
 
     doc.setFontSize(paperSize === "58mm" ? 10 : 14); doc.setFont("helvetica", "bold");
-    doc.text("Bikini Store", center, y, { align: "center" }); y += 4;
+    doc.text(branding.appName, center, y, { align: "center" }); y += 4;
     doc.setFontSize(fs); doc.setFont("helvetica", "normal");
     doc.text("Sistema de Punto de Venta", center, y, { align: "center" }); y += 5;
 

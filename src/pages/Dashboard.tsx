@@ -20,6 +20,7 @@ import {
 import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } from '../utils/orderTotals'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
+import { getResolvedBranding } from '../constants/branding'
 import type { InventoryStats } from '../types/product'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
@@ -43,6 +44,7 @@ type OrderRecord = {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const branding = getResolvedBranding(settings)
   const lowStockThreshold = settings.inventory.lowStockThreshold
   const currency = 'MXN'
 
@@ -316,9 +318,13 @@ export default function Dashboard() {
     let y = 8
 
     doc.setFontSize(paperSize === '58mm' ? 10 : 14); doc.setFont('helvetica', 'bold')
-    doc.text('Bikini Store', center, y, { align: 'center' }); y += 4
+    doc.text(branding.appName, center, y, { align: 'center' }); y += 4
     doc.setFontSize(fs); doc.setFont('helvetica', 'normal')
-    doc.text('Sistema de Punto de Venta', center, y, { align: 'center' }); y += 5
+    if (branding.subtitle) {
+      doc.text(branding.subtitle, center, y, { align: 'center' }); y += 5
+    } else {
+      y += 1
+    }
 
     doc.text(`Doc N°: ${getTicket(order.id)}`, left, y)
     doc.text('Caja: 1', right, y, { align: 'right' }); y += 3.5

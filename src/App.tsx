@@ -9,6 +9,7 @@ import { initializeDemoData, ensureDemoAuthAccounts } from './utils/initDemo'
 import { useSettings } from './context/SettingsContext'
 import { MaintenanceService } from './services/MaintenanceService'
 import { toast } from 'react-toastify'
+import { BrandingDocumentHead } from './components/BrandingDocumentHead'
 
 function AppContent() {
   const { isAuthenticated, authReady, hasModuleAccess, systemUser } = useAuth()
@@ -101,6 +102,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen app-page-bg">
+      <BrandingDocumentHead />
       <Suspense fallback={<Loader />}>
         <Routes>
           {routes.map((route) => (

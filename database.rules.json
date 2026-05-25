@@ -84,6 +84,10 @@
       "backupAutomation": {
         ".read": "auth != null && root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador'",
         ".write": "auth != null && root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador'"
+      },
+      "branding": {
+        ".read": true,
+        ".write": "auth != null && root.child('userAuthIndex').child(auth.uid).child('role').val() === 'Administrador'"
       }
     },
     "sesiones": {

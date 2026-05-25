@@ -28,6 +28,7 @@ import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
 import { UserService } from '../services/UserService'
 import { useSettings } from '../context/SettingsContext'
+import { getResolvedBranding, getPresetIconComponent } from '../constants/branding'
 import { calculateLineTotal } from '../utils/posPricing'
 
 type ProductDB = {
@@ -50,6 +51,7 @@ type CartItemLocal = ProductDB & { quantity: number }
 export default function POS() {
   const { user, authReady } = useAuth()
   const { settings } = useSettings()
+  const branding = getResolvedBranding(settings)
   const navigate = useNavigate()
 
   const [cart, setCart] = useState<CartItemLocal[]>([])
@@ -1078,9 +1080,24 @@ export default function POS() {
               <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm text-xs">
                 {/* Header */}
                 <div className="text-center mb-4">
-                  <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2"><Store size={20} /></div>
-                  <h2 className="text-sm font-bold uppercase text-gray-900 dark:text-white">Bikini Store</h2>
-                  <p className="text-sm uppercase text-gray-400 dark:text-gray-500 mt-0.5">Sistema de Punto de Venta</p>
+                  {branding.iconMode === 'custom' && branding.customImageUrl ? (
+                    <img
+                      src={branding.customImageUrl}
+                      alt={branding.appName}
+                      className="w-11 h-11 rounded-xl object-cover mx-auto mb-2"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2">
+                      {(() => {
+                        const BrandIcon = getPresetIconComponent(branding.presetIcon)
+                        return <BrandIcon size={20} />
+                      })()}
+                    </div>
+                  )}
+                  <h2 className="text-sm font-bold uppercase text-gray-900 dark:text-white">{branding.appName}</h2>
+                  {branding.subtitle ? (
+                    <p className="text-sm uppercase text-gray-400 dark:text-gray-500 mt-0.5">{branding.subtitle}</p>
+                  ) : null}
                 </div>
 
                 {/* Info */}

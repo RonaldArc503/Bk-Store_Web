@@ -35,6 +35,7 @@ import {
 import { toast } from "react-toastify";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useSettings } from "../context/SettingsContext";
+import { getResolvedBranding } from "../constants/branding";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -911,6 +912,8 @@ function DayDetailModal({ day, onClose }: { day: TimelineDayGroup | null; onClos
 }
 
 function PrintVoucher({ corte, onClose }: { corte: CorteRecord; onClose: () => void }) {
+  const { settings } = useSettings();
+  const branding = getResolvedBranding(settings);
   const doc = new jsPDF();
   const diff = (corte.efectivoContado ?? 0) - (corte.esperadoEfectivo ?? 0);
 
@@ -918,7 +921,7 @@ function PrintVoucher({ corte, onClose }: { corte: CorteRecord; onClose: () => v
   doc.setFont("helvetica", "bold");
   doc.text("Comprobante de Cierre de Caja", 105, 20, { align: "center" });
   doc.setFontSize(10);
-  doc.text("Bikini Store", 105, 30, { align: "center" });
+  doc.text(branding.appName, 105, 30, { align: "center" });
   doc.text(`Fecha: ${formatDateFull(corte.createdAt)} ${formatTime(corte.createdAt)}`, 105, 38, { align: "center" });
   doc.line(20, 45, 190, 45);
 

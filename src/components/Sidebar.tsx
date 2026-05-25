@@ -14,7 +14,9 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
+import { AppBrandLogo, AppBrandMark } from './AppBrandLogo'
 import { useState, useEffect } from 'react'
+import { getResolvedBranding } from '../constants/branding'
 import type { ModuleKey } from '../auth/permissions'
 
 interface SidebarProps {
@@ -44,6 +46,7 @@ export function Sidebar({ activeItem }: SidebarProps) {
   const location = useLocation()
   const { logout, hasModuleAccess } = useAuth()
   const { settings, updateUI } = useSettings()
+  const branding = getResolvedBranding(settings)
   const isCollapsed = settings.ui.sidebarCollapsed
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
@@ -99,17 +102,11 @@ export function Sidebar({ activeItem }: SidebarProps) {
             isCollapsed ? 'py-4' : 'p-6'
           }`}
         >
-          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-            <div className="w-10 h-10 bg-gradient-to-br from-lime-500 to-lime-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-              <ShoppingCart className="w-5 h-5 text-white" />
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0 flex-1">
-                <h1 className="font-bold text-gray-900 dark:text-white truncate">Bikini Store</h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Sistema de Inventario</p>
-              </div>
-            )}
-          </div>
+          <AppBrandMark
+            collapsed={isCollapsed}
+            titleClassName="font-bold text-gray-900 dark:text-white truncate"
+            subtitleClassName="text-xs text-gray-500 dark:text-gray-400 truncate"
+          />
         </div>
 
         {/* Toggle Button */}
@@ -183,11 +180,9 @@ export function Sidebar({ activeItem }: SidebarProps) {
       {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-50">
         <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-lime-500 to-lime-600 rounded-lg flex items-center justify-center shadow-md">
-              <ShoppingCart className="w-4 h-4 text-white" />
-            </div>
-            <h1 className="font-bold text-gray-900 dark:text-white">Bikini Store</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <AppBrandLogo size="sm" withShadow={false} />
+            <h1 className="font-bold text-gray-900 dark:text-white truncate">{branding.appName}</h1>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

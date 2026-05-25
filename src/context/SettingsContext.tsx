@@ -8,6 +8,8 @@ import {
 } from 'react'
 import { CatalogService } from '../services/CatalogService'
 import { SettingsSyncService } from '../services/SettingsSyncService'
+import { BrandingService } from '../services/BrandingService'
+import { DEFAULT_BRANDING, normalizeBranding, type StoreBranding } from '../constants/branding'
 
 export interface InventoryCatalogItem {
   id: string
@@ -37,6 +39,7 @@ export interface StoreSettings {
   ui: {
     sidebarCollapsed: boolean
   }
+  branding: StoreBranding
   backupAutomation: {
     enabled: boolean
     scheduleType: 'monthly' | 'weekly'
@@ -70,6 +73,7 @@ const defaultSettings: StoreSettings = {
   ui: {
     sidebarCollapsed: false,
   },
+  branding: { ...DEFAULT_BRANDING },
   backupAutomation: {
     enabled: false,
     scheduleType: 'monthly',
@@ -150,6 +154,7 @@ function loadSettings(): StoreSettings {
       inventory: { ...mergedInventory, productTypes, materials },
       printing: { ...defaultSettings.printing, ...(parsed.printing || {}) },
       ui: { ...defaultSettings.ui, ...(parsed.ui || {}) },
+      branding: normalizeBranding(parsed.branding ?? defaultSettings.branding),
       backupAutomation: {
         ...defaultSettings.backupAutomation,
         ...((parsed as { backupAutomation?: Partial<StoreSettings['backupAutomation']> }).backupAutomation || {}),
@@ -174,6 +179,7 @@ interface SettingsContextValue {
   updateInventoryCatalog: (key: 'productTypes' | 'materials', next: InventoryCatalogItem[]) => void
   updatePrinting: (patch: Partial<StoreSettings['printing']>) => void
   updateUI: (patch: Partial<StoreSettings['ui']>) => void
+  updateBranding: (patch: Partial<StoreBranding>) => void
   updateBackupAutomation: (patch: Partial<StoreSettings['backupAutomation']>) => void
   undoLastChange: () => void
   resetSettings: () => void
@@ -192,12 +198,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setLastSavedAt(Date.now())
     ;(async () => {
       try {
-        const [remoteCatalog, remoteBackupAutomation] = await Promise.all([
+        const [remoteCatalog, remoteBackupAutomation, remoteBranding] = await Promise.all([
           CatalogService.getCatalog(),
           SettingsSyncService.getBackupAutomation(),
+          BrandingService.getBranding(),
         ])
 
-        if (!remoteCatalog && !remoteBackupAutomation) return
+        if (!remoteCatalog && !remoteBackupAutomation && !remoteBranding) return
 
         setSettings((prev) => {
           const next: StoreSettings = {
@@ -213,6 +220,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                   ? remoteCatalog.materials
                   : prev.inventory.materials,
             },
+            branding: remoteBranding ? { ...prev.branding, ...remoteBranding } : prev.branding,
             backupAutomation: remoteBackupAutomation
               ? {
                   ...prev.backupAutomation,
@@ -324,6 +332,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const updateBranding = useCallback(
+    (patch: Partial<StoreBranding>) => {
+      setSettings((prev) => {
+        setUndoSnapshot(prev)
+        const nextBranding = normalizeBranding({ ...prev.branding, ...patch })
+        const next = { ...prev, branding: nextBranding }
+        persist(next)
+        setLastSavedAt(Date.now())
+        BrandingService.setBranding(nextBranding).catch(() => {})
+        return next
+      })
+    },
+    [],
+  )
+
   const updateBackupAutomation = useCallback(
     (patch: Partial<StoreSettings['backupAutomation']>) => {
       setSettings((prev) => {
@@ -356,6 +379,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setLastSavedAt(Date.now())
     CatalogService.setCatalog({ productTypes: [], materials: [] }).catch(() => {})
     SettingsSyncService.setBackupAutomation(defaultSettings.backupAutomation).catch(() => {})
+    BrandingService.setBranding(defaultSettings.branding).catch(() => {})
   }, [])
 
   return (
@@ -370,6 +394,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateInventoryCatalog,
         updatePrinting,
         updateUI,
+        updateBranding,
         updateBackupAutomation,
         undoLastChange,
         resetSettings,

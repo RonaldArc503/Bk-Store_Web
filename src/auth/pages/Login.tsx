@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { ShoppingCart, Loader } from 'lucide-react'
+import { Loader } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { loginEmail } from '../auth.service'
+import { AppBrandLogo } from '../../components/AppBrandLogo'
+import { useSettings } from '../../context/SettingsContext'
+import { getResolvedBranding } from '../../constants/branding'
 
 function getLoginErrorMessage(err: unknown): string {
   if (err instanceof Error && err.message === 'Credenciales invalidas') {
@@ -43,6 +46,8 @@ function getLoginErrorMessage(err: unknown): string {
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
+  const { settings } = useSettings()
+  const branding = getResolvedBranding(settings)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -69,14 +74,12 @@ export default function LoginPage() {
     <div className="min-h-screen app-page-bg flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-transparent dark:border-gray-800 p-8 w-full max-w-md">
         {/* Logo Section */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-lime-500 rounded-full flex items-center justify-center mb-4">
-            <ShoppingCart className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bikini Store</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            Sistema de Inventario y Punto de Venta
-          </p>
+        <div className="flex flex-col items-center mb-8 text-center">
+          <AppBrandLogo size="lg" className="mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{branding.appName}</h1>
+          {branding.subtitle ? (
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{branding.subtitle}</p>
+          ) : null}
         </div>
 
         {/* Form Section */}
