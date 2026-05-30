@@ -32,6 +32,16 @@ import { UserService } from '../services/UserService'
 import { useSettings } from '../context/SettingsContext'
 import { getResolvedBranding, getPresetIconComponent } from '../constants/branding'
 import { calculateLineTotal } from '../utils/posPricing'
+import {
+  getPaperTailwindWidthClass,
+  getPaperWidthCss,
+  getPaperWidthMm,
+  getThermalFontSize,
+  getThermalLineHeight,
+  getThermalTicketMaxNameLen,
+  isLetterPaper,
+  type PaperSize,
+} from '../utils/printPaperSize'
 
 type ProductDB = {
   id: string
@@ -170,10 +180,10 @@ function TicketPrintContent({
   )
 }
 
-function estimateTicketPdfHeight(orderInfo: any, paperSize: string): number {
+function estimateTicketPdfHeight(orderInfo: any, paperSize: PaperSize): number {
   if (paperSize === 'letter') return 279
   const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
-  const lineHeight = paperSize === '58mm' ? 4 : 5
+  const lineHeight = getThermalLineHeight(paperSize)
   let y = 8 + 6 + 3.5 + 3.5 + 4 + 3 + 3 + 2 + 3
   y += items.length * lineHeight + 1 + 3.5
   y += 3.5 + 3.5 + 3 + 4 + 5
@@ -245,9 +255,9 @@ export default function POS() {
     }
 
     const paperSize = settings.printing.paperSize
-    const width = paperSize === '58mm' ? '58mm' : paperSize === '80mm' ? '80mm' : '216mm'
-    const margin = paperSize === 'letter' ? '10mm' : '2mm'
-    const pageSize = paperSize === 'letter' ? 'letter' : `${width} auto`
+    const width = getPaperWidthCss(paperSize)
+    const margin = isLetterPaper(paperSize) ? '10mm' : '2mm'
+    const pageSize = isLetterPaper(paperSize) ? 'letter' : `${width} auto`
 
     styleEl.textContent = `
 @media print {
@@ -609,17 +619,17 @@ export default function POS() {
     if (!orderInfo) return null
 
     const paperSize = settings.printing.paperSize
-    const width = paperSize === '58mm' ? 58 : paperSize === '80mm' ? 80 : 216
-    const isLetter = paperSize === 'letter'
+    const width = getPaperWidthMm(paperSize)
+    const isLetter = isLetterPaper(paperSize)
     const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
-    const lineHeight = paperSize === '58mm' ? 4 : 5
+    const lineHeight = getThermalLineHeight(paperSize)
     const height = estimateTicketPdfHeight(orderInfo, paperSize)
 
     const doc = new jsPDF({ unit: 'mm', format: isLetter ? 'letter' : [width, height] })
     const left = 4
     const right = isLetter ? 200 : width - 4
     const center = (left + right) / 2
-    const fs = paperSize === '58mm' ? 6 : 7
+    const fs = getThermalFontSize(paperSize)
     let y = 8
 
     doc.setFontSize(fs + 1)
@@ -667,7 +677,7 @@ export default function POS() {
       const qty = Number(item.quantity || 0)
       const lineTotal = Number(item.lineTotal || 0)
       const unitPrice = qty > 0 ? lineTotal / qty : 0
-      const maxNameLen = paperSize === '58mm' ? 18 : 36
+      const maxNameLen = getThermalTicketMaxNameLen(paperSize)
       const displayName = name.length > maxNameLen ? name.substring(0, maxNameLen - 1) + '…' : name
 
       doc.text(String(qty), colQty, y)
@@ -796,12 +806,7 @@ export default function POS() {
     )
   }
 
-  const ticketPrintWidthClass =
-    settings.printing.paperSize === '58mm'
-      ? 'w-[58mm]'
-      : settings.printing.paperSize === '80mm'
-        ? 'w-[80mm]'
-        : 'w-[216mm]'
+  const ticketPrintWidthClass = getPaperTailwindWidthClass(settings.printing.paperSize)
 
   const cartContent = (
     <>

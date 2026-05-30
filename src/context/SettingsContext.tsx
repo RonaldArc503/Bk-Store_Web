@@ -10,6 +10,7 @@ import { CatalogService } from '../services/CatalogService'
 import { SettingsSyncService } from '../services/SettingsSyncService'
 import { BrandingService } from '../services/BrandingService'
 import { DEFAULT_BRANDING, normalizeBranding, type StoreBranding } from '../constants/branding'
+import type { PaperSize } from '../utils/printPaperSize'
 
 export interface InventoryCatalogItem {
   id: string
@@ -34,7 +35,7 @@ export interface StoreSettings {
   }
   printing: {
     autoPrint: boolean
-    paperSize: '58mm' | '80mm' | 'letter'
+    paperSize: PaperSize
   }
   ui: {
     sidebarCollapsed: boolean

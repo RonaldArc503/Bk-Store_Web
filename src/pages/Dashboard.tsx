@@ -21,6 +21,15 @@ import { getOrderDevuelto, getOrderEffectiveTotal, sumOrderEffectiveTotals } fro
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../context/SettingsContext'
 import { getResolvedBranding } from '../constants/branding'
+import {
+  getPaperWidthMm,
+  getReportMaxNameLen,
+  getReportTitleFontSize,
+  getReportTotalFontSize,
+  getThermalFontSize,
+  getThermalLineHeight,
+  isLetterPaper,
+} from '../utils/printPaperSize'
 import type { InventoryStats } from '../types/product'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
@@ -307,17 +316,17 @@ export default function Dashboard() {
   /* ─── PDF ─── */
   const downloadOrderReceiptPdf = (order: OrderRecord) => {
     const paperSize = settings.printing.paperSize
-    const width = paperSize === '58mm' ? 58 : paperSize === '80mm' ? 80 : 216
-    const isLetter = paperSize === 'letter'
+    const width = getPaperWidthMm(paperSize)
+    const isLetter = isLetterPaper(paperSize)
     const items = Array.isArray(order.items) ? order.items : []
-    const lh = paperSize === '58mm' ? 4 : 5
+    const lh = getThermalLineHeight(paperSize)
     const height = isLetter ? 279 : Math.max(140, 90 + items.length * (lh * 2) + 60)
     const doc = new jsPDF({ unit: 'mm', format: isLetter ? 'letter' : [width, height] })
     const left = 4; const right = isLetter ? 200 : width - 4; const center = (left + right) / 2
-    const fs = paperSize === '58mm' ? 6 : 7
+    const fs = getThermalFontSize(paperSize)
     let y = 8
 
-    doc.setFontSize(paperSize === '58mm' ? 10 : 14); doc.setFont('helvetica', 'bold')
+    doc.setFontSize(getReportTitleFontSize(paperSize)); doc.setFont('helvetica', 'bold')
     doc.text(branding.appName, center, y, { align: 'center' }); y += 4
     doc.setFontSize(fs); doc.setFont('helvetica', 'normal')
     if (branding.subtitle) {
@@ -338,7 +347,7 @@ export default function Dashboard() {
     y += 2; doc.setLineWidth(0.15); doc.line(left, y, right, y); y += 3
 
     doc.setFont('helvetica', 'normal'); doc.setFontSize(fs)
-    const maxNameLen = paperSize === '58mm' ? 22 : 30
+    const maxNameLen = getReportMaxNameLen(paperSize)
     items.forEach((item) => {
       const qty = getItemQuantity(item)
       const name = getItemName(item)
@@ -363,7 +372,7 @@ export default function Dashboard() {
     doc.text('IVA 13%:', left, y); doc.text(`$${iva.toFixed(2)}`, right, y, { align: 'right' }); y += 3
     doc.setLineWidth(0.4); doc.line(left, y, right, y); y += 4
 
-    doc.setFontSize(paperSize === '58mm' ? 9 : 11); doc.setFont('helvetica', 'bold')
+    doc.setFontSize(getReportTotalFontSize(paperSize)); doc.setFont('helvetica', 'bold')
     doc.text('TOTAL:', left, y); doc.text(`$${total.toFixed(2)}`, right, y, { align: 'right' }); y += 5
 
     doc.setFontSize(fs); doc.setFont('helvetica', 'normal')

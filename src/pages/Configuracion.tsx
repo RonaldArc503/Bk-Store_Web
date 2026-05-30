@@ -30,6 +30,7 @@ import { toast } from 'react-toastify'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
+import { PAPER_SIZE_OPTIONS, type PaperSize } from '../utils/printPaperSize'
 import type { Producto } from '../types/product'
 
 /* --- Toggle switch reutilizable --- */
@@ -666,12 +667,8 @@ function PrintingSection() {
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica" border={false}>
           <Select
             value={printing.paperSize}
-            onChange={(v) => updatePrinting({ paperSize: v })}
-            options={[
-              { value: '58mm', label: 'Térmico 58 mm' },
-              { value: '80mm', label: 'Térmico 80 mm' },
-              { value: 'letter', label: 'Carta' },
-            ]}
+            onChange={(v) => updatePrinting({ paperSize: v as PaperSize })}
+            options={PAPER_SIZE_OPTIONS}
           />
         </SettingRow>
       </SettingCard>
