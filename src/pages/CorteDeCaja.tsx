@@ -324,6 +324,9 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
 /* ────────────────────────────────────────────────────────────────────────── */
 
 function AperturaForm({ state, dispatch, onSave }: any) {
+  const aperturaMonto = parseFloat(state.aperturaMonto || '0')
+  const isAperturaInvalid = !state.aperturaMonto || aperturaMonto < 100 || !state.aperturaUsuario.trim()
+
   return (
     <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -343,11 +346,13 @@ function AperturaForm({ state, dispatch, onSave }: any) {
         <div>
           <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Monto de Apertura *</label>
           <input
-            type="number" min="0" step="0.01"
+            type="number"
+            min="100"
+            step="0.01"
             className="w-full p-2 md:p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-xl md:text-2xl font-bold text-lime-600 bg-white dark:bg-gray-800"
             value={state.aperturaMonto}
             onChange={(e) => dispatch({ type: "SET_APERTURA_MONTO", payload: e.target.value })}
-            placeholder="0.00"
+            placeholder="100.00"
             disabled={state.isAperturaSaved || state.aperturaAuto}
           />
         </div>
@@ -388,7 +393,7 @@ function AperturaForm({ state, dispatch, onSave }: any) {
         ) : !state.isAperturaSaved ? (
           <button
             onClick={onSave}
-            disabled={!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0 || !state.aperturaUsuario.trim()}
+            disabled={isAperturaInvalid}
             className="px-4 py-2 bg-lime-500 text-white rounded-lg hover:bg-lime-600 transition disabled:opacity-50"
           >
             Guardar Apertura
@@ -1168,7 +1173,11 @@ export default function CorteDeCaja() {
     if (!canManageCaja) { toast.error("No tienes permisos para abrir la caja"); return; }
     if (state.isAperturaSaved) { toast.info("Apertura ya guardada"); return; }
     if (state.todayClosed) { toast.warning("Ya se realizó un cierre hoy."); return; }
-    if (!state.aperturaMonto || parseFloat(state.aperturaMonto) <= 0) { toast.warning("Ingrese un monto de apertura válido"); return; }
+    const montoApertura = parseFloat(state.aperturaMonto)
+    if (!state.aperturaMonto || !Number.isFinite(montoApertura) || montoApertura < 100) {
+      toast.warning("El monto de apertura mínimo es de $100.00")
+      return
+    }
     if (!state.aperturaUsuario.trim()) { toast.warning("El nombre del usuario responsable es obligatorio"); return; }
     try {
       await CajaService.closeStaleOpenCajas();
@@ -1198,7 +1207,7 @@ export default function CorteDeCaja() {
 
       const now = new Date();
       const aperturaInfo = {
-        monto: parseFloat(state.aperturaMonto),
+        monto: montoApertura,
         fecha: state.aperturaFecha ? new Date(state.aperturaFecha).toISOString() : now.toISOString(),
         usuario: state.aperturaUsuario.trim(),
         createdBy: user?.uid,

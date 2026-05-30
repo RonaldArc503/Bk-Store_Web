@@ -3,6 +3,7 @@ import { database } from '../app/firebase'
 
 const CAJAS_PATH = 'cajas'
 const USER_ACTIVE_PATH = 'userActiveCaja'
+const MIN_CAJA_OPENING_AMOUNT = 100
 
 /** Clave YYYY-MM-DD en zona horaria local */
 export function getLocalDateKey(date: Date = new Date()): string {
@@ -35,13 +36,18 @@ export const CajaService = {
     auto?: boolean
   }) {
     try {
+      const monto = Number(aperturaInfo.monto)
+      if (!Number.isFinite(monto) || monto < MIN_CAJA_OPENING_AMOUNT) {
+        throw new Error(`El monto de apertura debe ser de al menos $${MIN_CAJA_OPENING_AMOUNT.toFixed(2)}`)
+      }
+
       const cajasRef = ref(database, CAJAS_PATH)
       const newRef = push(cajasRef)
       const id = newRef.key || Math.random().toString(36).substr(2, 9)
 
       // Build apertura without undefined fields (Firebase rejects undefined values)
       const apertura: Record<string, any> = {
-        monto: aperturaInfo.monto,
+        monto,
         fecha: aperturaInfo.fecha,
         usuario: aperturaInfo.usuario,
       }

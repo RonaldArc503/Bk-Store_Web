@@ -19,8 +19,17 @@ import { database } from "../app/firebase"
 import type { Producto, Inventario, CreateInventarioInput, UpdateInventarioInput, Product, CreateProductInput, UpdateProductInput, InventoryStats } from '../types/product'
 import { ProductService } from './ProductService'
 import { MovimientosService } from './MovimientosService'
+import { OrderService } from './OrderService'
+import { DevolucionService } from './DevolucionService'
 
 const INVENTARIO_PATH = 'inventario'
+
+export interface ProductDeletionCheck {
+  canDelete: boolean
+  hasSales: boolean
+  hasMovements: boolean
+  hasDevolutions: boolean
+}
 
 const toNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
@@ -360,6 +369,7 @@ export const InventoryService = {
           material: p.material,
           materialId: (p as any).materialId,
           genero: p.genero,
+          estado: p.estado,
           stock: inv?.stock || 0,
           costo: inv?.costo || 0,
           precioUnitario: inv?.precioUnitario || 0,
@@ -398,6 +408,49 @@ export const InventoryService = {
 
   generateBarcode(): string {
     return ProductService.generateBarcode()
+  },
+
+  async getProductDeletionCheck(productId: string): Promise<ProductDeletionCheck> {
+    try {
+      const [orders, movements, devolutions] = await Promise.all([
+        OrderService.getAllOrders(),
+        MovimientosService.getMovimientos(),
+        DevolucionService.getAllDevoluciones(),
+      ])
+
+      const hasSales = orders.some((order) => {
+        const items = Array.isArray(order?.items) ? order.items : []
+        return items.some((item: any) => {
+          const itemId = String(item?.id ?? item?.productId ?? item?.productoId ?? '').trim()
+          return itemId === productId
+        })
+      })
+
+      // Exclude initial stock registrations from blocking deletion (motivo 'stock inicial')
+      const hasMovements = movements.some((movement) =>
+        movement.productoId === productId && String(movement.motivo ?? '').trim().toLowerCase() !== 'stock inicial'
+      )
+
+      const hasDevolutions = devolutions.some((devolution: any) => {
+        const items = Array.isArray(devolution?.items) ? devolution.items : []
+        return items.some((item: any) => String(item?.productId ?? '').trim() === productId)
+      })
+
+      return {
+        canDelete: !hasSales && !hasMovements && !hasDevolutions,
+        hasSales,
+        hasMovements,
+        hasDevolutions,
+      }
+    } catch (error) {
+      console.error('Error checking product deletion status:', error)
+      return {
+        canDelete: false,
+        hasSales: false,
+        hasMovements: false,
+        hasDevolutions: false,
+      }
+    }
   },
 
   async updateProduct(input: UpdateProductInput): Promise<Product> {
@@ -453,6 +506,7 @@ export const InventoryService = {
         tipo: producto.tipo,
         material: producto.material,
         genero: producto.genero,
+        estado: producto.estado,
         stock: inventario?.stock ?? 0,
         costo: inventario?.costo ?? 0,
         precioUnitario: inventario?.precioUnitario ?? 0,
@@ -470,12 +524,47 @@ export const InventoryService = {
 
   async deleteProduct(id: string): Promise<void> {
     try {
+      const deletionCheck = await this.getProductDeletionCheck(id)
+
+      if (!deletionCheck.canDelete) {
+        throw new Error('No se puede eliminar un producto con ventas, movimientos o devoluciones registradas. Solo puedes deshabilitarlo.')
+      }
+
       await ProductService.deleteProducto(id)
       const inventario = await this.getInventarioByProductoId(id)
       if (inventario) await this.deleteInventario(inventario.id)
     } catch (error) {
       console.error('Error deleting product:', error)
       throw new Error('Error al eliminar producto')
+    }
+  },
+
+  async setProductStatus(id: string, estado: 'Activo' | 'Inactivo'): Promise<Product> {
+    try {
+      const producto = await ProductService.updateProducto({ id, estado })
+      const inventario = await this.getInventarioByProductoId(id)
+      return {
+        id: producto.id,
+        codigo: producto.codigo,
+        nombre: producto.nombre,
+        tipo: producto.tipo,
+        tipoId: producto.tipoId,
+        material: producto.material,
+        materialId: producto.materialId,
+        genero: producto.genero,
+        estado: producto.estado,
+        stock: inventario?.stock ?? 0,
+        costo: inventario?.costo ?? 0,
+        precioUnitario: inventario?.precioUnitario ?? 0,
+        precioTresUnidades: inventario?.precioTresUnidades ?? 0,
+        precioMediaDocena: inventario?.precioMediaDocena ?? 0,
+        precioDocena: inventario?.precioDocena ?? 0,
+        fechaCreacion: producto.createdAt,
+        fechaActualizacion: producto.updatedAt,
+      }
+    } catch (error) {
+      console.error('Error updating product status:', error)
+      throw new Error('Error al actualizar estado del producto')
     }
   },
 }

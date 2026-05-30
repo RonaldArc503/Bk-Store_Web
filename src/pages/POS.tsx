@@ -36,6 +36,7 @@ type ProductDB = {
   codigo?: string
   nombre: string
   categoria: string
+  estado?: 'Activo' | 'Inactivo'
   stock: number
   precioUnitario: number
   precioTresUnidades: number
@@ -139,17 +140,20 @@ export default function POS() {
         setCajaOpen(activeCaja != null && activeCaja.status !== 'closed')
 
         setProducts(
-          prods.map((p) => ({
-            id: p.id,
-            codigo: p.codigo,
-            nombre: p.nombre,
-            categoria: p.tipo || 'General',
-            stock: p.stock,
-            precioUnitario: p.precioUnitario || 0,
-            precioTresUnidades: p.precioTresUnidades || 0,
-            precioMediaDocena: p.precioMediaDocena || 0,
-            precioDocena: p.precioDocena || 0,
-          }))
+          prods
+            .filter((p) => p.estado !== 'Inactivo')
+            .map((p) => ({
+              id: p.id,
+              codigo: p.codigo,
+              nombre: p.nombre,
+              categoria: p.tipo || 'General',
+              estado: p.estado,
+              stock: p.stock,
+              precioUnitario: p.precioUnitario || 0,
+              precioTresUnidades: p.precioTresUnidades || 0,
+              precioMediaDocena: p.precioMediaDocena || 0,
+              precioDocena: p.precioDocena || 0,
+            }))
         )
       } catch (err) {
         console.error('Error loading POS data', err)
@@ -371,17 +375,20 @@ export default function POS() {
       try {
         const updatedProducts = await InventoryService.getProducts()
         setProducts(
-          updatedProducts.map((p) => ({
-            id: p.id,
-            codigo: p.codigo,
-            nombre: p.nombre,
-            categoria: p.tipo || 'General',
-            stock: p.stock,
-            precioUnitario: p.precioUnitario || 0,
-            precioTresUnidades: p.precioTresUnidades || 0,
-            precioMediaDocena: p.precioMediaDocena || 0,
-            precioDocena: p.precioDocena || 0,
-          }))
+          updatedProducts
+            .filter((p) => p.estado !== 'Inactivo')
+            .map((p) => ({
+              id: p.id,
+              codigo: p.codigo,
+              nombre: p.nombre,
+              categoria: p.tipo || 'General',
+              estado: p.estado,
+              stock: p.stock,
+              precioUnitario: p.precioUnitario || 0,
+              precioTresUnidades: p.precioTresUnidades || 0,
+              precioMediaDocena: p.precioMediaDocena || 0,
+              precioDocena: p.precioDocena || 0,
+            }))
         )
       } catch (refreshError) {
         console.warn('No se pudo refrescar inventario del POS tras la venta', refreshError)

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Package, AlertTriangle, Search, Edit2, Trash2 } from 'lucide-react'
+import { Package, AlertTriangle, Search, Edit2, Power, Trash2 } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { InventoryModal } from '../components/InventoryModal'
 import { InventoryService } from '../services/InventoryService'
@@ -28,6 +28,7 @@ export default function InventoryPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deletionCheckMap, setDeletionCheckMap] = useState<Record<string, boolean>>({})
 
   // Cargar productos y estadísticas
   useEffect(() => {
@@ -50,9 +51,13 @@ export default function InventoryPage() {
         InventoryService.getProducts(),
         InventoryService.getInventoryStats(lowStockThreshold),
       ])
+      const deletionChecks = await Promise.all(
+        productsData.map(async (product) => [product.id, await InventoryService.getProductDeletionCheck(product.id)] as const),
+      )
       setProducts(productsData)
       setFilteredProducts(productsData)
       setStats(statsData)
+      setDeletionCheckMap(Object.fromEntries(deletionChecks.map(([id, check]) => [id, check.canDelete])))
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -86,7 +91,24 @@ export default function InventoryPage() {
     loadData() // Actualizar stats
   }
 
-  // Eliminar producto
+  // Deshabilitar / habilitar producto
+  const handleToggleProductStatus = async (id: string) => {
+    setDeleteLoading(true)
+    try {
+      const current = products.find((p) => p.id === id)
+      const nextStatus = current?.estado === 'Inactivo' ? 'Activo' : 'Inactivo'
+      const updated = await InventoryService.setProductStatus(id, nextStatus)
+      setProducts(products.map((p) => (p.id === id ? updated : p)))
+      setFilteredProducts(filteredProducts.map((p) => (p.id === id ? updated : p)))
+      loadData() // Actualizar stats
+    } catch (error) {
+      console.error('Error updating product status:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar producto')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   const handleDeleteProduct = async (id: string) => {
     setDeleteLoading(true)
     try {
@@ -94,9 +116,10 @@ export default function InventoryPage() {
       setProducts(products.filter((p) => p.id !== id))
       setFilteredProducts(filteredProducts.filter((p) => p.id !== id))
       setDeleteConfirm(null)
-      loadData() // Actualizar stats
+      await loadData()
     } catch (error) {
       console.error('Error deleting product:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar producto')
     } finally {
       setDeleteLoading(false)
     }
@@ -239,6 +262,9 @@ export default function InventoryPage() {
                       Género
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                       Stock
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
@@ -265,6 +291,17 @@ export default function InventoryPage() {
                       <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{product.material}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{product.genero}</td>
                       <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                            product.estado === 'Inactivo'
+                              ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                              : 'bg-lime-100 text-lime-700 dark:bg-lime-950/40 dark:text-lime-300'
+                          }`}
+                        >
+                          {product.estado === 'Inactivo' ? 'Deshabilitado' : 'Activo'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-sm font-medium ${product.stock < lowStockThreshold ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}
@@ -287,12 +324,26 @@ export default function InventoryPage() {
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => setDeleteConfirm(product.id)}
-                              className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
-                              title="Eliminar"
+                              onClick={() => void handleToggleProductStatus(product.id)}
+                              disabled={deleteLoading}
+                              className={`p-2 rounded-lg transition disabled:opacity-50 ${
+                                product.estado === 'Inactivo'
+                                  ? 'text-lime-600 dark:text-lime-400 hover:bg-lime-50 dark:hover:bg-lime-950/40'
+                                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                              }`}
+                              title={product.estado === 'Inactivo' ? 'Habilitar' : 'Deshabilitar'}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Power className="w-4 h-4" />
                             </button>
+                            {deletionCheckMap[product.id] && (
+                              <button
+                                onClick={() => setDeleteConfirm(product.id)}
+                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
+                                title="Eliminar definitivamente"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -344,6 +395,12 @@ export default function InventoryPage() {
                     <p className="font-medium text-gray-900 dark:text-gray-100">{product.genero}</p>
                   </div>
                   <div>
+                    <p className="text-gray-500 dark:text-gray-400">Estado</p>
+                    <p className={`font-medium ${product.estado === 'Inactivo' ? 'text-gray-500 dark:text-gray-400' : 'text-lime-600 dark:text-lime-400'}`}>
+                      {product.estado === 'Inactivo' ? 'Deshabilitado' : 'Activo'}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-gray-500 dark:text-gray-400">Stock</p>
                     <p className={`font-medium ${product.stock < lowStockThreshold ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                       {product.stock} unidades
@@ -368,12 +425,26 @@ export default function InventoryPage() {
                       <Edit2 className="w-4 h-4" />
                       <span className="text-sm font-medium">Editar</span>
                     </button>
+                    {deletionCheckMap[product.id] && (
+                      <button
+                        onClick={() => setDeleteConfirm(product.id)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition border border-red-200 dark:border-red-800/60"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="text-sm font-medium">Eliminar</span>
+                      </button>
+                    )}
                     <button
-                      onClick={() => setDeleteConfirm(product.id)}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition border border-red-200 dark:border-red-800/60"
+                      onClick={() => void handleToggleProductStatus(product.id)}
+                      disabled={deleteLoading}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg transition border disabled:opacity-50 ${
+                        product.estado === 'Inactivo'
+                          ? 'text-lime-600 dark:text-lime-400 hover:bg-lime-50 dark:hover:bg-lime-950/40 border-lime-200 dark:border-lime-800/60'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border-gray-200 dark:border-gray-700'
+                      }`}
                     >
-                      <Trash2 className="w-4 h-4" />
-                      <span className="text-sm font-medium">Eliminar</span>
+                      <Power className="w-4 h-4" />
+                      <span className="text-sm font-medium">{product.estado === 'Inactivo' ? 'Habilitar' : 'Deshabilitar'}</span>
                     </button>
                   </div>
                 )}
@@ -382,13 +453,12 @@ export default function InventoryPage() {
           )}
         </div>
 
-        {/* Delete Confirmation Modal */}
         {deleteConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">¿Eliminar producto?</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">¿Eliminar producto definitivamente?</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Esta acción no se puede deshacer. El producto será eliminado permanentemente.
+                Solo podrás eliminarlo si no existe en ventas, movimientos ni devoluciones. Si aparece aquí, puedes deshabilitarlo con el botón de power.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-end">
                 <button

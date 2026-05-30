@@ -49,6 +49,15 @@ async function readPath(path: string): Promise<unknown> {
   return snap.exists() ? snap.val() : null
 }
 
+async function readPathSafe(path: string): Promise<unknown> {
+  try {
+    return await readPath(path)
+  } catch (error) {
+    console.warn(`Could not read backup path ${path}`, error)
+    return null
+  }
+}
+
 /**
  * Borra un nodo de RTDB respetando reglas que solo permiten .write en hijos ($id).
  * No usar set(path, null) en la raíz del módulo — Firebase lo rechaza.
@@ -117,7 +126,7 @@ export const MaintenanceService = {
   async createFullBackup(settingsSnapshot?: unknown): Promise<FullBackupPayload> {
     try {
       const entries = await Promise.all(
-        BACKUP_PATHS.map(async (path) => [path, await readPath(path)] as const),
+        BACKUP_PATHS.map(async (path) => [path, await readPathSafe(path)] as const),
       )
       const dbData: Record<string, unknown> = {}
       for (const [path, value] of entries) {
@@ -160,10 +169,11 @@ export const MaintenanceService = {
     const anchor = document.createElement('a')
     anchor.href = url
     anchor.download = fileName
+    anchor.rel = 'noopener'
     document.body.appendChild(anchor)
     anchor.click()
     document.body.removeChild(anchor)
-    URL.revokeObjectURL(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   },
 
   flattenForSheet(value: unknown): Record<string, unknown>[] {
@@ -214,7 +224,11 @@ export const MaintenanceService = {
 
     const localRows = this.flattenForSheet(backup.local?.settings || {})
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localRows), 'config_local')
-    XLSX.writeFile(wb, fileName || this.buildBackupFileName('xlsx'))
+    const excelData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([excelData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    this.triggerDownload(blob, fileName || this.buildBackupFileName('xlsx'))
     return backup
   },
 

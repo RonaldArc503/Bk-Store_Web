@@ -115,6 +115,7 @@ export interface Product {
   material: string
   materialId?: string
   genero: string
+  estado?: 'Activo' | 'Inactivo'
   stock: number
   costo: number
   precioUnitario: number
