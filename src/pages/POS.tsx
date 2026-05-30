@@ -25,6 +25,7 @@ import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
+import { printTicketDocument } from '../services/TicketPrintService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
@@ -33,8 +34,6 @@ import { useSettings } from '../context/SettingsContext'
 import { getResolvedBranding, getPresetIconComponent } from '../constants/branding'
 import { calculateLineTotal } from '../utils/posPricing'
 import {
-  getPaperTailwindWidthClass,
-  getPaperWidthCss,
   getPaperWidthMm,
   getThermalFontSize,
   getThermalLineHeight,
@@ -196,7 +195,7 @@ function estimateTicketPdfHeight(orderInfo: any, paperSize: PaperSize): number {
 
 export default function POS() {
   const { user, authReady } = useAuth()
-  const { settings } = useSettings()
+  const { settings, updatePrinting } = useSettings()
   const branding = getResolvedBranding(settings)
   const navigate = useNavigate()
 
@@ -244,50 +243,6 @@ export default function POS() {
       setTimeout(() => searchInputRef.current?.focus(), 100)
     }
   }, [isPaymentModalOpen, isTicketModalOpen, showSaleSuccess, isCartOpen])
-
-  useEffect(() => {
-    const styleId = 'print-paper-size-style'
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
-    if (!styleEl) {
-      styleEl = document.createElement('style')
-      styleEl.id = styleId
-      document.head.appendChild(styleEl)
-    }
-
-    const paperSize = settings.printing.paperSize
-    const width = getPaperWidthCss(paperSize)
-    const margin = isLetterPaper(paperSize) ? '10mm' : '2mm'
-    const pageSize = isLetterPaper(paperSize) ? 'letter' : `${width} auto`
-
-    styleEl.textContent = `
-@media print {
-  @page { size: ${pageSize}; margin: ${margin}; }
-  html.printing-ticket body > *:not(#ticket-print-root) { display: none !important; }
-  html.printing-ticket #ticket-print-root {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-    opacity: 1 !important;
-  }
-  html.printing-ticket #print-area {
-    width: ${width} !important;
-    max-width: none !important;
-    margin: 0 auto !important;
-    padding: 2mm !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    background: #fff !important;
-    color: #000 !important;
-  }
-  html.printing-ticket #print-area * {
-    color: #000 !important;
-  }
-  html.printing-ticket .ticket-modal-chrome { display: none !important; }
-}`
-  }, [settings.printing.paperSize])
 
   useEffect(() => {
     if (!authReady) {
@@ -590,9 +545,24 @@ export default function POS() {
       }
 
       if (settings.printing.autoPrint) {
-        setTimeout(() => {
-          printTicketDom(false)
-        }, 400)
+        void (async () => {
+          const doc = buildTicketPdf(completedOrder)
+          if (!doc) {
+            toast.error('No se pudo generar el ticket')
+            return
+          }
+          try {
+            const result = await printTicketDocument(doc, {
+              printerName: settings.printing.printerName || undefined,
+            })
+            if (result.method === 'qz' && result.printer && !settings.printing.printerName) {
+              updatePrinting({ printerName: result.printer })
+            }
+          } catch (error) {
+            console.error('Auto print failed', error)
+            toast.error('No se pudo imprimir el ticket automaticamente')
+          }
+        })()
       }
     } catch (err) {
       await Promise.allSettled(
@@ -746,25 +716,26 @@ export default function POS() {
     if (closeAfter) setIsTicketModalOpen(false)
   }
 
-  const printTicketDom = (closeAfter: boolean) => {
-    const printArea = document.getElementById('print-area')
-    if (!printArea) {
-      toast.error('No se pudo preparar el ticket para imprimir')
+  const printTicketFromOrder = async (orderInfo: any, closeAfter: boolean) => {
+    const doc = buildTicketPdf(orderInfo)
+    if (!doc) {
+      toast.error('No se pudo generar el ticket')
       return
     }
 
-    let cleaned = false
-    const cleanup = () => {
-      if (cleaned) return
-      cleaned = true
-      document.documentElement.classList.remove('printing-ticket')
-      if (closeAfter) setIsTicketModalOpen(false)
+    try {
+      const result = await printTicketDocument(doc, {
+        printerName: settings.printing.printerName || undefined,
+      })
+      if (result.method === 'qz' && result.printer && !settings.printing.printerName) {
+        updatePrinting({ printerName: result.printer })
+      }
+    } catch (error) {
+      console.error('Print failed', error)
+      toast.error('No se pudo imprimir el ticket')
     }
 
-    document.documentElement.classList.add('printing-ticket')
-    window.addEventListener('afterprint', cleanup, { once: true })
-    window.print()
-    setTimeout(cleanup, 3000)
+    if (closeAfter) setIsTicketModalOpen(false)
   }
 
   if (cajaOpen === null) {
@@ -805,8 +776,6 @@ export default function POS() {
       </div>
     )
   }
-
-  const ticketPrintWidthClass = getPaperTailwindWidthClass(settings.printing.paperSize)
 
   const cartContent = (
     <>
@@ -1248,20 +1217,6 @@ export default function POS() {
       )}
 
       {/* Ticket: oculto para impresión automática o visible en modal */}
-      {lastOrderInfo && !isTicketModalOpen && (
-        <div id="ticket-print-root" className="fixed -left-[9999px] top-0 w-0 h-0 overflow-hidden" aria-hidden="true">
-          <div id="print-area" className={`bg-white p-5 text-xs ${ticketPrintWidthClass}`}>
-            <TicketPrintContent
-              orderInfo={lastOrderInfo}
-              branding={branding}
-              empleadoInfo={empleadoInfo}
-              userEmail={user?.email}
-              paymentLabels={paymentLabels}
-            />
-          </div>
-        </div>
-      )}
-
       {isTicketModalOpen && lastOrderInfo && (
         <div id="ticket-print-root" className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
@@ -1276,7 +1231,7 @@ export default function POS() {
             </div>
             <div className="ticket-modal-chrome mt-3 flex gap-2">
               <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
-              <button onClick={() => printTicketDom(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm flex items-center justify-center gap-2"><Printer size={16} />Imprimir</button>
+              <button onClick={() => void printTicketFromOrder(lastOrderInfo, false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm flex items-center justify-center gap-2"><Printer size={16} />Imprimir</button>
               <button onClick={() => saveTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />PDF</button>
             </div>
           </div>

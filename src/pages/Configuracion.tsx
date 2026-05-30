@@ -31,6 +31,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import { PAPER_SIZE_OPTIONS, type PaperSize } from '../utils/printPaperSize'
+import { detectPrinters } from '../services/TicketPrintService'
 import type { Producto } from '../types/product'
 
 /* --- Toggle switch reutilizable --- */
@@ -657,20 +658,93 @@ function InventorySection() {
 function PrintingSection() {
   const { settings, updatePrinting } = useSettings()
   const { printing } = settings
+  const [detectedPrinters, setDetectedPrinters] = useState<string[]>([])
+  const [qzAvailable, setQzAvailable] = useState<boolean | null>(null)
+  const [detecting, setDetecting] = useState(false)
+
+  const handleDetectPrinters = async () => {
+    setDetecting(true)
+    try {
+      const result = await detectPrinters()
+      setQzAvailable(result.available)
+      setDetectedPrinters(result.printers)
+      if (result.available && result.printers.length === 0) {
+        toast.info('QZ Tray conectado, pero no se encontraron impresoras')
+        return
+      }
+      if (!result.available) {
+        toast.warn('Instala QZ Tray en la PC para impresion directa a la ticketera')
+        return
+      }
+      if (result.selected) {
+        updatePrinting({ printerName: result.selected })
+        toast.success(`Impresora detectada: ${result.selected}`)
+      } else {
+        toast.info('Impresoras encontradas. Selecciona una en la lista.')
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error('No se pudieron detectar impresoras')
+    } finally {
+      setDetecting(false)
+    }
+  }
+
+  const printerOptions = detectedPrinters.length
+    ? detectedPrinters.map((name) => ({ value: name, label: name }))
+    : printing.printerName
+      ? [{ value: printing.printerName, label: printing.printerName }]
+      : [{ value: '', label: 'Auto-detectar al imprimir' }]
 
   return (
     <SettingsSection icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />} title="Impresión">
       <SettingCard>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Envia el ticket a la impresora al finalizar cada venta">
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Envia el ticket directo a la ticketera al finalizar cada venta">
           <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica" border={false}>
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica">
           <Select
             value={printing.paperSize}
             onChange={(v) => updatePrinting({ paperSize: v as PaperSize })}
             options={PAPER_SIZE_OPTIONS}
           />
         </SettingRow>
+        <SettingRow
+          icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />}
+          title="Impresora de tickets"
+          description="Detecta la ticketera conectada en esta PC (requiere QZ Tray)"
+          border={false}
+        >
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:min-w-[260px]">
+            <Select
+              value={printing.printerName || ''}
+              onChange={(v) => updatePrinting({ printerName: v })}
+              options={printerOptions}
+            />
+            <button
+              type="button"
+              onClick={() => void handleDetectPrinters()}
+              disabled={detecting}
+              className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60"
+            >
+              {detecting ? 'Detectando…' : 'Detectar'}
+            </button>
+          </div>
+        </SettingRow>
+        {qzAvailable === false ? (
+          <p className="px-4 pb-4 text-xs text-amber-700 dark:text-amber-300">
+            Para imprimir sin abrir el navegador, instala{' '}
+            <a href="https://qz.io/download/" target="_blank" rel="noreferrer" className="underline font-medium">
+              QZ Tray
+            </a>{' '}
+            en la computadora del punto de venta y vuelve a pulsar Detectar.
+          </p>
+        ) : null}
+        {printing.printerName ? (
+          <p className="px-4 pb-4 text-xs text-gray-500 dark:text-gray-400">
+            Impresora activa: <span className="font-medium text-gray-700 dark:text-gray-300">{printing.printerName}</span>
+          </p>
+        ) : null}
       </SettingCard>
     </SettingsSection>
   )

@@ -36,6 +36,7 @@ export interface StoreSettings {
   printing: {
     autoPrint: boolean
     paperSize: PaperSize
+    printerName: string
   }
   ui: {
     sidebarCollapsed: boolean
@@ -70,6 +71,7 @@ const defaultSettings: StoreSettings = {
   printing: {
     autoPrint: false,
     paperSize: '80mm',
+    printerName: '',
   },
   ui: {
     sidebarCollapsed: false,
