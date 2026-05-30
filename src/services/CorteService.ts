@@ -20,6 +20,8 @@ export interface CorteRecord {
   totalVentas: number
   remesas: { id: number; monto: number; motivo?: string }[]
   totalRemesas: number
+  abonos?: { id: number; monto: number; motivo?: string }[]
+  totalAbonos?: number
   efectivoContado: number
   transferenciasContado: number
   qrContado: number

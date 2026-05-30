@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   useEffect,
   useRef,
@@ -99,6 +100,8 @@ function toDateKeyFromIso(iso: string) {
 
 type CorteWithDateKey = CorteRecord & { dateKey?: string };
 
+type CajaMovimiento = { id: number; monto: number; motivo?: string };
+
 /** Fecha del corte en YYYY-MM-DD (zona local). Prioriza dateKey guardado en Firebase. */
 function getCorteDateKey(corte: CorteWithDateKey): string {
   if (corte.dateKey) return corte.dateKey;
@@ -110,11 +113,11 @@ function isCorteFromToday(corte: CorteWithDateKey): boolean {
   return getCorteDateKey(corte) === getLocalDateKey();
 }
 
-// Firebase guarda remesas/retiros como objeto, no como array
-function remesasToArray(remesas: any): { id: number; monto: number; motivo?: string }[] {
-  if (!remesas) return [];
-  if (Array.isArray(remesas)) return remesas;
-  return Object.values(remesas);
+// Firebase guarda movimientos (remesas/abonos) como objeto, no como array
+function movimientosToArray(movimientos: any): CajaMovimiento[] {
+  if (!movimientos) return [];
+  if (Array.isArray(movimientos)) return movimientos;
+  return Object.values(movimientos);
 }
 
 interface TimelineEntry {
@@ -145,7 +148,9 @@ interface CorteState {
   isCajaOpen: boolean;
   closePrepMode: boolean;
   aperturaAuto: boolean;
-  retiros: { id: number; monto: number; motivo?: string }[];
+  conteoManual: boolean;
+  retiros: CajaMovimiento[];
+  abonos: CajaMovimiento[];
   efectivoContado: string;
   transferenciasContado: string;
   qrContado: string;
@@ -180,9 +185,12 @@ type CorteAction =
   | { type: "SET_CLOSE_PREP_MODE"; payload: boolean }
   | { type: "SET_APERTURA_AUTO"; payload: boolean }
   | { type: "APPLY_CLOSE_AUTOFILL"; payload: { efectivoEsperado: number; ventasDia: CorteState["ventasDia"] } }
-  | { type: "SET_RETIROS"; payload: { id: number; monto: number; motivo?: string }[] }
-  | { type: "ADD_RETIRO"; payload: { id: number; monto: number; motivo?: string } }
+  | { type: "SET_RETIROS"; payload: CajaMovimiento[] }
+  | { type: "ADD_RETIRO"; payload: CajaMovimiento }
   | { type: "REMOVE_RETIRO"; payload: number }
+  | { type: "SET_ABONOS"; payload: CajaMovimiento[] }
+  | { type: "ADD_ABONO"; payload: CajaMovimiento }
+  | { type: "REMOVE_ABONO"; payload: number }
   | { type: "SET_EFECTIVO_CONTADO"; payload: string }
   | { type: "SET_TRANSFERENCIAS_CONTADO"; payload: string }
   | { type: "SET_QR_CONTADO"; payload: string }
@@ -202,6 +210,7 @@ type CorteAction =
   | { type: "SET_CLOSE_CONFIRM_STEP"; payload: "none" | "review" | "final" }
   | { type: "SET_CLOSE_CONFIRM_PHRASE"; payload: string }
   | { type: "SET_CLOSE_CONFIRM_ACK"; payload: boolean }
+  | { type: "SET_CONTEO_MANUAL"; payload: boolean }
   | { type: "RESET_CLOSE_CONFIRM" }
   | { type: "SET_HISTORY_FILTER_MONTH"; payload: string }
   | { type: "SET_PREVIEW_DATA"; payload: any }
@@ -213,7 +222,9 @@ const initialState: CorteState = {
   isCajaOpen: false,
   closePrepMode: false,
   aperturaAuto: false,
+  conteoManual: false,
   retiros: [],
+  abonos: [],
   efectivoContado: "0.00",
   transferenciasContado: "0.00",
   qrContado: "0.00",
@@ -254,6 +265,9 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
     case "SET_RETIROS": return { ...state, retiros: action.payload };
     case "ADD_RETIRO": return { ...state, retiros: [...state.retiros, action.payload] };
     case "REMOVE_RETIRO": return { ...state, retiros: state.retiros.filter((r) => r.id !== action.payload) };
+    case "SET_ABONOS": return { ...state, abonos: action.payload };
+    case "ADD_ABONO": return { ...state, abonos: [...state.abonos, action.payload] };
+    case "REMOVE_ABONO": return { ...state, abonos: state.abonos.filter((a) => a.id !== action.payload) };
     case "SET_EFECTIVO_CONTADO": return { ...state, efectivoContado: action.payload };
     case "SET_TRANSFERENCIAS_CONTADO": return { ...state, transferenciasContado: action.payload };
     case "SET_QR_CONTADO": return { ...state, qrContado: action.payload };
@@ -273,6 +287,7 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
     case "SET_CLOSE_CONFIRM_STEP": return { ...state, closeConfirmStep: action.payload };
     case "SET_CLOSE_CONFIRM_PHRASE": return { ...state, closeConfirmPhrase: action.payload };
     case "SET_CLOSE_CONFIRM_ACK": return { ...state, closeConfirmAck: action.payload };
+    case "SET_CONTEO_MANUAL": return { ...state, conteoManual: action.payload };
     case "RESET_CLOSE_CONFIRM":
       return {
         ...state,
@@ -295,6 +310,8 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
         activeCajaId: null,
         ventasDia: { efectivo: 0, transferencia: 0, qr: 0, tarjeta: 0 },
         retiros: [],
+        abonos: [],
+        conteoManual: false,
         efectivoContado: "0.00",
         transferenciasContado: "0.00",
         qrContado: "0.00",
@@ -308,7 +325,9 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
         aperturaFecha: action.payload.aperturaFecha,
         aperturaUsuario: action.payload.aperturaUsuario,
         ventasDia: action.payload.ventasDia,
-        retiros: remesasToArray(action.payload.retiros),
+        retiros: movimientosToArray(action.payload.retiros),
+        abonos: movimientosToArray(action.payload.abonos),
+        conteoManual: false,
         activeCajaId: action.payload.activeCajaId,
         isAperturaSaved: true,
         isCajaOpen: true,
@@ -323,7 +342,7 @@ function corteReducer(state: CorteState, action: CorteAction): CorteState {
 /* Componentes secundarios                                                   */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function AperturaForm({ state, dispatch, onSave }: any) {
+function AperturaForm({ state, dispatch, onSave, saldoCaja }: any) {
   const aperturaMonto = parseFloat(state.aperturaMonto || '0')
   const isAperturaInvalid = !state.aperturaMonto || aperturaMonto < 100 || !state.aperturaUsuario.trim()
 
@@ -385,6 +404,12 @@ function AperturaForm({ state, dispatch, onSave }: any) {
           )}
         </div>
       </div>
+      {state.isAperturaSaved && (
+        <div className="mt-4 rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 p-3">
+          <p className="text-xs text-blue-700 dark:text-blue-300">Saldo actual estimado en caja</p>
+          <p className="text-xl font-bold text-blue-700 dark:text-blue-300">${fmt(Number(saldoCaja || 0))}</p>
+        </div>
+      )}
       <div className="mt-4 flex gap-3">
         {state.aperturaAuto && state.isAperturaSaved ? (
           <div className="flex items-center gap-2 px-4 py-2 bg-lime-50 dark:bg-lime-900/30 rounded-lg text-lime-700 dark:text-lime-300 font-medium">
@@ -441,43 +466,68 @@ function VentasResumen({ ventasDia }: { ventasDia: { efectivo: number; transfere
   );
 }
 
-function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) {
-  const [newRetiro, setNewRetiro] = useState({ monto: "", motivo: "" });
+function MovimientosCajaForm({
+  state,
+  totalRetiros,
+  totalAbonos,
+  onAddRetiro,
+  onAddAbono,
+  onRemoveRetiro,
+  onRemoveAbono,
+}: any) {
+  const [newMovimiento, setNewMovimiento] = useState({ tipo: "retiro", monto: "", motivo: "" });
 
   const handleAdd = () => {
-    if (!newRetiro.motivo.trim()) {
-      toast.warning("Debe justificar el retiro (ej: depósito en banco, pago a proveedor)");
+    if (!newMovimiento.motivo.trim()) {
+      toast.warning("Debe justificar el movimiento (ej: depósito en banco, pago a proveedor)");
       return;
     }
-    if (!newRetiro.monto || parseFloat(newRetiro.monto) <= 0) {
+    if (!newMovimiento.monto || parseFloat(newMovimiento.monto) <= 0) {
       toast.warning("Ingrese un monto válido");
       return;
     }
-    onAddRetiro({
+    const payload = {
       id: Date.now(),
-      monto: parseFloat(newRetiro.monto),
-      motivo: newRetiro.motivo.trim(),
-    });
-    setNewRetiro({ monto: "", motivo: "" });
+      monto: parseFloat(newMovimiento.monto),
+      motivo: newMovimiento.motivo.trim(),
+    };
+    if (newMovimiento.tipo === "abono") {
+      onAddAbono(payload);
+    } else {
+      onAddRetiro(payload);
+    }
+    setNewMovimiento({ tipo: newMovimiento.tipo, monto: "", motivo: "" });
   };
+
+  const hasRetiros = state.retiros.length > 0;
+  const hasAbonos = state.abonos.length > 0;
 
   return (
     <div className="border border-orange-200 dark:border-orange-900/50 rounded-2xl p-4 md:p-6 bg-orange-50/50 dark:bg-orange-950/20">
-      <h3 className="font-bold mb-2 text-lg text-orange-900 dark:text-orange-200">Retiro de efectivo al cierre</h3>
+      <h3 className="font-bold mb-2 text-lg text-orange-900 dark:text-orange-200">Movimientos de caja</h3>
       <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
-        Registre el efectivo que sale de caja antes de cerrar (depósito bancario, remesa, etc.).
-        El <strong>efectivo contado</strong> al cierre será el que queda en caja después del retiro.
-        Mañana la apertura usará ese monto restante.
+        Registre retiros y abonos durante el dia. Estos movimientos se reflejan en el efectivo esperado al cierre.
       </p>
       <div className="flex flex-col sm:flex-row items-end gap-3 md:gap-4 mb-4">
+        <div className="w-full sm:w-44">
+          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Tipo *</label>
+          <select
+            className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
+            value={newMovimiento.tipo}
+            onChange={(e) => setNewMovimiento({ ...newMovimiento, tipo: e.target.value })}
+          >
+            <option value="retiro">Retiro</option>
+            <option value="abono">Abono / Depósito</option>
+          </select>
+        </div>
         <div className="flex-1 w-full">
-          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Motivo del retiro *</label>
+          <label className="block text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">Descripcion *</label>
           <input
             type="text"
             placeholder="Ej: Depósito en banco, pago proveedor..."
             className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
-            value={newRetiro.motivo}
-            onChange={(e) => setNewRetiro({ ...newRetiro, motivo: e.target.value })}
+            value={newMovimiento.motivo}
+            onChange={(e) => setNewMovimiento({ ...newMovimiento, motivo: e.target.value })}
           />
         </div>
         <div className="w-full sm:w-40">
@@ -485,8 +535,8 @@ function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) 
           <input
             type="number" min="0" step="0.01" placeholder="0.00"
             className="w-full p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
-            value={newRetiro.monto}
-            onChange={(e) => setNewRetiro({ ...newRetiro, monto: e.target.value })}
+            value={newMovimiento.monto}
+            onChange={(e) => setNewMovimiento({ ...newMovimiento, monto: e.target.value })}
           />
         </div>
         <button
@@ -494,25 +544,48 @@ function RetirosForm({ state, totalRetiros, onAddRetiro, onRemoveRetiro }: any) 
           onClick={handleAdd}
           className="flex items-center gap-2 text-gray-900 dark:text-gray-100 whitespace-nowrap bg-white dark:bg-gray-800 border border-orange-200 dark:border-orange-800 px-4 py-3 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30"
         >
-          <Plus size={18} /> Agregar retiro
+          <Plus size={18} /> Agregar movimiento
         </button>
       </div>
-      {state.retiros.length > 0 && (
+      {(hasRetiros || hasAbonos) && (
         <div className="mb-4">
-          <div className="bg-orange-50 dark:bg-orange-950/30 p-4 rounded-xl mb-3">
-            <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 font-medium mb-2">
-              <MinusCircle size={18} /> Total Retiros
-            </div>
-            <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">-${fmt(totalRetiros)}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            {hasRetiros && (
+              <div className="bg-orange-50 dark:bg-orange-950/30 p-4 rounded-xl">
+                <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 font-medium mb-2">
+                  <MinusCircle size={18} /> Total Retiros
+                </div>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">-${fmt(totalRetiros)}</p>
+              </div>
+            )}
+            {hasAbonos && (
+              <div className="bg-lime-50 dark:bg-lime-950/30 p-4 rounded-xl">
+                <div className="flex items-center gap-2 text-lime-600 dark:text-lime-400 font-medium mb-2">
+                  <Plus size={18} /> Total Abonos
+                </div>
+                <p className="text-2xl font-bold text-lime-600 dark:text-lime-400">+${fmt(totalAbonos)}</p>
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             {state.retiros.map((r: any) => (
-              <div key={r.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded p-3">
+              <div key={`retiro-${r.id}`} className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded p-3">
                 <div>
-                  <p className="font-medium">-${fmt(r.monto)}</p>
+                  <p className="font-medium text-orange-600 dark:text-orange-400">-${fmt(r.monto)}</p>
                   {r.motivo && <p className="text-xs text-gray-500 dark:text-gray-400">{r.motivo}</p>}
                 </div>
                 <button onClick={() => onRemoveRetiro(r.id)} className="text-red-500 text-sm hover:underline">
+                  Eliminar
+                </button>
+              </div>
+            ))}
+            {state.abonos.map((a: any) => (
+              <div key={`abono-${a.id}`} className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded p-3">
+                <div>
+                  <p className="font-medium text-lime-600 dark:text-lime-400">+${fmt(a.monto)}</p>
+                  {a.motivo && <p className="text-xs text-gray-500 dark:text-gray-400">{a.motivo}</p>}
+                </div>
+                <button onClick={() => onRemoveAbono(a.id)} className="text-red-500 text-sm hover:underline">
                   Eliminar
                 </button>
               </div>
@@ -531,7 +604,7 @@ function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEf
         <div>
           <h3 className="font-bold text-lg">Conteo de cierre</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Valores sugeridos según ventas y retiros. Ajuste el efectivo contado si el conteo físico difiere.
+            Valores sugeridos según ventas y movimientos de caja. Ajuste el efectivo contado si el conteo físico difiere.
           </p>
         </div>
       </div>
@@ -542,7 +615,10 @@ function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEf
             type="number" min="0" step="0.01"
             className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
             value={state.efectivoContado}
-            onChange={(e) => dispatch({ type: "SET_EFECTIVO_CONTADO", payload: e.target.value })}
+            onChange={(e) => {
+              dispatch({ type: "SET_CONTEO_MANUAL", payload: true });
+              dispatch({ type: "SET_EFECTIVO_CONTADO", payload: e.target.value });
+            }}
           />
           <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg text-sm mt-3">
             <div className="flex justify-between text-blue-600 dark:text-blue-400">
@@ -565,7 +641,10 @@ function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEf
             type="number" min="0" step="0.01"
             className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
             value={state.transferenciasContado}
-            onChange={(e) => dispatch({ type: "SET_TRANSFERENCIAS_CONTADO", payload: e.target.value })}
+            onChange={(e) => {
+              dispatch({ type: "SET_CONTEO_MANUAL", payload: true });
+              dispatch({ type: "SET_TRANSFERENCIAS_CONTADO", payload: e.target.value });
+            }}
           />
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Esperado: ${fmt(ventasDia.transferencia)}</p>
           <p className={`text-xs ${parseFloat(state.transferenciasContado || "0") === ventasDia.transferencia ? "text-lime-600" : "text-amber-600"}`}>
@@ -578,7 +657,10 @@ function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEf
             type="number" min="0" step="0.01"
             className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
             value={state.qrContado}
-            onChange={(e) => dispatch({ type: "SET_QR_CONTADO", payload: e.target.value })}
+            onChange={(e) => {
+              dispatch({ type: "SET_CONTEO_MANUAL", payload: true });
+              dispatch({ type: "SET_QR_CONTADO", payload: e.target.value });
+            }}
           />
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Esperado: ${fmt(ventasDia.qr)}</p>
         </div>
@@ -588,7 +670,10 @@ function CierreForm({ state, dispatch, ventasDia, efectivoEsperado, diferenciaEf
             type="number" min="0" step="0.01"
             className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
             value={state.tarjetaContado}
-            onChange={(e) => dispatch({ type: "SET_TARJETA_CONTADO", payload: e.target.value })}
+            onChange={(e) => {
+              dispatch({ type: "SET_CONTEO_MANUAL", payload: true });
+              dispatch({ type: "SET_TARJETA_CONTADO", payload: e.target.value });
+            }}
           />
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Esperado: ${fmt(ventasDia.tarjeta)}</p>
         </div>
@@ -839,7 +924,8 @@ function DayDetailModal({ day, onClose }: { day: TimelineDayGroup | null; onClos
 
             const corte = entry.corte!;
             const diff = (corte.efectivoContado ?? 0) - (corte.esperadoEfectivo ?? 0);
-            const corteRetiros = remesasToArray(corte.remesas);
+            const corteRetiros = movimientosToArray(corte.remesas);
+            const corteAbonos = movimientosToArray(corte.abonos);
 
             return (
               <div key={entry.id} className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
@@ -901,6 +987,22 @@ function DayDetailModal({ day, onClose }: { day: TimelineDayGroup | null; onClos
                   </div>
                 )}
 
+                {corteAbonos.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-lime-700 dark:text-lime-300 mb-1 flex items-center gap-1">
+                      <Plus size={12} /> Abonos ({corteAbonos.length}) — Total: +${fmt(corte.totalAbonos ?? 0)}
+                    </p>
+                    <div className="space-y-1">
+                      {corteAbonos.map((a: any) => (
+                        <div key={a.id} className="flex justify-between text-xs bg-lime-50 dark:bg-lime-950/20 rounded px-2 py-1">
+                          <span className="text-gray-600 dark:text-gray-400">{a.motivo || "Sin motivo"}</span>
+                          <span className="font-semibold text-lime-700 dark:text-lime-300">+${fmt(a.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {!!corte.notas && (
                   <div className="mt-3 rounded bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                     <p className="font-semibold">Notas</p>
@@ -936,6 +1038,7 @@ function PrintVoucher({ corte, onClose }: { corte: CorteRecord; onClose: () => v
       ["Apertura:", `$${fmt(corte.aperturaInfo?.monto ?? 0)}`],
       ["Total Ventas:", `$${fmt(corte.totalVentas ?? 0)}`],
       ["Total Retiros:", `-$${fmt(corte.totalRemesas ?? 0)}`],
+      ["Total Abonos:", `+$${fmt(corte.totalAbonos ?? 0)}`],
       ["Efectivo Esperado:", `$${fmt(corte.esperadoEfectivo ?? 0)}`],
       ["Efectivo Contado:", `$${fmt(corte.efectivoContado ?? 0)}`],
       ["Diferencia:", `${diff >= 0 ? "+" : ""}$${fmt(diff)}`],
@@ -958,6 +1061,7 @@ function PrintVoucher({ corte, onClose }: { corte: CorteRecord; onClose: () => v
 export default function CorteDeCaja() {
   const { user, authReady, hasModuleAccess, systemUser } = useAuth();
   const { settings } = useSettings();
+  const userId = user?.uid;
   const canManageCaja = hasModuleAccess("corte", "full");
   const canReopenCaja = hasModuleAccess("corteReopen", "full");
   const responsableNombre =
@@ -1027,6 +1131,7 @@ export default function CorteDeCaja() {
               tarjeta: Number(active.totals?.tarjeta ?? 0),
             },
             retiros: active.remesas || [],
+            abonos: active.abonos || [],
             activeCajaId: active.id || null,
           },
         });
@@ -1060,6 +1165,7 @@ export default function CorteDeCaja() {
               aperturaAuto: true,
               ventasDia: { efectivo: 0, transferencia: 0, qr: 0, tarjeta: 0 },
               retiros: [],
+              abonos: [],
               activeCajaId: createdCaja.id || null,
             },
           });
@@ -1090,7 +1196,7 @@ export default function CorteDeCaja() {
   }, [settings.notifications.cashRegister, state.isCajaOpen, state.todayClosed]);
 
   const autoCloseOpenCajaAt11Pm = useCallback(async () => {
-    if (!user?.uid) return;
+    if (!userId) return;
 
     const now = new Date();
 
@@ -1099,12 +1205,13 @@ export default function CorteDeCaja() {
 
     await CajaService.closeStaleOpenCajas();
 
-    const active = await CajaService.getTodayOpenCaja(user.uid);
+    const active = await CajaService.getTodayOpenCaja(userId);
     if (!active || active.status !== "open") return;
 
     if (now.getHours() < 23) return;
 
-    const remesas = remesasToArray(active.remesas);
+    const remesas = movimientosToArray(active.remesas);
+    const abonos = movimientosToArray(active.abonos);
     const ventasDia = {
       efectivo: Number(active.totals?.efectivo ?? 0),
       transferencia: Number(active.totals?.transferencia ?? 0),
@@ -1114,8 +1221,9 @@ export default function CorteDeCaja() {
     const totalVentasAuto =
       ventasDia.efectivo + ventasDia.transferencia + ventasDia.qr + ventasDia.tarjeta;
     const totalRetirosAuto = remesas.reduce((acc, r) => acc + Number(r?.monto || 0), 0);
+    const totalAbonosAuto = abonos.reduce((acc, a) => acc + Number(a?.monto || 0), 0);
     const aperturaMonto = Number(active.apertura?.monto ?? 0);
-    const esperadoEfectivoAuto = aperturaMonto + ventasDia.efectivo - totalRetirosAuto;
+    const esperadoEfectivoAuto = aperturaMonto + ventasDia.efectivo + totalAbonosAuto - totalRetirosAuto;
 
     const corteAuto = {
       aperturaInfo: {
@@ -1131,13 +1239,19 @@ export default function CorteDeCaja() {
         motivo: r?.motivo || "",
       })),
       totalRemesas: totalRetirosAuto,
+      abonos: abonos.map((a) => ({
+        id: Number(a?.id ?? Date.now()),
+        monto: Number(a?.monto ?? 0),
+        motivo: a?.motivo || "",
+      })),
+      totalAbonos: totalAbonosAuto,
       efectivoContado: esperadoEfectivoAuto,
       transferenciasContado: ventasDia.transferencia,
       qrContado: ventasDia.qr,
       tarjetaContado: ventasDia.tarjeta,
       esperadoEfectivo: esperadoEfectivoAuto,
       notas: "Cierre automatico 23:00",
-      createdBy: user.uid,
+      createdBy: userId,
       createdAt: new Date().toISOString(),
     };
 
@@ -1158,16 +1272,35 @@ export default function CorteDeCaja() {
         console.error("Error in automatic 11 PM close:", err);
       }
     }
-  }, [reloadData, user?.uid]);
+  }, [reloadData, userId]);
 
   useEffect(() => {
-    if (!authReady || !user?.uid) return;
+    if (!authReady || !userId) return;
     void autoCloseOpenCajaAt11Pm();
     const timer = window.setInterval(() => {
       void autoCloseOpenCajaAt11Pm();
     }, 60_000);
     return () => window.clearInterval(timer);
-  }, [authReady, autoCloseOpenCajaAt11Pm, user?.uid]);
+  }, [authReady, autoCloseOpenCajaAt11Pm, userId]);
+
+  useEffect(() => {
+    if (!state.activeCajaId) return;
+    const unsubscribe = CajaService.onCajaChange(state.activeCajaId, (caja) => {
+      if (!caja || caja.status !== "open") return;
+      dispatch({
+        type: "SET_VENTAS_DIA",
+        payload: {
+          efectivo: Number(caja.totals?.efectivo ?? 0),
+          transferencia: Number(caja.totals?.transferencia ?? 0),
+          qr: Number(caja.totals?.qr ?? 0),
+          tarjeta: Number(caja.totals?.tarjeta ?? 0),
+        },
+      });
+      dispatch({ type: "SET_RETIROS", payload: movimientosToArray(caja.remesas) });
+      dispatch({ type: "SET_ABONOS", payload: movimientosToArray(caja.abonos) });
+    });
+    return () => unsubscribe();
+  }, [state.activeCajaId]);
 
   const handleSaveApertura = async () => {
     if (!canManageCaja) { toast.error("No tienes permisos para abrir la caja"); return; }
@@ -1198,6 +1331,7 @@ export default function CorteDeCaja() {
               tarjeta: Number(alreadyOpen.totals?.tarjeta ?? 0),
             },
             retiros: alreadyOpen.remesas || [],
+            abonos: alreadyOpen.abonos || [],
             activeCajaId: alreadyOpen.id || null,
           },
         });
@@ -1244,6 +1378,7 @@ export default function CorteDeCaja() {
               tarjeta: Number(active.totals?.tarjeta ?? 0),
             },
             retiros: active.remesas || [],
+            abonos: active.abonos || [],
             activeCajaId: active.id || null,
           },
         });
@@ -1327,6 +1462,7 @@ export default function CorteDeCaja() {
             tarjeta: Number(reopened.totals?.tarjeta ?? 0),
           },
           retiros: reopened.remesas || [],
+          abonos: reopened.abonos || [],
           activeCajaId: reopened.id || null,
         },
       });
@@ -1342,54 +1478,60 @@ export default function CorteDeCaja() {
 
   const totalVentas = state.ventasDia.efectivo + state.ventasDia.transferencia + state.ventasDia.qr + state.ventasDia.tarjeta;
   const totalRetiros = state.retiros.reduce((acc, r) => acc + (r.monto || 0), 0);
-  const efectivoEsperado = parseFloat(state.aperturaMonto || "0") + state.ventasDia.efectivo - totalRetiros;
+  const totalAbonos = state.abonos.reduce((acc, a) => acc + (a.monto || 0), 0);
+  const efectivoEsperado = parseFloat(state.aperturaMonto || "0") + state.ventasDia.efectivo + totalAbonos - totalRetiros;
   const efectivoActual = parseFloat(state.efectivoContado || "0");
   const diferenciaEfectivo = efectivoActual - efectivoEsperado;
   const requiereNota = Math.abs(diferenciaEfectivo) > 50;
 
   useEffect(() => {
-    if (!state.closePrepMode) return;
+    if (!state.isAperturaSaved || state.todayClosed) return;
+    if (state.conteoManual) return;
     dispatch({
       type: "APPLY_CLOSE_AUTOFILL",
       payload: { efectivoEsperado, ventasDia: state.ventasDia },
     });
   }, [
-    state.closePrepMode,
+    state.isAperturaSaved,
+    state.todayClosed,
+    state.conteoManual,
     totalRetiros,
+    totalAbonos,
     state.aperturaMonto,
     state.ventasDia.efectivo,
     state.ventasDia.transferencia,
     state.ventasDia.qr,
     state.ventasDia.tarjeta,
+    state.ventasDia,
     efectivoEsperado,
   ]);
 
-  const handleStartClosePrep = () => {
+  const handleOpenCloseConfirm = () => {
     if (!canManageCaja) return;
     if (state.todayClosed || !state.isAperturaSaved || !state.activeCajaId) return;
-    dispatch({ type: "SET_CLOSE_PREP_MODE", payload: true });
-    dispatch({
-      type: "APPLY_CLOSE_AUTOFILL",
-      payload: { efectivoEsperado, ventasDia: state.ventasDia },
-    });
-  };
-
-  const handleCancelClosePrep = () => {
-    dispatch({ type: "SET_CLOSE_PREP_MODE", payload: false });
-    dispatch({ type: "RESET_CLOSE_CONFIRM" });
+    const retiroSinMotivo = state.retiros.some((r) => !String(r.motivo || "").trim());
+    const abonoSinMotivo = state.abonos.some((a) => !String(a.motivo || "").trim());
+    if (retiroSinMotivo || abonoSinMotivo) {
+      toast.error("Todos los retiros y abonos deben tener motivo");
+      return;
+    }
+    if (requiereNota && !state.notas.trim()) {
+      toast.error("Se requiere una nota explicativa para la diferencia mayor a $50");
+      return;
+    }
+    dispatch({ type: "SET_CLOSE_CONFIRM_PHRASE", payload: "" });
+    dispatch({ type: "SET_CLOSE_CONFIRM_ACK", payload: false });
+    dispatch({ type: "SET_CLOSE_CONFIRM_STEP", payload: "review" });
   };
 
   const handleCerrarCaja = async () => {
     if (!canManageCaja) { toast.error("No tienes permisos para cerrar la caja"); return; }
     if (state.todayClosed) return;
     if (!state.isAperturaSaved || !state.activeCajaId) { toast.error("No hay una caja activa para cerrar"); return; }
-    if (!state.closePrepMode) {
-      toast.warning("Inicie el proceso de cierre antes de confirmar");
-      return;
-    }
     const retiroSinMotivo = state.retiros.some((r) => !String(r.motivo || "").trim());
-    if (retiroSinMotivo) {
-      toast.error("Todos los retiros deben tener un motivo justificado");
+    const abonoSinMotivo = state.abonos.some((a) => !String(a.motivo || "").trim());
+    if (retiroSinMotivo || abonoSinMotivo) {
+      toast.error("Todos los retiros y abonos deben tener un motivo justificado");
       return;
     }
     if (requiereNota && !state.notas.trim()) { toast.error("Se requiere una nota explicativa para la diferencia mayor a $50"); return; }
@@ -1411,6 +1553,7 @@ export default function CorteDeCaja() {
     };
 
     const cleanRetiros = state.retiros.map((r) => ({ id: r.id, monto: r.monto, motivo: r.motivo || "" }));
+    const cleanAbonos = state.abonos.map((a) => ({ id: a.id, monto: a.monto, motivo: a.motivo || "" }));
     const corte = {
       aperturaInfo: {
         monto: parseFloat(state.aperturaMonto || "0"),
@@ -1421,6 +1564,8 @@ export default function CorteDeCaja() {
       totalVentas,
       remesas: cleanRetiros,
       totalRemesas: totalRetiros,
+      abonos: cleanAbonos,
+      totalAbonos: totalAbonos,
       efectivoContado: parseFloat(state.efectivoContado || "0"),
       transferenciasContado: parseFloat(state.transferenciasContado || "0"),
       qrContado: parseFloat(state.qrContado || "0"),
@@ -1438,7 +1583,6 @@ export default function CorteDeCaja() {
       dispatch({ type: "SET_ACTIVE_CAJA_ID", payload: null });
       dispatch({ type: "SET_TODAY_CLOSED", payload: true });
       dispatch({ type: "SET_TODAY_CORTE", payload: created.corte as CorteRecord });
-      dispatch({ type: "SET_CLOSE_PREP_MODE", payload: false });
       dispatch({ type: "RESET_CLOSE_CONFIRM" });
       await reloadData();
       toast.success("Cierre de caja guardado correctamente");
@@ -1470,6 +1614,7 @@ export default function CorteDeCaja() {
         "Monto Apertura": e.corte?.aperturaInfo?.monto,
         "Total Ventas": e.corte?.totalVentas,
         "Total Retiros": e.corte?.totalRemesas,
+        "Total Abonos": e.corte?.totalAbonos,
         "Efectivo Esperado": e.corte?.esperadoEfectivo,
         "Efectivo Contado": e.corte?.efectivoContado,
         Diferencia: (e.corte?.efectivoContado ?? 0) - (e.corte?.esperadoEfectivo ?? 0),
@@ -1654,7 +1799,7 @@ export default function CorteDeCaja() {
           )}
 
           {canManageCaja ? (
-            <AperturaForm state={state} dispatch={dispatch} onSave={handleSaveApertura} />
+            <AperturaForm state={state} dispatch={dispatch} onSave={handleSaveApertura} saldoCaja={efectivoEsperado} />
           ) : (
             state.isAperturaSaved && (
               <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
@@ -1681,51 +1826,73 @@ export default function CorteDeCaja() {
             <>
               <VentasResumen ventasDia={state.ventasDia} />
 
-              {canManageCaja && !state.todayClosed && !state.closePrepMode && (
-                <button
-                  type="button"
-                  onClick={handleStartClosePrep}
-                  disabled={!state.isAperturaSaved || !state.activeCajaId}
-                  className="w-full py-3.5 rounded-xl border-2 border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 font-bold hover:bg-red-100 dark:hover:bg-red-950/50 transition disabled:opacity-50"
-                >
-                  Iniciar cierre de caja
-                </button>
+              <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 md:p-6 bg-white dark:bg-gray-900">
+                <h3 className="font-bold mb-2 text-lg">Balance de caja (estimado)</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
+                  El monto de apertura no cambia. Los movimientos actualizan el efectivo esperado.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Apertura</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">${fmt(parseFloat(state.aperturaMonto || "0"))}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Ventas en efectivo</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">+${fmt(state.ventasDia.efectivo)}</p>
+                  </div>
+                  <div className="bg-lime-50 dark:bg-lime-950/30 p-3 rounded-xl">
+                    <p className="text-xs text-lime-700 dark:text-lime-300">Abonos</p>
+                    <p className="text-lg font-bold text-lime-700 dark:text-lime-300">+${fmt(totalAbonos)}</p>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-950/30 p-3 rounded-xl">
+                    <p className="text-xs text-orange-600 dark:text-orange-400">Retiros</p>
+                    <p className="text-lg font-bold text-orange-600 dark:text-orange-400">-${fmt(totalRetiros)}</p>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-xl">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">Efectivo esperado</p>
+                    <p className="text-lg font-bold text-blue-700 dark:text-blue-300">${fmt(efectivoEsperado)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {canManageCaja && !state.todayClosed && (
+                <MovimientosCajaForm
+                  state={state}
+                  totalRetiros={totalRetiros}
+                  totalAbonos={totalAbonos}
+                  onAddRetiro={async (retiro: any) => {
+                    dispatch({ type: "ADD_RETIRO", payload: retiro });
+                    if (state.activeCajaId) {
+                      try { await CajaService.addRetiro(state.activeCajaId, retiro); }
+                      catch (err) { console.error(err); toast.error("Error al guardar el retiro"); }
+                    }
+                  }}
+                  onAddAbono={async (abono: any) => {
+                    dispatch({ type: "ADD_ABONO", payload: abono });
+                    if (state.activeCajaId) {
+                      try { await CajaService.addAbono(state.activeCajaId, abono); }
+                      catch (err) { console.error(err); toast.error("Error al guardar el abono"); }
+                    }
+                  }}
+                  onRemoveRetiro={async (id: number) => {
+                    dispatch({ type: "REMOVE_RETIRO", payload: id });
+                    if (state.activeCajaId) {
+                      try { await CajaService.removeRetiro(state.activeCajaId, id); }
+                      catch (err) { console.error(err); toast.error("Error al eliminar el retiro"); }
+                    }
+                  }}
+                  onRemoveAbono={async (id: number) => {
+                    dispatch({ type: "REMOVE_ABONO", payload: id });
+                    if (state.activeCajaId) {
+                      try { await CajaService.removeAbono(state.activeCajaId, id); }
+                      catch (err) { console.error(err); toast.error("Error al eliminar el abono"); }
+                    }
+                  }}
+                />
               )}
 
-              {canManageCaja && state.closePrepMode && !state.todayClosed && (
+              {canManageCaja && !state.todayClosed && (
                 <>
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 px-4 py-3">
-                    <p className="text-sm text-red-800 dark:text-red-200">
-                      Paso 1: registre retiros de efectivo (si aplica) y revise el conteo antes de cerrar.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleCancelClosePrep}
-                      className="shrink-0 text-sm text-gray-600 dark:text-gray-400 hover:underline"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-
-                  <RetirosForm
-                    state={state}
-                    totalRetiros={totalRetiros}
-                    onAddRetiro={async (retiro: any) => {
-                      dispatch({ type: "ADD_RETIRO", payload: retiro });
-                      if (state.activeCajaId) {
-                        try { await CajaService.addRetiro(state.activeCajaId, retiro); }
-                        catch (err) { console.error(err); toast.error("Error al guardar el retiro"); }
-                      }
-                    }}
-                    onRemoveRetiro={async (id: number) => {
-                      dispatch({ type: "REMOVE_RETIRO", payload: id });
-                      if (state.activeCajaId) {
-                        try { await CajaService.removeRetiro(state.activeCajaId, id); }
-                        catch (err) { console.error(err); toast.error("Error al eliminar el retiro"); }
-                      }
-                    }}
-                  />
-
                   <CierreForm
                     state={state} dispatch={dispatch}
                     ventasDia={state.ventasDia} aperturaMonto={state.aperturaMonto}
@@ -1735,20 +1902,11 @@ export default function CorteDeCaja() {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      const sinMotivo = state.retiros.some((r) => !String(r.motivo || "").trim());
-                      if (sinMotivo) {
-                        toast.error("Todos los retiros deben tener motivo");
-                        return;
-                      }
-                      dispatch({ type: "SET_CLOSE_CONFIRM_PHRASE", payload: "" });
-                      dispatch({ type: "SET_CLOSE_CONFIRM_ACK", payload: false });
-                      dispatch({ type: "SET_CLOSE_CONFIRM_STEP", payload: "review" });
-                    }}
+                    onClick={handleOpenCloseConfirm}
                     disabled={!state.isAperturaSaved || !state.activeCajaId}
                     className="w-full mt-2 bg-red-600 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
                   >
-                    Continuar — confirmar cierre de caja
+                    Cerrar caja — confirmar
                   </button>
                 </>
               )}
@@ -1781,6 +1939,12 @@ export default function CorteDeCaja() {
                       <div className="flex justify-between mt-1 text-orange-600 dark:text-orange-400">
                         <span>Retiros de efectivo:</span>
                         <span className="font-bold">-${fmt(totalRetiros)}</span>
+                      </div>
+                    )}
+                    {totalAbonos > 0 && (
+                      <div className="flex justify-between mt-1 text-lime-600 dark:text-lime-400">
+                        <span>Abonos a caja:</span>
+                        <span className="font-bold">+${fmt(totalAbonos)}</span>
                       </div>
                     )}
                     <div className="flex justify-between mt-1"><span>Efectivo esperado en caja:</span><span className="font-bold">${fmt(efectivoEsperado)}</span></div>

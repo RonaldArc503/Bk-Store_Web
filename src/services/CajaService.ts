@@ -1,4 +1,4 @@
-import { ref, push, set, get, update, remove, increment } from 'firebase/database'
+import { ref, push, set, get, update, remove, increment, onValue } from 'firebase/database'
 import { database } from '../app/firebase'
 
 const CAJAS_PATH = 'cajas'
@@ -28,6 +28,17 @@ export function isCajaFromToday(caja: { apertura?: { fecha?: string }; createdAt
 }
 
 export const CajaService = {
+  onCajaChange(cajaId: string, callback: (caja: any | null) => void): () => void {
+    const cajaRef = ref(database, `${CAJAS_PATH}/${cajaId}`)
+    const unsubscribe = onValue(cajaRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null)
+        return
+      }
+      callback(snapshot.val())
+    })
+    return unsubscribe
+  },
   async openCaja(aperturaInfo: {
     monto: number
     fecha: string
@@ -363,11 +374,31 @@ export const CajaService = {
     }
   },
 
+  async addAbono(cajaId: string, abono: { id: number; monto: number; motivo: string }) {
+    try {
+      const abonoRef = ref(database, `${CAJAS_PATH}/${cajaId}/abonos/${abono.id}`)
+      await set(abonoRef, { ...abono, createdAt: new Date().toISOString() })
+      return abono
+    } catch (error) {
+      console.error('Error adding abono:', error)
+      throw error
+    }
+  },
+
   async removeRetiro(cajaId: string, retiroId: number) {
     try {
       await remove(ref(database, `${CAJAS_PATH}/${cajaId}/remesas/${retiroId}`))
     } catch (error) {
       console.error('Error removing retiro:', error)
+      throw error
+    }
+  },
+
+  async removeAbono(cajaId: string, abonoId: number) {
+    try {
+      await remove(ref(database, `${CAJAS_PATH}/${cajaId}/abonos/${abonoId}`))
+    } catch (error) {
+      console.error('Error removing abono:', error)
       throw error
     }
   },
@@ -382,6 +413,20 @@ export const CajaService = {
       )
     } catch (error) {
       console.error('Error getting retiros:', error)
+      return []
+    }
+  },
+
+  async getAbonos(cajaId: string): Promise<{ id: number; monto: number; motivo: string }[]> {
+    try {
+      const snap = await get(ref(database, `${CAJAS_PATH}/${cajaId}/abonos`))
+      if (!snap.exists()) return []
+      const data = snap.val() as Record<string, any>
+      return Object.values(data).sort((a: any, b: any) =>
+        (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
+      )
+    } catch (error) {
+      console.error('Error getting abonos:', error)
       return []
     }
   },

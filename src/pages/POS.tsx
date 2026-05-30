@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
@@ -92,7 +93,7 @@ export default function POS() {
       const isMobile = window.innerWidth < 768
       if (isMobile) setIsCartOpen(false)
     }
-  }, [cart.length])
+  }, [cart.length, isCartOpen])
 
   useEffect(() => {
     if (!isPaymentModalOpen && !isTicketModalOpen && !showSaleSuccess && !isCartOpen) {
@@ -450,7 +451,7 @@ export default function POS() {
     const isLetter = paperSize === 'letter'
     const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
     const lineHeight = paperSize === '58mm' ? 4 : 5
-    const height = isLetter ? 279 : Math.max(140, 90 + items.length * (lineHeight * 2) + 60)
+    const height = isLetter ? 279 : Math.max(140, 90 + items.length * lineHeight + 60)
 
     const doc = new jsPDF({ unit: 'mm', format: isLetter ? 'letter' : [width, height] })
     const left = 4
@@ -462,11 +463,7 @@ export default function POS() {
     doc.setFontSize(fs + 1)
     doc.setFont('helvetica', 'bold')
     doc.text('BIKINI STORE', center, y, { align: 'center' })
-    y += 4
-    doc.setFontSize(fs + 1)
-    doc.setFont('helvetica', 'normal')
-    doc.text('SISTEMA DE PUNTO DE VENTA', center, y, { align: 'center' })
-    y += 5
+    y += 6
 
     doc.setFontSize(fs)
     const ticketId = String(orderInfo.orderId || orderInfo.id || '').slice(-8).toUpperCase()
@@ -475,25 +472,27 @@ export default function POS() {
     y += 3.5
     doc.text(`Fecha: ${orderInfo.date || ''}`, left, y)
     y += 3.5
-    const empName = empleadoInfo.nombre || user?.email || 'Cajero'
-    const empRol = empleadoInfo.rol || 'Vendedor'
-    doc.text(`Empleado: ${empName}`, left, y)
-    y += 3.5
-    doc.text(`Cargo: ${empRol}`, left, y)
-    y += 3.5
+    // omit system header and employee details on ticket per configuration
     doc.text('NOMBRE: Consumidor Final', left, y)
-    y += 3
+    y += 4
 
     doc.setDrawColor(0)
     doc.setLineWidth(0.3)
     doc.line(left, y, right, y)
     y += 3
 
-    // Items — each item on two lines to avoid column overlap
+    // Items — single-line columns: CANT. | DESCRIPCION | P.U | TOTAL
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(fs)
-    doc.text('Cant.', left, y)
-    doc.text('Artículo', left + 8, y)
+    const colQty = left
+    const colDesc = left + 12
+    const colPU = right - (isLetter ? 40 : 30)
+    const colTotal = right
+
+    doc.text('CANT.', colQty, y)
+    doc.text('DESCRIPCION', colDesc, y)
+    doc.text('P.U', colPU, y, { align: 'right' })
+    doc.text('TOTAL', colTotal, y, { align: 'right' })
     y += 2
     doc.setLineWidth(0.15)
     doc.line(left, y, right, y)
@@ -506,16 +505,13 @@ export default function POS() {
       const qty = Number(item.quantity || 0)
       const lineTotal = Number(item.lineTotal || 0)
       const unitPrice = qty > 0 ? lineTotal / qty : 0
-      const maxNameLen = paperSize === '58mm' ? 22 : 30
+      const maxNameLen = paperSize === '58mm' ? 18 : 36
       const displayName = name.length > maxNameLen ? name.substring(0, maxNameLen - 1) + '…' : name
 
-      doc.text(`${qty}`, left, y)
-      doc.text(displayName, left + 8, y)
-      y += lineHeight
-      doc.setFontSize(fs)
-      doc.text(`  P.Unit: $${unitPrice.toFixed(2)}`, left, y)
-      doc.text(`$${lineTotal.toFixed(2)}`, right, y, { align: 'right' })
-      doc.setFontSize(fs)
+      doc.text(String(qty), colQty, y)
+      doc.text(displayName, colDesc, y)
+      doc.text(`$${unitPrice.toFixed(2)}`, colPU, y, { align: 'right' })
+      doc.text(`$${lineTotal.toFixed(2)}`, colTotal, y, { align: 'right' })
       y += lineHeight
     })
 
