@@ -11,6 +11,7 @@ import {
   ChevronRight,
   X,
   Receipt,
+  Printer,
   Banknote,
   CreditCard as CardIcon,
   QrCode,
@@ -47,8 +48,141 @@ type ProductDB = {
 
 type CartItemLocal = ProductDB & { quantity: number }
 
-// IVA ya incluido en precios de venta — no se calcula por separado
+type TicketPrintContentProps = {
+  orderInfo: any
+  branding: ReturnType<typeof getResolvedBranding>
+  empleadoInfo: { nombre: string; rol: string }
+  userEmail?: string | null
+  paymentLabels: Record<string, string>
+}
 
+function TicketPrintContent({
+  orderInfo,
+  branding,
+  empleadoInfo,
+  userEmail,
+  paymentLabels,
+}: TicketPrintContentProps) {
+  const tTotal = Number(orderInfo.total || 0)
+  const tBase = Math.round((tTotal / 1.13) * 100) / 100
+  const tIva = Math.round((tTotal - tBase) * 100) / 100
+  const tMethod = paymentLabels[orderInfo.method] || orderInfo.method || 'Efectivo'
+  const tCashReceived = Number(orderInfo.cashReceived || 0)
+  const tChangeAmount = Number(orderInfo.changeAmount || 0)
+  const showCashBreakdown = orderInfo.method === 'efectivo' && tCashReceived > 0
+  const tTicketId = String(orderInfo.orderId || orderInfo.id || '').slice(-8).toUpperCase()
+  const BrandIcon = getPresetIconComponent(branding.presetIcon)
+
+  return (
+    <>
+      <div className="text-center mb-4">
+        {branding.iconMode === 'custom' && branding.customImageUrl ? (
+          <img
+            src={branding.customImageUrl}
+            alt={branding.appName}
+            className="w-11 h-11 rounded-xl object-cover mx-auto mb-2"
+          />
+        ) : (
+          <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2">
+            <BrandIcon size={20} />
+          </div>
+        )}
+        <h2 className="text-sm font-bold uppercase text-gray-900 dark:text-white">{branding.appName}</h2>
+        {branding.subtitle ? (
+          <p className="text-sm uppercase text-gray-400 dark:text-gray-500 mt-0.5">{branding.subtitle}</p>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs text-gray-500 dark:text-gray-400 mb-3 px-1">
+        <p>Doc N°: <span className="font-medium text-gray-700 dark:text-gray-300">{tTicketId}</span></p>
+        <p className="text-right">Caja: <span className="font-medium text-gray-700 dark:text-gray-300">1</span></p>
+        <p className="col-span-2">Fecha: <span className="font-medium text-gray-700 dark:text-gray-300">{orderInfo.date}</span></p>
+        <p className="col-span-2">Empleado: <span className="font-medium text-gray-700 dark:text-gray-300">{empleadoInfo.nombre || userEmail || 'Cajero'}{empleadoInfo.rol ? ` (${empleadoInfo.rol})` : ''}</span></p>
+        <p className="col-span-2">NOMBRE: <span className="font-medium text-gray-700 dark:text-gray-300">Consumidor Final</span></p>
+      </div>
+
+      <div className="border-t border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
+          <span>Cant.</span>
+          <span>Artículo</span>
+          <span className="text-right">P. Unit.</span>
+          <span className="text-right">Total</span>
+        </div>
+        {orderInfo.items.map((it: any, idx: number) => {
+          const qty = Number(it.quantity || 0)
+          const lt = Number(it.lineTotal || 0)
+          const up = qty > 0 ? lt / qty : 0
+          return (
+            <div key={idx} className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs border-b border-gray-50 dark:border-gray-800/50">
+              <span className="text-gray-600 dark:text-gray-300">{qty}</span>
+              <span className="text-gray-800 dark:text-gray-200 font-medium truncate">{it.name}</span>
+              <span className="text-right text-gray-500 dark:text-gray-400">${up.toFixed(2)}</span>
+              <span className="text-right font-medium text-gray-900 dark:text-gray-100">${lt.toFixed(2)}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-3 space-y-1.5 text-xs px-1">
+        <div className="flex justify-between text-gray-500 dark:text-gray-400">
+          <span>Subtotal (sin IVA)</span>
+          <span>${tBase.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-gray-500 dark:text-gray-400">
+          <span>IVA 13%</span>
+          <span>${tIva.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center font-bold text-xs mt-3 pt-3 border-t-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-1">
+        <span>TOTAL</span>
+        <span>${tTotal.toFixed(2)}</span>
+      </div>
+
+      <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg text-xs space-y-1">
+        <div className="flex justify-between">
+          <span className="text-gray-500 dark:text-gray-400">Metodo de pago</span>
+          <span className="font-semibold text-gray-800 dark:text-gray-200">{tMethod}</span>
+        </div>
+        {showCashBreakdown ? (
+          <>
+            <div className="flex justify-between">
+              <span className="text-gray-500 dark:text-gray-400">Efectivo</span>
+              <span className="font-semibold text-[#8CC63F]">${tCashReceived.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500 dark:text-gray-400">Cambio</span>
+              <span className="font-semibold text-gray-800 dark:text-gray-200">
+                {tChangeAmount < 0 ? `-$${Math.abs(tChangeAmount).toFixed(2)}` : `$${tChangeAmount.toFixed(2)}`}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex justify-between">
+            <span className="text-gray-500 dark:text-gray-400">Pagado</span>
+            <span className="font-semibold text-[#8CC63F]">${tTotal.toFixed(2)}</span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-3 pb-1">Gracias por tu preferencia</p>
+    </>
+  )
+}
+
+function estimateTicketPdfHeight(orderInfo: any, paperSize: string): number {
+  if (paperSize === 'letter') return 279
+  const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
+  const lineHeight = paperSize === '58mm' ? 4 : 5
+  let y = 8 + 6 + 3.5 + 3.5 + 4 + 3 + 3 + 2 + 3
+  y += items.length * lineHeight + 1 + 3.5
+  y += 3.5 + 3.5 + 3 + 4 + 5
+  y += 3.5
+  if (orderInfo.method === 'efectivo') y += 7
+  else y += 3.5
+  y += 4 + 3.5 + 4
+  return Math.max(100, Math.ceil(y + 8))
+}
 
 export default function POS() {
   const { user, authReady } = useAuth()
@@ -112,9 +246,37 @@ export default function POS() {
 
     const paperSize = settings.printing.paperSize
     const width = paperSize === '58mm' ? '58mm' : paperSize === '80mm' ? '80mm' : '216mm'
-    const pageSize = paperSize === 'letter' ? 'letter' : `${width} 200mm`
+    const margin = paperSize === 'letter' ? '10mm' : '2mm'
+    const pageSize = paperSize === 'letter' ? 'letter' : `${width} auto`
 
-    styleEl.textContent = `@media print { @page { size: ${pageSize}; margin: 10mm; } #print-area { width: ${width} !important; max-width: none !important; margin: 0 auto; } }`
+    styleEl.textContent = `
+@media print {
+  @page { size: ${pageSize}; margin: ${margin}; }
+  html.printing-ticket body > *:not(#ticket-print-root) { display: none !important; }
+  html.printing-ticket #ticket-print-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+  }
+  html.printing-ticket #print-area {
+    width: ${width} !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  html.printing-ticket #print-area * {
+    color: #000 !important;
+  }
+  html.printing-ticket .ticket-modal-chrome { display: none !important; }
+}`
   }, [settings.printing.paperSize])
 
   useEffect(() => {
@@ -399,7 +561,7 @@ export default function POS() {
       setLastOrderInfo(completedOrder)
 
       setIsPaymentModalOpen(false)
-      setIsTicketModalOpen(settings.printing.autoPrint)
+      setIsTicketModalOpen(!settings.printing.autoPrint)
       setCart([])
       setIsCartOpen(false)
       setSelectedPaymentMethod(null)
@@ -419,8 +581,8 @@ export default function POS() {
 
       if (settings.printing.autoPrint) {
         setTimeout(() => {
-          printTicketPdf(completedOrder, true)
-        }, 200)
+          printTicketDom(false)
+        }, 400)
       }
     } catch (err) {
       await Promise.allSettled(
@@ -451,7 +613,7 @@ export default function POS() {
     const isLetter = paperSize === 'letter'
     const items = Array.isArray(orderInfo.items) ? orderInfo.items : []
     const lineHeight = paperSize === '58mm' ? 4 : 5
-    const height = isLetter ? 279 : Math.max(140, 90 + items.length * lineHeight + 60)
+    const height = estimateTicketPdfHeight(orderInfo, paperSize)
 
     const doc = new jsPDF({ unit: 'mm', format: isLetter ? 'letter' : [width, height] })
     const left = 4
@@ -462,7 +624,7 @@ export default function POS() {
 
     doc.setFontSize(fs + 1)
     doc.setFont('helvetica', 'bold')
-    doc.text('BIKINI STORE', center, y, { align: 'center' })
+    doc.text(String(branding.appName || 'Bikini Store').toUpperCase(), center, y, { align: 'center' })
     y += 6
 
     doc.setFontSize(fs)
@@ -574,19 +736,25 @@ export default function POS() {
     if (closeAfter) setIsTicketModalOpen(false)
   }
 
-  const printTicketPdf = (orderInfo: any, closeAfter: boolean) => {
-    const doc = buildTicketPdf(orderInfo)
-    if (!doc) return
-    const pdfBlob = doc.output('blob')
-    const blobUrl = URL.createObjectURL(pdfBlob)
-    const printWindow = window.open(blobUrl, '_blank')
-    if (printWindow) {
-      printWindow.addEventListener('load', () => {
-        printWindow.focus()
-        printWindow.print()
-      })
+  const printTicketDom = (closeAfter: boolean) => {
+    const printArea = document.getElementById('print-area')
+    if (!printArea) {
+      toast.error('No se pudo preparar el ticket para imprimir')
+      return
     }
-    if (closeAfter) setIsTicketModalOpen(false)
+
+    let cleaned = false
+    const cleanup = () => {
+      if (cleaned) return
+      cleaned = true
+      document.documentElement.classList.remove('printing-ticket')
+      if (closeAfter) setIsTicketModalOpen(false)
+    }
+
+    document.documentElement.classList.add('printing-ticket')
+    window.addEventListener('afterprint', cleanup, { once: true })
+    window.print()
+    setTimeout(cleanup, 3000)
   }
 
   if (cajaOpen === null) {
@@ -627,6 +795,13 @@ export default function POS() {
       </div>
     )
   }
+
+  const ticketPrintWidthClass =
+    settings.printing.paperSize === '58mm'
+      ? 'w-[58mm]'
+      : settings.printing.paperSize === '80mm'
+        ? 'w-[80mm]'
+        : 'w-[216mm]'
 
   const cartContent = (
     <>
@@ -1067,130 +1242,41 @@ export default function POS() {
         </div>
       )}
 
-      {/* Ticket Modal */}
-      {isTicketModalOpen && lastOrderInfo && (() => {
-        const tTotal = Number(lastOrderInfo.total || 0)
-        const tBase = Math.round((tTotal / 1.13) * 100) / 100
-        const tIva = Math.round((tTotal - tBase) * 100) / 100
-        const tMethod = paymentLabels[lastOrderInfo.method] || lastOrderInfo.method || 'Efectivo'
-        const tCashReceived = Number(lastOrderInfo.cashReceived || 0)
-        const tChangeAmount = Number(lastOrderInfo.changeAmount || 0)
-        const showCashBreakdown = lastOrderInfo.method === 'efectivo' && tCashReceived > 0
-        const tTicketId = String(lastOrderInfo.orderId || lastOrderInfo.id || '').slice(-8).toUpperCase()
-        return (
-          <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <div className="w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
-              <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm text-xs">
-                {/* Header */}
-                <div className="text-center mb-4">
-                  {branding.iconMode === 'custom' && branding.customImageUrl ? (
-                    <img
-                      src={branding.customImageUrl}
-                      alt={branding.appName}
-                      className="w-11 h-11 rounded-xl object-cover mx-auto mb-2"
-                    />
-                  ) : (
-                    <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2">
-                      {(() => {
-                        const BrandIcon = getPresetIconComponent(branding.presetIcon)
-                        return <BrandIcon size={20} />
-                      })()}
-                    </div>
-                  )}
-                  <h2 className="text-sm font-bold uppercase text-gray-900 dark:text-white">{branding.appName}</h2>
-                  {branding.subtitle ? (
-                    <p className="text-sm uppercase text-gray-400 dark:text-gray-500 mt-0.5">{branding.subtitle}</p>
-                  ) : null}
-                </div>
+      {/* Ticket: oculto para impresión automática o visible en modal */}
+      {lastOrderInfo && !isTicketModalOpen && (
+        <div id="ticket-print-root" className="fixed -left-[9999px] top-0 w-0 h-0 overflow-hidden" aria-hidden="true">
+          <div id="print-area" className={`bg-white p-5 text-xs ${ticketPrintWidthClass}`}>
+            <TicketPrintContent
+              orderInfo={lastOrderInfo}
+              branding={branding}
+              empleadoInfo={empleadoInfo}
+              userEmail={user?.email}
+              paymentLabels={paymentLabels}
+            />
+          </div>
+        </div>
+      )}
 
-                {/* Info */}
-                <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs text-gray-500 dark:text-gray-400 mb-3 px-1">
-                  <p>Doc N°: <span className="font-medium text-gray-700 dark:text-gray-300">{tTicketId}</span></p>
-                  <p className="text-right">Caja: <span className="font-medium text-gray-700 dark:text-gray-300">1</span></p>
-                  <p className="col-span-2">Fecha: <span className="font-medium text-gray-700 dark:text-gray-300">{lastOrderInfo.date}</span></p>
-                  <p className="col-span-2">Empleado: <span className="font-medium text-gray-700 dark:text-gray-300">{empleadoInfo.nombre || user?.email || 'Cajero'}{empleadoInfo.rol ? ` (${empleadoInfo.rol})` : ''}</span></p>
-                  <p className="col-span-2">NAME: <span className="font-medium text-gray-700 dark:text-gray-300">Final Consumer</span></p>
-                </div>
-
-                {/* Items table */}
-                <div className="border-t border-gray-200 dark:border-gray-700">
-                  <div className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
-                    <span>Cant.</span>
-                    <span>Artículo</span>
-                    <span className="text-right">P. Unit.</span>
-                    <span className="text-right">Total</span>
-                  </div>
-                  {lastOrderInfo.items.map((it: any, idx: number) => {
-                    const qty = Number(it.quantity || 0)
-                    const lt = Number(it.lineTotal || 0)
-                    const up = qty > 0 ? lt / qty : 0
-                    return (
-                      <div key={idx} className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs border-b border-gray-50 dark:border-gray-800/50">
-                        <span className="text-gray-600 dark:text-gray-300">{qty}</span>
-                        <span className="text-gray-800 dark:text-gray-200 font-medium truncate">{it.name}</span>
-                        <span className="text-right text-gray-500 dark:text-gray-400">${up.toFixed(2)}</span>
-                        <span className="text-right font-medium text-gray-900 dark:text-gray-100">${lt.toFixed(2)}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* IVA breakdown */}
-                <div className="mt-3 space-y-1.5 text-xs px-1">
-                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
-                    <span>Subtotal (sin IVA)</span>
-                    <span>${tBase.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
-                    <span>IVA 13%</span>
-                    <span>${tIva.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                {/* Total */}
-                <div className="flex justify-between items-center font-bold text-xs mt-3 pt-3 border-t-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-1">
-                  <span>TOTAL</span>
-                  <span>${tTotal.toFixed(2)}</span>
-                </div>
-
-                {/* Payment info */}
-                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Metodo de pago</span>
-                    <span className="font-semibold text-gray-800 dark:text-gray-200">{tMethod}</span>
-                  </div>
-                  {showCashBreakdown ? (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-gray-400">Efectivo</span>
-                        <span className="font-semibold text-[#8CC63F]">${tCashReceived.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-gray-400">Cambio</span>
-                        <span className="font-semibold text-gray-800 dark:text-gray-200">
-                          {tChangeAmount < 0 ? `-$${Math.abs(tChangeAmount).toFixed(2)}` : `$${tChangeAmount.toFixed(2)}`}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 dark:text-gray-400">Pagado</span>
-                      <span className="font-semibold text-[#8CC63F]">${tTotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-3">Thank you for shopping with us</p>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
-                <button onClick={() => saveTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />Descargar PDF</button>
-              </div>
+      {isTicketModalOpen && lastOrderInfo && (
+        <div id="ticket-print-root" className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+            <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm text-xs">
+              <TicketPrintContent
+                orderInfo={lastOrderInfo}
+                branding={branding}
+                empleadoInfo={empleadoInfo}
+                userEmail={user?.email}
+                paymentLabels={paymentLabels}
+              />
+            </div>
+            <div className="ticket-modal-chrome mt-3 flex gap-2">
+              <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
+              <button onClick={() => printTicketDom(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm flex items-center justify-center gap-2"><Printer size={16} />Imprimir</button>
+              <button onClick={() => saveTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />PDF</button>
             </div>
           </div>
-        )
-      })()}
+        </div>
+      )}
     </div>
   )
 }
