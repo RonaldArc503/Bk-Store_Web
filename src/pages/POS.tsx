@@ -174,6 +174,7 @@ function TicketPrintContent({
         )}
       </div>
 
+      <p className="text-center text-[10px] italic text-gray-400 dark:text-gray-500 mt-2 pb-1">No se aceptan cambios ni devoluciones en prendas de ropa interior</p>
       <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-3 pb-1">Gracias por tu preferencia</p>
     </>
   )
@@ -724,6 +725,13 @@ export default function POS() {
     doc.setLineWidth(0.3)
     doc.line(left, y, right, y)
     y += 3.5
+    // Policy: smaller italic text
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(Math.max(6, fs - 1))
+    doc.text('No se aceptan cambios ni devoluciones en prendas de ropa interior', center, y, { align: 'center' })
+    y += 3.5
+    // Back to normal for thank-you
+    doc.setFont('helvetica', 'normal')
     doc.setFontSize(fs)
     doc.text('Gracias por tu preferencia', center, y, { align: 'center' })
     return doc
