@@ -673,7 +673,7 @@ function PrintingSection() {
         return
       }
       if (!result.available) {
-        toast.warn('Instala QZ Tray en la PC para impresion directa a la ticketera')
+        toast.warn(result.error || 'Instala QZ Tray en la PC y asegurate de que este abierto en la bandeja')
         return
       }
       if (result.selected) {

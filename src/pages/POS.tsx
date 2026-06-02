@@ -25,7 +25,7 @@ import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
-import { printTicketDocument } from '../services/TicketPrintService'
+import { printSaleTicket, type SaleTicketData } from '../services/TicketPrintService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
@@ -198,6 +198,12 @@ export default function POS() {
   const { settings, updatePrinting } = useSettings()
   const branding = getResolvedBranding(settings)
   const navigate = useNavigate()
+  const paymentLabels: Record<string, string> = {
+    efectivo: 'Efectivo',
+    tarjeta: 'Tarjeta',
+    transferencia: 'Transferencia',
+    qr: 'Código QR',
+  }
 
   const [cart, setCart] = useState<CartItemLocal[]>([])
   const [products, setProducts] = useState<ProductDB[]>([])
@@ -422,6 +428,23 @@ export default function POS() {
     setIsPaymentModalOpen(true)
   }
 
+  const buildSaleTicketData = (orderInfo: any): SaleTicketData => ({
+    orderId: String(orderInfo.orderId || orderInfo.id || ''),
+    date: String(orderInfo.date || ''),
+    items: (Array.isArray(orderInfo.items) ? orderInfo.items : []).map((item: any) => ({
+      name: String(item.name || 'Producto'),
+      quantity: Number(item.quantity || 0),
+      lineTotal: Number(item.lineTotal || 0),
+    })),
+    total: Number(orderInfo.total || 0),
+    method: String(orderInfo.method || 'efectivo'),
+    cashReceived: orderInfo.cashReceived,
+    changeAmount: orderInfo.changeAmount,
+    storeName: branding.appName,
+    subtitle: branding.subtitle || undefined,
+    paymentLabel: paymentLabels[orderInfo.method] || orderInfo.method,
+  })
+
   const processPayment = async () => {
     if (!selectedPaymentMethod || isProcessingPayment) return
     if (!authReady || !user?.uid) {
@@ -545,24 +568,7 @@ export default function POS() {
       }
 
       if (settings.printing.autoPrint) {
-        void (async () => {
-          const doc = buildTicketPdf(completedOrder)
-          if (!doc) {
-            toast.error('No se pudo generar el ticket')
-            return
-          }
-          try {
-            const result = await printTicketDocument(doc, {
-              printerName: settings.printing.printerName || undefined,
-            })
-            if (result.method === 'qz' && result.printer && !settings.printing.printerName) {
-              updatePrinting({ printerName: result.printer })
-            }
-          } catch (error) {
-            console.error('Auto print failed', error)
-            toast.error('No se pudo imprimir el ticket automaticamente')
-          }
-        })()
+        void runAutoPrint(completedOrder)
       }
     } catch (err) {
       await Promise.allSettled(
@@ -583,7 +589,23 @@ export default function POS() {
     }
   }
 
-  const paymentLabels: Record<string, string> = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', qr: 'Código QR' }
+  const runAutoPrint = async (orderInfo: any) => {
+    try {
+      const ticketData = buildSaleTicketData(orderInfo)
+      const doc = buildTicketPdf(orderInfo)
+      const result = await printSaleTicket(ticketData, {
+        printerName: settings.printing.printerName || undefined,
+        paperSize: settings.printing.paperSize,
+        pdfFallback: doc,
+      })
+      if (result.printer && !settings.printing.printerName) {
+        updatePrinting({ printerName: result.printer })
+      }
+    } catch (error) {
+      console.error('Auto print failed', error)
+      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el ticket automaticamente')
+    }
+  }
 
   const buildTicketPdf = (orderInfo: any) => {
     if (!orderInfo) return null
@@ -717,22 +739,20 @@ export default function POS() {
   }
 
   const printTicketFromOrder = async (orderInfo: any, closeAfter: boolean) => {
-    const doc = buildTicketPdf(orderInfo)
-    if (!doc) {
-      toast.error('No se pudo generar el ticket')
-      return
-    }
-
     try {
-      const result = await printTicketDocument(doc, {
+      const ticketData = buildSaleTicketData(orderInfo)
+      const doc = buildTicketPdf(orderInfo)
+      const result = await printSaleTicket(ticketData, {
         printerName: settings.printing.printerName || undefined,
+        paperSize: settings.printing.paperSize,
+        pdfFallback: doc,
       })
-      if (result.method === 'qz' && result.printer && !settings.printing.printerName) {
+      if (result.printer && !settings.printing.printerName) {
         updatePrinting({ printerName: result.printer })
       }
     } catch (error) {
       console.error('Print failed', error)
-      toast.error('No se pudo imprimir el ticket')
+      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el ticket')
     }
 
     if (closeAfter) setIsTicketModalOpen(false)

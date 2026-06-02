@@ -1,7 +1,11 @@
 import type { jsPDF } from 'jspdf'
+import { buildEscPosTicket, type SaleTicketData } from '../utils/escposTicket'
+import type { PaperSize } from '../utils/printPaperSize'
+
+export type { SaleTicketData }
 
 const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js'
-const QZ_CONNECT_TIMEOUT_MS = 3000
+const QZ_CONNECT_TIMEOUT_MS = 10000
 
 const THERMAL_PATTERNS = [
   /thermal/i,
@@ -10,8 +14,11 @@ const THERMAL_PATTERNS = [
   /ticket/i,
   /ticketera/i,
   /pos/i,
-  /epson\s*tm/i,
-  /star\s/i,
+  /epson/i,
+  /tm-/i,
+  /tm\d/i,
+  /star/i,
+  /tsp/i,
   /citizen/i,
   /bixolon/i,
   /58mm/i,
@@ -19,6 +26,8 @@ const THERMAL_PATTERNS = [
   /80mm/i,
   /t[eé]rmic/i,
   /termic/i,
+  /generic/i,
+  /text only/i,
 ]
 
 let qzLoadPromise: Promise<NonNullable<Window['qz']>> | null = null
@@ -28,12 +37,18 @@ function loadQzTray(): Promise<NonNullable<Window['qz']>> {
   if (qzLoadPromise) return qzLoadPromise
 
   qzLoadPromise = new Promise((resolve, reject) => {
+    const finish = () => {
+      if (window.qz) resolve(window.qz)
+      else reject(new Error('QZ Tray no respondio'))
+    }
+
     const existing = document.querySelector(`script[src="${QZ_SCRIPT_URL}"]`)
     if (existing) {
-      existing.addEventListener('load', () => {
-        if (window.qz) resolve(window.qz)
-        else reject(new Error('QZ Tray no disponible'))
-      })
+      if (window.qz) {
+        resolve(window.qz)
+        return
+      }
+      existing.addEventListener('load', finish)
       existing.addEventListener('error', () => reject(new Error('No se pudo cargar QZ Tray')))
       return
     }
@@ -41,10 +56,7 @@ function loadQzTray(): Promise<NonNullable<Window['qz']>> {
     const script = document.createElement('script')
     script.src = QZ_SCRIPT_URL
     script.async = true
-    script.onload = () => {
-      if (window.qz) resolve(window.qz)
-      else reject(new Error('QZ Tray no disponible'))
-    }
+    script.onload = finish
     script.onerror = () => reject(new Error('No se pudo cargar QZ Tray'))
     document.head.appendChild(script)
   })
@@ -52,27 +64,17 @@ function loadQzTray(): Promise<NonNullable<Window['qz']>> {
   return qzLoadPromise
 }
 
-function configureQzSecurity(qz: NonNullable<Window['qz']>) {
-  qz.security.setCertificatePromise((resolve) => resolve())
-  qz.security.setSignaturePromise(() => (resolve) => resolve(''))
-}
-
-async function connectQz(): Promise<NonNullable<Window['qz']> | null> {
-  try {
-    const qz = await loadQzTray()
-    configureQzSecurity(qz)
-    if (!qz.websocket.isActive()) {
-      await Promise.race([
-        qz.websocket.connect(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Tiempo de espera agotado')), QZ_CONNECT_TIMEOUT_MS)
-        ),
-      ])
-    }
-    return qz
-  } catch {
-    return null
+async function connectQz(): Promise<NonNullable<Window['qz']>> {
+  const qz = await loadQzTray()
+  if (!qz.websocket.isActive()) {
+    await Promise.race([
+      qz.websocket.connect(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('QZ Tray no responde. Abre QZ Tray en la bandeja del sistema.')), QZ_CONNECT_TIMEOUT_MS)
+      ),
+    ])
   }
+  return qz
 }
 
 export function pickBestPrinter(printers: string[], savedName?: string, defaultName?: string | null): string | null {
@@ -88,13 +90,39 @@ export function pickBestPrinter(printers: string[], savedName?: string, defaultN
   return printers[0] ?? null
 }
 
-export async function detectPrinters(): Promise<{ available: boolean; printers: string[]; selected: string | null }> {
-  const qz = await connectQz()
-  if (!qz) {
-    return { available: false, printers: [], selected: null }
+export async function detectPrinters(): Promise<{
+  available: boolean
+  printers: string[]
+  selected: string | null
+  error?: string
+}> {
+  try {
+    const qz = await connectQz()
+    const printers = await qz.printers.find()
+    let defaultName: string | null = null
+    try {
+      defaultName = await qz.printers.getDefault()
+    } catch {
+      defaultName = null
+    }
+
+    return {
+      available: true,
+      printers,
+      selected: pickBestPrinter(printers, undefined, defaultName),
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo conectar con QZ Tray'
+    return { available: false, printers: [], selected: null, error: message }
+  }
+}
+
+async function resolvePrinter(qz: NonNullable<Window['qz']>, savedName?: string): Promise<string> {
+  const printers = await qz.printers.find()
+  if (!printers.length) {
+    throw new Error('No hay impresoras instaladas en esta PC')
   }
 
-  const printers = await qz.printers.find()
   let defaultName: string | null = null
   try {
     defaultName = await qz.printers.getDefault()
@@ -102,11 +130,35 @@ export async function detectPrinters(): Promise<{ available: boolean; printers: 
     defaultName = null
   }
 
-  return {
-    available: true,
-    printers,
-    selected: pickBestPrinter(printers, undefined, defaultName),
+  const printer = pickBestPrinter(printers, savedName, defaultName)
+  if (!printer) {
+    throw new Error('No se pudo seleccionar una impresora')
   }
+  return printer
+}
+
+async function printEscPosWithQz(
+  qz: NonNullable<Window['qz']>,
+  printerName: string,
+  commands: string[]
+): Promise<void> {
+  const configs = [
+    qz.configs.create(printerName, { encoding: 'UTF-8' }),
+    qz.configs.create(printerName, { encoding: 'UTF-8', altPrinting: true }),
+    qz.configs.create(printerName, { encoding: 'ISO-8859-1', altPrinting: true }),
+  ]
+
+  let lastError: unknown = null
+  for (const config of configs) {
+    try {
+      await qz.print(config, commands)
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('QZ Tray rechazo la impresion ESC/POS')
 }
 
 function pdfToBase64(doc: jsPDF): string {
@@ -138,11 +190,8 @@ function printPdfInBrowser(doc: jsPDF): void {
   }
 }
 
-async function printPdfWithQz(doc: jsPDF, printerName: string): Promise<void> {
-  const qz = await connectQz()
-  if (!qz) throw new Error('QZ Tray no conectado')
-
-  const config = qz.configs.create(printerName)
+async function printPdfWithQz(qz: NonNullable<Window['qz']>, printerName: string, doc: jsPDF): Promise<void> {
+  const config = qz.configs.create(printerName, { altFontRendering: true })
   const base64 = pdfToBase64(doc)
   await qz.print(config, [
     {
@@ -150,42 +199,72 @@ async function printPdfWithQz(doc: jsPDF, printerName: string): Promise<void> {
       format: 'pdf',
       flavor: 'base64',
       data: base64,
+      options: { ignoreTransparency: true, altFontRendering: true },
     },
   ])
 }
 
 export type TicketPrintResult = {
-  method: 'qz' | 'browser'
+  method: 'qz-escpos' | 'qz-pdf' | 'browser'
   printer?: string
 }
 
-export async function printTicketDocument(
-  doc: jsPDF,
-  options: { printerName?: string } = {}
+export async function printSaleTicket(
+  ticket: SaleTicketData,
+  options: { printerName?: string; paperSize: PaperSize; pdfFallback?: jsPDF | null }
 ): Promise<TicketPrintResult> {
-  const qz = await connectQz()
-  if (qz) {
-    try {
-      const printers = await qz.printers.find()
-      let defaultName: string | null = null
-      try {
-        defaultName = await qz.printers.getDefault()
-      } catch {
-        defaultName = null
-      }
+  const escpos = buildEscPosTicket(ticket, options.paperSize)
 
-      const printer = pickBestPrinter(printers, options.printerName, defaultName)
-      if (printer) {
-        await printPdfWithQz(doc, printer)
-        return { method: 'qz', printer }
-      }
-    } catch (error) {
-      console.warn('Impresion QZ fallida, usando navegador', error)
-    }
+  try {
+    const qz = await connectQz()
+    const printer = await resolvePrinter(qz, options.printerName)
+    await printEscPosWithQz(qz, printer, escpos)
+    return { method: 'qz-escpos', printer }
+  } catch (escposError) {
+    console.warn('ESC/POS via QZ fallo, intentando PDF', escposError)
   }
 
-  printPdfInBrowser(doc)
-  return { method: 'browser' }
+  if (options.pdfFallback) {
+    try {
+      const qz = await connectQz()
+      const printer = await resolvePrinter(qz, options.printerName)
+      await printPdfWithQz(qz, printer, options.pdfFallback)
+      return { method: 'qz-pdf', printer }
+    } catch (pdfQzError) {
+      console.warn('PDF via QZ fallo, usando navegador', pdfQzError)
+    }
+
+    printPdfInBrowser(options.pdfFallback)
+    return { method: 'browser' }
+  }
+
+  throw new Error(
+    'No se pudo imprimir. Verifica que QZ Tray este abierto y que la ticketera este encendida.'
+  )
+}
+
+/** @deprecated Usar printSaleTicket */
+export async function printTicketDocument(
+  doc: jsPDF,
+  options: { printerName?: string; paperSize?: PaperSize; ticket?: SaleTicketData } = {}
+): Promise<TicketPrintResult> {
+  if (options.ticket && options.paperSize) {
+    return printSaleTicket(options.ticket, {
+      printerName: options.printerName,
+      paperSize: options.paperSize,
+      pdfFallback: doc,
+    })
+  }
+
+  try {
+    const qz = await connectQz()
+    const printer = await resolvePrinter(qz, options.printerName)
+    await printPdfWithQz(qz, printer, doc)
+    return { method: 'qz-pdf', printer }
+  } catch {
+    printPdfInBrowser(doc)
+    return { method: 'browser' }
+  }
 }
 
 export function isLikelyQzInstalled(): boolean {
