@@ -71,7 +71,7 @@ const defaultSettings: StoreSettings = {
   printing: {
     autoPrint: false,
     paperSize: '58mm',
-    printerName: '',
+    printerName: 'POS-58',
   },
   ui: {
     sidebarCollapsed: false,

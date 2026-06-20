@@ -733,19 +733,22 @@ export default function POS() {
   const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
     const toastId = toast.loading('Abriendo impresion del ticket...')
     try {
-      toast.info(getBrowserPrintHint(settings.printing.paperSize), { autoClose: 6000 })
+      toast.info(getBrowserPrintHint(settings.printing.paperSize, settings.printing.printerName), {
+        autoClose: 6000,
+      })
       const ticketData = buildSaleTicketData(orderInfo)
       const doc = buildTicketPdf(orderInfo)
       const result = await printSaleTicket(ticketData, {
         paperSize: settings.printing.paperSize,
         pdfFallback: doc,
+        printerName: settings.printing.printerName,
       })
       const okMsg =
         result.method === 'serial'
-          ? 'Ticket impreso en la PR-100'
+          ? `Ticket impreso en ${result.printer}`
           : result.method === 'pdf'
-            ? 'Ticket PDF. Elige PR-100 en el dialogo.'
-            : 'Ventana de impresion abierta. Elige PR-100, papel 58 mm.'
+            ? `Ticket PDF enviado a ${result.printer}`
+            : `Ticket enviado a ${result.printer}. Confirma Imprimir en el dialogo.`
       toast.update(toastId, {
         render: okMsg,
         type: 'success',

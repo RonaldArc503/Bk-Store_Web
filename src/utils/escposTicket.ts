@@ -178,7 +178,7 @@ export function buildTestEscPos(): string {
   return [
     '\x1B@',
     '\x1Ba\x01',
-    'PRUEBA PR-100',
+    'PRUEBA POS-58',
     '\x0A',
     '\x1Ba\x00',
     'Si lees esto, la ticketera funciona.',

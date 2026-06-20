@@ -6,6 +6,7 @@ import {
 } from '../utils/escposTicket'
 import type { PaperSize } from '../utils/printPaperSize'
 import {
+  DEFAULT_THERMAL_PRINTER,
   getBrowserPrintHint,
   printHtmlInBrowser,
   printPdfInBrowser,
@@ -18,9 +19,16 @@ import {
 import { buildTestTicketHtml, buildThermalTicketHtml } from '../utils/thermalTicketHtml'
 
 export type { SaleTicketData }
+export { DEFAULT_THERMAL_PRINTER, getBrowserPrintHint }
 
 export type TicketPrintResult = {
   method: 'serial' | 'html' | 'pdf'
+  printer: string
+}
+
+function resolvePrinterName(name?: string): string {
+  const trimmed = name?.trim()
+  return trimmed || DEFAULT_THERMAL_PRINTER
 }
 
 async function trySerialPrint(payload: string): Promise<boolean> {
@@ -35,45 +43,51 @@ async function trySerialPrint(payload: string): Promise<boolean> {
 
 export async function printSaleTicket(
   ticket: SaleTicketData,
-  options: { paperSize: PaperSize; pdfFallback?: jsPDF | null; preferSerial?: boolean }
-): Promise<TicketPrintResult> {
-  const escpos = buildEscPosTicket(ticket, options.paperSize)
-
-  if (options.preferSerial !== false) {
-    const serialOk = await trySerialPrint(escpos)
-    if (serialOk) return { method: 'serial' }
+  options: {
+    paperSize: PaperSize
+    pdfFallback?: jsPDF | null
+    printerName?: string
   }
-
+): Promise<TicketPrintResult> {
+  const printer = resolvePrinterName(options.printerName)
+  const escpos = buildEscPosTicket(ticket, options.paperSize)
   const html = buildThermalTicketHtml(ticket, options.paperSize)
+
   try {
-    await printHtmlInBrowser(html, 'Ticket de venta')
-    return { method: 'html' }
+    await printHtmlInBrowser(html, 'Ticket de venta', printer)
+    return { method: 'html', printer }
   } catch (htmlError) {
+    const serialOk = await trySerialPrint(escpos)
+    if (serialOk) return { method: 'serial', printer }
+
     if (options.pdfFallback) {
       try {
         await printPdfInBrowser(options.pdfFallback)
-        return { method: 'pdf' }
+        return { method: 'pdf', printer }
       } catch {
         /* fall through */
       }
     }
     throw htmlError instanceof Error
       ? htmlError
-      : new Error('No se pudo imprimir. Empareja la PR-100 o revisa la cola de Windows.')
+      : new Error(`No se pudo imprimir en ${printer}. Revisa la cola de impresion.`)
   }
 }
 
 export async function printTestTicket(options: {
   paperSize: PaperSize
-  preferSerial?: boolean
+  printerName?: string
 }): Promise<TicketPrintResult> {
-  if (options.preferSerial !== false) {
-    const serialOk = await trySerialPrint(buildTestEscPos())
-    if (serialOk) return { method: 'serial' }
-  }
+  const printer = resolvePrinterName(options.printerName)
 
-  await printHtmlInBrowser(buildTestTicketHtml(options.paperSize), 'Prueba PR-100')
-  return { method: 'html' }
+  try {
+    await printHtmlInBrowser(buildTestTicketHtml(options.paperSize), 'Prueba POS-58', printer)
+    return { method: 'html', printer }
+  } catch {
+    const serialOk = await trySerialPrint(buildTestEscPos())
+    if (serialOk) return { method: 'serial', printer }
+    throw new Error(`No se pudo imprimir en ${printer}.`)
+  }
 }
 
 export async function connectSerialPrinter(): Promise<void> {
@@ -82,16 +96,11 @@ export async function connectSerialPrinter(): Promise<void> {
 
 export function getPrintInstructions(): string {
   return [
-    'Ticketera PR-100 (58 mm, ESC/POS).',
-    '1. Usa Chrome o Edge en la PC del POS.',
-    '2. Pulsa Emparejar PR-100 una sola vez y elige el puerto USB/Serial.',
-    '3. Pulsa Imprimir ticket de prueba; debe salir papel al instante.',
-    '4. Si usas dialogo del navegador: impresora PR-100, papel 58 mm, sin margenes.',
+    'Ticketera POS-58 / PR-100 (58 mm).',
+    '1. Deja POS-58 como impresora predeterminada en Windows.',
+    '2. Al imprimir, el navegador usa esa impresora automaticamente.',
+    '3. Papel 58 mm, sin margenes ni encabezados.',
   ].join('\n')
 }
 
-export {
-  getBrowserPrintHint,
-  buildEscPosTicket,
-  isSerialPrintSupported,
-}
+export { buildEscPosTicket, isSerialPrintSupported }

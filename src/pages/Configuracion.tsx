@@ -666,7 +666,7 @@ function PrintingSection() {
     setPairing(true)
     try {
       await connectSerialPrinter()
-      toast.success('PR-100 emparejada. Ahora prueba imprimir.')
+      toast.success('Ticketera emparejada por USB/Serial. Prueba imprimir.')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo emparejar la ticketera'
       toast.error(message)
@@ -677,13 +677,17 @@ function PrintingSection() {
 
   const handleTestPrint = async () => {
     setTestingPrint(true)
-    const toastId = toast.loading('Enviando prueba a la PR-100...')
+    const toastId = toast.loading(`Enviando prueba a ${printing.printerName || 'POS-58'}...`)
     try {
-      const result = await printTestTicket({ paperSize: printing.paperSize })
+      toast.info(getBrowserPrintHint(printing.paperSize, printing.printerName), { autoClose: 5000 })
+      const result = await printTestTicket({
+        paperSize: printing.paperSize,
+        printerName: printing.printerName,
+      })
       const okMsg =
         result.method === 'serial'
-          ? 'Prueba enviada directo a la PR-100. Revisa si salio papel.'
-          : 'Se abrio la ventana de impresion. Elige PR-100, papel 58 mm e imprime.'
+          ? `Prueba enviada a ${result.printer}. Revisa si salio papel.`
+          : `Ticket enviado a ${result.printer}. Pulsa Imprimir en el dialogo.`
       toast.update(toastId, {
         render: okMsg,
         type: 'success',
@@ -713,31 +717,28 @@ function PrintingSection() {
         </SettingRow>
         <SettingRow
           icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />}
-          title="Impresora PR-100"
-          description="Nombre en Windows (referencia). La PR-100 suele aparecer como POS-58 o PR-100"
+          title="Impresora POS-58"
+          description="Nombre en Windows. Debe coincidir con la impresora predeterminada (POS-58)"
           border={false}
         >
           <input
             type="text"
             value={printing.printerName}
             onChange={(e) => updatePrinting({ printerName: e.target.value })}
-            placeholder="Ej: PR-100 / POS-58"
+            placeholder="POS-58"
             className="w-full sm:w-64 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
           />
         </SettingRow>
         <div className="mx-4 mb-4 rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/30 px-4 py-3 text-xs text-cyan-950 dark:text-cyan-100 space-y-2">
-          <p className="font-semibold">PR-100 (58 mm, ESC/POS) sin QZ Tray</p>
+          <p className="font-semibold">Impresion en POS-58 (58 mm)</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>Usa <strong>Chrome o Edge</strong> en la PC del punto de venta.</li>
             <li>
-              Pulsa <strong>Emparejar PR-100</strong> y selecciona el puerto USB/Serial de la ticketera (solo una vez).
+              Deja <strong>POS-58</strong> como impresora predeterminada en Windows (como ya la tienes).
             </li>
-            <li>Pulsa <strong>Imprimir ticket de prueba</strong>; debe salir &quot;PRUEBA PR-100&quot; al instante.</li>
-            <li>
-              Si no aparece puerto serial: instala el driver USB de la PR-100 o cancela trabajos atascados en Cola de
-              impresion de Windows.
-            </li>
-            <li>Cierra QZ Tray si lo tienes abierto.</li>
+            <li>Al imprimir, el navegador usa POS-58 automaticamente.</li>
+            <li>Pulsa <strong>Imprimir ticket de prueba</strong> y confirma en el dialogo.</li>
+            <li>Papel <strong>58 mm</strong>, sin encabezado ni pie de pagina.</li>
+            <li>Opcional: <strong>Emparejar ticketera</strong> solo si quieres impresion directa USB/Serial.</li>
           </ol>
           {!serialSupported ? (
             <p className="text-amber-800 dark:text-amber-200">
@@ -753,7 +754,7 @@ function PrintingSection() {
               disabled={pairing}
               className="px-4 py-2 text-sm rounded-xl border border-cyan-600 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-950/40 disabled:opacity-60"
             >
-              {pairing ? 'Emparejando…' : 'Emparejar PR-100'}
+              {pairing ? 'Emparejando…' : 'Emparejar ticketera (opcional)'}
             </button>
           ) : null}
           <button

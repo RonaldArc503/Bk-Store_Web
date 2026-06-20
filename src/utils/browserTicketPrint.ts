@@ -1,7 +1,9 @@
 import type { jsPDF } from 'jspdf'
 import type { PaperSize } from './printPaperSize'
 
-const PRINT_SHELL = (body: string, title: string) => `<!DOCTYPE html>
+export const DEFAULT_THERMAL_PRINTER = 'POS-58'
+
+const PRINT_SHELL = (body: string, title: string, printerName: string) => `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -43,8 +45,8 @@ const PRINT_SHELL = (body: string, title: string) => `<!DOCTYPE html>
 </head>
 <body>
   <div class="toolbar no-print">
-    <button type="button" onclick="window.print()">Imprimir en PR-100</button>
-    <p>Impresora: PR-100 / POS-58. Papel: 58 mm. Desactiva encabezado y pie de pagina.</p>
+    <button type="button" onclick="window.print()">Imprimir en ${printerName}</button>
+    <p>Impresora: ${printerName} (predeterminada en Windows). Papel: 58 mm. Sin encabezado ni pie de pagina.</p>
   </div>
   <div class="preview">
     <div class="sheet">${body}</div>
@@ -78,12 +80,16 @@ function openPrintWindow(html: string): Promise<void> {
   })
 }
 
-export function printHtmlInBrowser(html: string, title = 'Ticket'): Promise<void> {
+export function printHtmlInBrowser(
+  html: string,
+  title = 'Ticket',
+  printerName = DEFAULT_THERMAL_PRINTER
+): Promise<void> {
   const match = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
   const inner = match?.[1] ?? html
   const headMatch = html.match(/<head[^>]*>([\s\S]*)<\/head>/i)
   const headInner = headMatch?.[1] ?? ''
-  const wrapped = PRINT_SHELL(`${headInner}${inner}`, title)
+  const wrapped = PRINT_SHELL(`${headInner}${inner}`, title, printerName)
   return openPrintWindow(wrapped)
 }
 
@@ -120,6 +126,6 @@ export function printPdfInBrowser(doc: jsPDF): Promise<void> {
   })
 }
 
-export function getBrowserPrintHint(_paperSize: PaperSize): string {
-  return 'Si no sale papel, usa el boton Emparejar PR-100 y prueba de nuevo (Chrome/Edge).'
+export function getBrowserPrintHint(_paperSize: PaperSize, printerName = DEFAULT_THERMAL_PRINTER): string {
+  return `Se enviara a ${printerName} (impresora predeterminada en Windows). Papel 58 mm.`
 }
