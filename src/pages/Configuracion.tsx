@@ -31,7 +31,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import { PAPER_SIZE_OPTIONS, type PaperSize } from '../utils/printPaperSize'
-import { connectSerialPrinter, getBrowserPrintHint, isSerialPrintSupported, printTestTicket } from '../services/TicketPrintService'
+import { getBrowserPrintHint, printTestTicket } from '../services/TicketPrintService'
 import type { Producto } from '../types/product'
 
 /* --- Toggle switch reutilizable --- */
@@ -659,21 +659,6 @@ function PrintingSection() {
   const { settings, updatePrinting } = useSettings()
   const { printing } = settings
   const [testingPrint, setTestingPrint] = useState(false)
-  const [pairing, setPairing] = useState(false)
-  const serialSupported = isSerialPrintSupported()
-
-  const handlePairPrinter = async () => {
-    setPairing(true)
-    try {
-      await connectSerialPrinter()
-      toast.success('Ticketera emparejada por USB/Serial. Prueba imprimir.')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo emparejar la ticketera'
-      toast.error(message)
-    } finally {
-      setPairing(false)
-    }
-  }
 
   const handleTestPrint = async () => {
     setTestingPrint(true)
@@ -685,8 +670,8 @@ function PrintingSection() {
         printerName: printing.printerName,
       })
       const okMsg =
-        result.method === 'serial'
-          ? `Prueba enviada a ${result.printer}. Revisa si salio papel.`
+        result.method === 'pdf'
+          ? `Prueba PDF enviada a ${result.printer}.`
           : `Ticket enviado a ${result.printer}. Pulsa Imprimir en el dialogo.`
       toast.update(toastId, {
         render: okMsg,
@@ -733,30 +718,18 @@ function PrintingSection() {
           <p className="font-semibold">Impresion en POS-58 (58 mm)</p>
           <ol className="list-decimal list-inside space-y-1">
             <li>
-              Deja <strong>POS-58</strong> como impresora predeterminada en Windows (como ya la tienes).
+              Deja <strong>POS-58</strong> como impresora predeterminada en Windows.
             </li>
-            <li>Al imprimir, el navegador usa POS-58 automaticamente.</li>
-            <li>Pulsa <strong>Imprimir ticket de prueba</strong> y confirma en el dialogo.</li>
+            <li>Pulsa <strong>Imprimir ticket de prueba</strong> y confirma en el dialogo del navegador.</li>
             <li>Papel <strong>58 mm</strong>, sin encabezado ni pie de pagina.</li>
-            <li>Opcional: <strong>Emparejar ticketera</strong> solo si quieres impresion directa USB/Serial.</li>
           </ol>
-          {!serialSupported ? (
-            <p className="text-amber-800 dark:text-amber-200">
-              Este navegador no soporta impresion directa. Abre el sitio en Chrome o Edge.
-            </p>
-          ) : null}
+          <p className="text-amber-900 dark:text-amber-100 rounded-lg bg-amber-100/80 dark:bg-amber-950/40 px-3 py-2">
+            <strong>No uses &quot;Emparejar&quot;.</strong> Eso solo sirve para puertos COM/Serial. Tu PR-100 esta
+            instalada como impresora <strong>POS-58</strong> en Windows, por eso el navegador no encuentra dispositivos
+            serial. Es normal.
+          </p>
         </div>
-        <div className="px-4 pb-4 flex flex-wrap gap-2">
-          {serialSupported ? (
-            <button
-              type="button"
-              onClick={() => void handlePairPrinter()}
-              disabled={pairing}
-              className="px-4 py-2 text-sm rounded-xl border border-cyan-600 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-950/40 disabled:opacity-60"
-            >
-              {pairing ? 'Emparejando…' : 'Emparejar ticketera (opcional)'}
-            </button>
-          ) : null}
+        <div className="px-4 pb-4">
           <button
             type="button"
             onClick={() => void handleTestPrint()}

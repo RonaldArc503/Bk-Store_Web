@@ -744,11 +744,9 @@ export default function POS() {
         printerName: settings.printing.printerName,
       })
       const okMsg =
-        result.method === 'serial'
-          ? `Ticket impreso en ${result.printer}`
-          : result.method === 'pdf'
-            ? `Ticket PDF enviado a ${result.printer}`
-            : `Ticket enviado a ${result.printer}. Confirma Imprimir en el dialogo.`
+        result.method === 'pdf'
+          ? `Ticket PDF enviado a ${result.printer}`
+          : `Ticket enviado a ${result.printer}. Confirma Imprimir en el dialogo.`
       toast.update(toastId, {
         render: okMsg,
         type: 'success',
