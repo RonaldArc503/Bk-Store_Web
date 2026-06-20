@@ -10,8 +10,6 @@ import {
   Trash2,
   ChevronRight,
   X,
-  Receipt,
-  Printer,
   Banknote,
   CreditCard as CardIcon,
   QrCode,
@@ -25,13 +23,15 @@ import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
-import { printSaleTicket, getBrowserPrintHint, type SaleTicketData } from '../services/TicketPrintService'
+import { TicketPrintContent } from '../components/TicketPrintContent'
+import { TicketPreviewModal } from '../components/TicketPreviewModal'
+import { printElementInPage } from '../utils/browserTicketPrint'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
 import { UserService } from '../services/UserService'
 import { useSettings } from '../context/SettingsContext'
-import { getResolvedBranding, getPresetIconComponent } from '../constants/branding'
+import { getResolvedBranding } from '../constants/branding'
 import { calculateLineTotal } from '../utils/posPricing'
 import {
   getPaperWidthMm,
@@ -56,129 +56,6 @@ type ProductDB = {
 }
 
 type CartItemLocal = ProductDB & { quantity: number }
-
-type TicketPrintContentProps = {
-  orderInfo: any
-  branding: ReturnType<typeof getResolvedBranding>
-  empleadoInfo: { nombre: string; rol: string }
-  userEmail?: string | null
-  paymentLabels: Record<string, string>
-}
-
-function TicketPrintContent({
-  orderInfo,
-  branding,
-  empleadoInfo,
-  userEmail,
-  paymentLabels,
-}: TicketPrintContentProps) {
-  const tTotal = Number(orderInfo.total || 0)
-  const tBase = Math.round((tTotal / 1.13) * 100) / 100
-  const tIva = Math.round((tTotal - tBase) * 100) / 100
-  const tMethod = paymentLabels[orderInfo.method] || orderInfo.method || 'Efectivo'
-  const tCashReceived = Number(orderInfo.cashReceived || 0)
-  const tChangeAmount = Number(orderInfo.changeAmount || 0)
-  const showCashBreakdown = orderInfo.method === 'efectivo' && tCashReceived > 0
-  const tTicketId = String(orderInfo.orderId || orderInfo.id || '').slice(-8).toUpperCase()
-  const BrandIcon = getPresetIconComponent(branding.presetIcon)
-
-  return (
-    <>
-      <div className="text-center mb-4">
-        {branding.iconMode === 'custom' && branding.customImageUrl ? (
-          <img
-            src={branding.customImageUrl}
-            alt={branding.appName}
-            className="w-11 h-11 rounded-xl object-cover mx-auto mb-2"
-          />
-        ) : (
-          <div className="w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2">
-            <BrandIcon size={20} />
-          </div>
-        )}
-        <h2 className="text-sm font-bold uppercase text-gray-900 dark:text-white">{branding.appName}</h2>
-        {branding.subtitle ? (
-          <p className="text-sm uppercase text-gray-400 dark:text-gray-500 mt-0.5">{branding.subtitle}</p>
-        ) : null}
-      </div>
-
-      <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs text-gray-500 dark:text-gray-400 mb-3 px-1">
-        <p>Doc N°: <span className="font-medium text-gray-700 dark:text-gray-300">{tTicketId}</span></p>
-        <p className="text-right">Caja: <span className="font-medium text-gray-700 dark:text-gray-300">1</span></p>
-        <p className="col-span-2">Fecha: <span className="font-medium text-gray-700 dark:text-gray-300">{orderInfo.date}</span></p>
-        <p className="col-span-2">Empleado: <span className="font-medium text-gray-700 dark:text-gray-300">{empleadoInfo.nombre || userEmail || 'Cajero'}{empleadoInfo.rol ? ` (${empleadoInfo.rol})` : ''}</span></p>
-        <p className="col-span-2">NOMBRE: <span className="font-medium text-gray-700 dark:text-gray-300">Consumidor Final</span></p>
-      </div>
-
-      <div className="border-t border-gray-200 dark:border-gray-700">
-        <div className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
-          <span>Cant.</span>
-          <span>Artículo</span>
-          <span className="text-right">P. Unit.</span>
-          <span className="text-right">Total</span>
-        </div>
-        {orderInfo.items.map((it: any, idx: number) => {
-          const qty = Number(it.quantity || 0)
-          const lt = Number(it.lineTotal || 0)
-          const up = qty > 0 ? lt / qty : 0
-          return (
-            <div key={idx} className="grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-gray-600 dark:text-gray-300">{qty}</span>
-              <span className="text-gray-800 dark:text-gray-200 font-medium truncate">{it.name}</span>
-              <span className="text-right text-gray-500 dark:text-gray-400">${up.toFixed(2)}</span>
-              <span className="text-right font-medium text-gray-900 dark:text-gray-100">${lt.toFixed(2)}</span>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="mt-3 space-y-1.5 text-xs px-1">
-        <div className="flex justify-between text-gray-500 dark:text-gray-400">
-          <span>Subtotal (sin IVA)</span>
-          <span>${tBase.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-gray-500 dark:text-gray-400">
-          <span>IVA 13%</span>
-          <span>${tIva.toFixed(2)}</span>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-center font-bold text-xs mt-3 pt-3 border-t-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-1">
-        <span>TOTAL</span>
-        <span>${tTotal.toFixed(2)}</span>
-      </div>
-
-      <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg text-xs space-y-1">
-        <div className="flex justify-between">
-          <span className="text-gray-500 dark:text-gray-400">Metodo de pago</span>
-          <span className="font-semibold text-gray-800 dark:text-gray-200">{tMethod}</span>
-        </div>
-        {showCashBreakdown ? (
-          <>
-            <div className="flex justify-between">
-              <span className="text-gray-500 dark:text-gray-400">Efectivo</span>
-              <span className="font-semibold text-[#8CC63F]">${tCashReceived.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500 dark:text-gray-400">Cambio</span>
-              <span className="font-semibold text-gray-800 dark:text-gray-200">
-                {tChangeAmount < 0 ? `-$${Math.abs(tChangeAmount).toFixed(2)}` : `$${tChangeAmount.toFixed(2)}`}
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className="flex justify-between">
-            <span className="text-gray-500 dark:text-gray-400">Pagado</span>
-            <span className="font-semibold text-[#8CC63F]">${tTotal.toFixed(2)}</span>
-          </div>
-        )}
-      </div>
-
-      <p className="text-center text-[10px] italic text-gray-400 dark:text-gray-500 mt-2 pb-1">No se aceptan cambios ni devoluciones en prendas de ropa interior</p>
-      <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-3 pb-1">Gracias por tu preferencia</p>
-    </>
-  )
-}
 
 function estimateTicketPdfHeight(orderInfo: any, paperSize: PaperSize): number {
   if (paperSize === 'letter') return 279
@@ -213,6 +90,7 @@ export default function POS() {
   const [showPricesWithoutIva, setShowPricesWithoutIva] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false)
+  const [printingTicket, setPrintingTicket] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
   const [cashReceivedInput, setCashReceivedInput] = useState('')
   const [lastOrderInfo, setLastOrderInfo] = useState<any>(null)
@@ -229,8 +107,6 @@ export default function POS() {
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const runTicketPrintRef = useRef<(orderInfo: any, closeAfter: boolean) => Promise<void>>(async () => {})
-  const [pendingPrintOrder, setPendingPrintOrder] = useState<any>(null)
   const [empleadoInfo, setEmpleadoInfo] = useState<{ nombre: string; rol: string }>({ nombre: '', rol: '' })
 
   useEffect(() => {
@@ -431,23 +307,6 @@ export default function POS() {
     setIsPaymentModalOpen(true)
   }
 
-  const buildSaleTicketData = (orderInfo: any): SaleTicketData => ({
-    orderId: String(orderInfo.orderId || orderInfo.id || ''),
-    date: String(orderInfo.date || ''),
-    items: (Array.isArray(orderInfo.items) ? orderInfo.items : []).map((item: any) => ({
-      name: String(item.name || 'Producto'),
-      quantity: Number(item.quantity || 0),
-      lineTotal: Number(item.lineTotal || 0),
-    })),
-    total: Number(orderInfo.total || 0),
-    method: String(orderInfo.method || 'efectivo'),
-    cashReceived: orderInfo.cashReceived,
-    changeAmount: orderInfo.changeAmount,
-    storeName: branding.appName,
-    subtitle: branding.subtitle || undefined,
-    paymentLabel: paymentLabels[orderInfo.method] || orderInfo.method,
-  })
-
   const processPayment = async () => {
     if (!selectedPaymentMethod || isProcessingPayment) return
     if (!authReady || !user?.uid) {
@@ -552,7 +411,7 @@ export default function POS() {
       setLastOrderInfo(completedOrder)
 
       setIsPaymentModalOpen(false)
-      setIsTicketModalOpen(!settings.printing.autoPrint)
+      setIsTicketModalOpen(settings.printing.autoPrint)
       setCart([])
       setIsCartOpen(false)
       setSelectedPaymentMethod(null)
@@ -568,10 +427,6 @@ export default function POS() {
 
       if (settings.notifications.sales) {
         toast.success('Venta registrada correctamente')
-      }
-
-      if (settings.printing.autoPrint) {
-        setPendingPrintOrder(completedOrder)
       }
     } catch (err) {
       await Promise.allSettled(
@@ -730,50 +585,20 @@ export default function POS() {
     if (closeAfter) setIsTicketModalOpen(false)
   }
 
-  const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
-    const toastId = toast.loading('Abriendo impresion del ticket...')
+  const printTicketFromOrder = async (_orderInfo: any, closeAfter: boolean) => {
+    setPrintingTicket(true)
     try {
-      toast.info(getBrowserPrintHint(settings.printing.paperSize, settings.printing.printerName), {
-        autoClose: 6000,
-      })
-      const ticketData = buildSaleTicketData(orderInfo)
-      const doc = buildTicketPdf(orderInfo)
-      const result = await printSaleTicket(ticketData, {
-        paperSize: settings.printing.paperSize,
-        pdfFallback: doc,
-        printerName: settings.printing.printerName,
-      })
-      const okMsg =
-        result.method === 'pdf'
-          ? `Ticket PDF enviado a ${result.printer}`
-          : `Ticket enviado a ${result.printer}. Confirma Imprimir en el dialogo.`
-      toast.update(toastId, {
-        render: okMsg,
-        type: 'success',
-        isLoading: false,
-        autoClose: 5000,
-      })
+      await printElementInPage('print-area', settings.printing.paperSize)
+      toast.success(`Ticket enviado a ${settings.printing.printerName || 'POS-58'}`)
     } catch (error) {
       console.error('Print failed', error)
       const message = error instanceof Error ? error.message : 'No se pudo imprimir el ticket'
-      toast.update(toastId, { render: message, type: 'error', isLoading: false, autoClose: 10000 })
-      setIsTicketModalOpen(true)
+      toast.error(message)
+    } finally {
+      setPrintingTicket(false)
     }
-
     if (closeAfter) setIsTicketModalOpen(false)
   }
-
-  runTicketPrintRef.current = runTicketPrint
-
-  const printTicketFromOrder = (orderInfo: any, closeAfter: boolean) =>
-    void runTicketPrint(orderInfo, closeAfter)
-
-  useEffect(() => {
-    if (!pendingPrintOrder) return
-    void runTicketPrintRef.current(pendingPrintOrder, false).finally(() => {
-      setPendingPrintOrder(null)
-    })
-  }, [pendingPrintOrder])
 
   if (cajaOpen === null) {
     return (
@@ -1254,26 +1079,23 @@ export default function POS() {
       )}
 
       {/* Ticket: oculto para impresión automática o visible en modal */}
-      {isTicketModalOpen && lastOrderInfo && (
-        <div id="ticket-print-root" className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
-            <div id="print-area" className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm text-xs">
-              <TicketPrintContent
-                orderInfo={lastOrderInfo}
-                branding={branding}
-                empleadoInfo={empleadoInfo}
-                userEmail={user?.email}
-                paymentLabels={paymentLabels}
-              />
-            </div>
-            <div className="ticket-modal-chrome mt-3 flex gap-2">
-              <button onClick={() => setIsTicketModalOpen(false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm">Cerrar</button>
-              <button onClick={() => void printTicketFromOrder(lastOrderInfo, false)} className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm flex items-center justify-center gap-2"><Printer size={16} />Imprimir</button>
-              <button onClick={() => saveTicketPdf(lastOrderInfo, true)} className="flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Receipt size={16} />PDF</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {lastOrderInfo ? (
+        <TicketPreviewModal
+          open={isTicketModalOpen}
+          onClose={() => setIsTicketModalOpen(false)}
+          onPrint={() => void printTicketFromOrder(lastOrderInfo, false)}
+          onPdf={() => saveTicketPdf(lastOrderInfo, true)}
+          printing={printingTicket}
+        >
+          <TicketPrintContent
+            orderInfo={lastOrderInfo}
+            branding={branding}
+            empleadoInfo={empleadoInfo}
+            userEmail={user?.email}
+            paymentLabels={paymentLabels}
+          />
+        </TicketPreviewModal>
+      ) : null}
     </div>
   )
 }

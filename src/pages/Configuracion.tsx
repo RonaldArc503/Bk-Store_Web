@@ -31,7 +31,10 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import { PAPER_SIZE_OPTIONS, type PaperSize } from '../utils/printPaperSize'
-import { getBrowserPrintHint, printTestTicket } from '../services/TicketPrintService'
+import jsPDF from 'jspdf'
+import { TicketPrintContent } from '../components/TicketPrintContent'
+import { TicketPreviewModal } from '../components/TicketPreviewModal'
+import { printElementInPage } from '../utils/browserTicketPrint'
 import type { Producto } from '../types/product'
 
 /* --- Toggle switch reutilizable --- */
@@ -657,41 +660,58 @@ function InventorySection() {
 
 function PrintingSection() {
   const { settings, updatePrinting } = useSettings()
+  const { user } = useAuth()
   const { printing } = settings
-  const [testingPrint, setTestingPrint] = useState(false)
+  const branding = getResolvedBranding(settings)
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [printingTicket, setPrintingTicket] = useState(false)
 
-  const handleTestPrint = async () => {
-    setTestingPrint(true)
-    const toastId = toast.loading(`Enviando prueba a ${printing.printerName || 'POS-58'}...`)
+  const testOrder = useMemo(
+    () => ({
+      orderId: 'PRUEBA',
+      date: new Date().toLocaleString('es-SV'),
+      items: [{ name: 'Articulo de prueba POS-58', quantity: 1, lineTotal: 1.13 }],
+      total: 1.13,
+      method: 'efectivo',
+      cashReceived: 2,
+      changeAmount: 0.87,
+    }),
+    [showTestModal]
+  )
+
+  const handleTestPrint = () => {
+    setShowTestModal(true)
+  }
+
+  const handlePrintTest = async () => {
+    setPrintingTicket(true)
     try {
-      toast.info(getBrowserPrintHint(printing.paperSize, printing.printerName), { autoClose: 5000 })
-      const result = await printTestTicket({
-        paperSize: printing.paperSize,
-        printerName: printing.printerName,
-      })
-      const okMsg =
-        result.method === 'pdf'
-          ? `Prueba PDF enviada a ${result.printer}.`
-          : `Ticket enviado a ${result.printer}. Pulsa Imprimir en el dialogo.`
-      toast.update(toastId, {
-        render: okMsg,
-        type: 'success',
-        isLoading: false,
-        autoClose: 6000,
-      })
+      await printElementInPage('print-area', printing.paperSize)
+      toast.success(`Ticket enviado a ${printing.printerName || 'POS-58'}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo imprimir la prueba'
-      toast.update(toastId, { render: message, type: 'error', isLoading: false, autoClose: 10000 })
+      toast.error(message)
     } finally {
-      setTestingPrint(false)
+      setPrintingTicket(false)
     }
   }
 
+  const handleTestPdf = () => {
+    const doc = new jsPDF({ unit: 'mm', format: [58, 80] })
+    doc.setFont('helvetica', 'bold')
+    doc.text('PRUEBA POS-58', 4, 10)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Ticket de prueba Bikini Store', 4, 16)
+    doc.save('ticket-prueba.pdf')
+    setShowTestModal(false)
+  }
+
   return (
+    <>
     <SettingsSection icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />} title="Impresión">
       <SettingCard>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Abre el dialogo de impresion al finalizar cada venta">
-          <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Mostrar ticket al cobrar" description="Abre la vista del ticket dentro del sistema al finalizar cada venta">
+          <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Mostrar ticket al cobrar" />
         </SettingRow>
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="PR-100 usa rollo de 58 mm (como indica la etiqueta de la ticketera)">
           <Select
@@ -720,7 +740,7 @@ function PrintingSection() {
             <li>
               Deja <strong>POS-58</strong> como impresora predeterminada en Windows.
             </li>
-            <li>Pulsa <strong>Imprimir ticket de prueba</strong> y confirma en el dialogo del navegador.</li>
+            <li>Pulsa <strong>Ver ticket de prueba</strong>, revisa la vista y usa <strong>Imprimir</strong> o <strong>PDF</strong>.</li>
             <li>Papel <strong>58 mm</strong>, sin encabezado ni pie de pagina.</li>
           </ol>
           <p className="text-amber-900 dark:text-amber-100 rounded-lg bg-amber-100/80 dark:bg-amber-950/40 px-3 py-2">
@@ -732,18 +752,33 @@ function PrintingSection() {
         <div className="px-4 pb-4">
           <button
             type="button"
-            onClick={() => void handleTestPrint()}
-            disabled={testingPrint}
-            className="px-4 py-2 text-sm rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60"
+            onClick={handleTestPrint}
+            className="px-4 py-2 text-sm rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white"
           >
-            {testingPrint ? 'Abriendo prueba…' : 'Imprimir ticket de prueba'}
+            Ver ticket de prueba
           </button>
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 w-full">
-            {getBrowserPrintHint(printing.paperSize)}
+            Se abre dentro del sistema, igual que al cobrar en el POS.
           </p>
         </div>
       </SettingCard>
     </SettingsSection>
+    <TicketPreviewModal
+      open={showTestModal}
+      onClose={() => setShowTestModal(false)}
+      onPrint={() => void handlePrintTest()}
+      onPdf={handleTestPdf}
+      printing={printingTicket}
+    >
+      <TicketPrintContent
+        orderInfo={testOrder}
+        branding={branding}
+        empleadoInfo={{ nombre: 'Prueba', rol: '' }}
+        userEmail={user?.email}
+        paymentLabels={{ efectivo: 'Efectivo' }}
+      />
+    </TicketPreviewModal>
+    </>
   )
 }
 

@@ -1,0 +1,44 @@
+import{c as e,h as t}from"./AppBrandLogo-DgUXODgn.js";import{t as n}from"./jsx-runtime-CJb5yOQ_.js";import{t as r}from"./receipt-FUDzjV60.js";import{n as i}from"./printPaperSize-Bcb-7gTI.js";var a=t(`printer`,[[`path`,{d:`M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2`,key:`143wyd`}],[`path`,{d:`M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6`,key:`1itne7`}],[`rect`,{x:`6`,y:`14`,width:`12`,height:`8`,rx:`1`,key:`1ue0tg`}]]),o=n();function s({orderInfo:t,branding:n,empleadoInfo:r,userEmail:i,paymentLabels:a}){let s=Number(t.total||0),c=Math.round(s/1.13*100)/100,l=Math.round((s-c)*100)/100,u=a[t.method]||t.method||`Efectivo`,d=Number(t.cashReceived||0),f=Number(t.changeAmount||0),p=t.method===`efectivo`&&d>0,m=String(t.orderId||t.id||``).slice(-8).toUpperCase(),h=e(n.presetIcon);return(0,o.jsxs)(o.Fragment,{children:[(0,o.jsxs)(`div`,{className:`text-center mb-4`,children:[n.iconMode===`custom`&&n.customImageUrl?(0,o.jsx)(`img`,{src:n.customImageUrl,alt:n.appName,className:`w-11 h-11 rounded-xl object-cover mx-auto mb-2`}):(0,o.jsx)(`div`,{className:`w-11 h-11 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center mx-auto mb-2`,children:(0,o.jsx)(h,{size:20})}),(0,o.jsx)(`h2`,{className:`text-sm font-bold uppercase text-gray-900`,children:n.appName}),n.subtitle?(0,o.jsx)(`p`,{className:`text-sm uppercase text-gray-500 mt-0.5`,children:n.subtitle}):null]}),(0,o.jsxs)(`div`,{className:`grid grid-cols-2 gap-y-1 gap-x-2 text-xs text-gray-500 mb-3 px-1`,children:[(0,o.jsxs)(`p`,{children:[`Doc N°: `,(0,o.jsx)(`span`,{className:`font-medium text-gray-700`,children:m})]}),(0,o.jsxs)(`p`,{className:`text-right`,children:[`Caja: `,(0,o.jsx)(`span`,{className:`font-medium text-gray-700`,children:`1`})]}),(0,o.jsxs)(`p`,{className:`col-span-2`,children:[`Fecha: `,(0,o.jsx)(`span`,{className:`font-medium text-gray-700`,children:t.date})]}),(0,o.jsxs)(`p`,{className:`col-span-2`,children:[`Empleado:`,` `,(0,o.jsxs)(`span`,{className:`font-medium text-gray-700`,children:[r.nombre||i||`Cajero`,r.rol?` (${r.rol})`:``]})]}),(0,o.jsxs)(`p`,{className:`col-span-2`,children:[`NOMBRE: `,(0,o.jsx)(`span`,{className:`font-medium text-gray-700`,children:`Consumidor Final`})]})]}),(0,o.jsxs)(`div`,{className:`border-t border-gray-200`,children:[(0,o.jsxs)(`div`,{className:`grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100`,children:[(0,o.jsx)(`span`,{children:`Cant.`}),(0,o.jsx)(`span`,{children:`Artículo`}),(0,o.jsx)(`span`,{className:`text-right`,children:`P. Unit.`}),(0,o.jsx)(`span`,{className:`text-right`,children:`Total`})]}),t.items.map((e,t)=>{let n=Number(e.quantity||0),r=Number(e.lineTotal||0),i=n>0?r/n:0;return(0,o.jsxs)(`div`,{className:`grid grid-cols-[32px_1fr_60px_60px] gap-1 py-2 px-1 text-xs border-b border-gray-50`,children:[(0,o.jsx)(`span`,{className:`text-gray-600`,children:n}),(0,o.jsx)(`span`,{className:`text-gray-800 font-medium truncate`,children:e.name}),(0,o.jsxs)(`span`,{className:`text-right text-gray-500`,children:[`$`,i.toFixed(2)]}),(0,o.jsxs)(`span`,{className:`text-right font-medium text-gray-900`,children:[`$`,r.toFixed(2)]})]},t)})]}),(0,o.jsxs)(`div`,{className:`mt-3 space-y-1.5 text-xs px-1`,children:[(0,o.jsxs)(`div`,{className:`flex justify-between text-gray-500`,children:[(0,o.jsx)(`span`,{children:`Subtotal (sin IVA)`}),(0,o.jsxs)(`span`,{children:[`$`,c.toFixed(2)]})]}),(0,o.jsxs)(`div`,{className:`flex justify-between text-gray-500`,children:[(0,o.jsx)(`span`,{children:`IVA 13%`}),(0,o.jsxs)(`span`,{children:[`$`,l.toFixed(2)]})]})]}),(0,o.jsxs)(`div`,{className:`flex justify-between items-center font-bold text-xs mt-3 pt-3 border-t-2 border-gray-900 text-gray-900 px-1`,children:[(0,o.jsx)(`span`,{children:`TOTAL`}),(0,o.jsxs)(`span`,{children:[`$`,s.toFixed(2)]})]}),(0,o.jsxs)(`div`,{className:`mt-3 p-3 bg-gray-50 rounded-lg text-xs space-y-1`,children:[(0,o.jsxs)(`div`,{className:`flex justify-between`,children:[(0,o.jsx)(`span`,{className:`text-gray-500`,children:`Metodo de pago`}),(0,o.jsx)(`span`,{className:`font-semibold text-gray-800`,children:u})]}),p?(0,o.jsxs)(o.Fragment,{children:[(0,o.jsxs)(`div`,{className:`flex justify-between`,children:[(0,o.jsx)(`span`,{className:`text-gray-500`,children:`Efectivo`}),(0,o.jsxs)(`span`,{className:`font-semibold text-[#8CC63F]`,children:[`$`,d.toFixed(2)]})]}),(0,o.jsxs)(`div`,{className:`flex justify-between`,children:[(0,o.jsx)(`span`,{className:`text-gray-500`,children:`Cambio`}),(0,o.jsx)(`span`,{className:`font-semibold text-gray-800`,children:f<0?`-$${Math.abs(f).toFixed(2)}`:`$${f.toFixed(2)}`})]})]}):(0,o.jsxs)(`div`,{className:`flex justify-between`,children:[(0,o.jsx)(`span`,{className:`text-gray-500`,children:`Pagado`}),(0,o.jsxs)(`span`,{className:`font-semibold text-[#8CC63F]`,children:[`$`,s.toFixed(2)]})]})]}),(0,o.jsx)(`p`,{className:`text-center text-[10px] italic text-gray-400 mt-2 pb-1`,children:`No se aceptan cambios ni devoluciones en prendas de ropa interior`}),(0,o.jsx)(`p`,{className:`text-center text-xs text-gray-400 mt-3 pb-1`,children:`Gracias por tu preferencia`})]})}function c({open:e,onClose:t,onPrint:n,onPdf:i,printing:s=!1,children:c}){return e?(0,o.jsx)(`div`,{id:`ticket-print-root`,className:`fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4`,onClick:e=>{e.target===e.currentTarget&&t()},children:(0,o.jsxs)(`div`,{className:`w-full sm:max-w-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 sm:p-5 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto`,children:[(0,o.jsx)(`div`,{id:`print-area`,className:`bg-white p-5 rounded-xl shadow-sm text-xs text-gray-900 print:bg-white print:text-black`,children:c}),(0,o.jsxs)(`div`,{className:`ticket-modal-chrome mt-3 flex gap-2`,children:[(0,o.jsx)(`button`,{type:`button`,onClick:t,className:`flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm`,children:`Cerrar`}),(0,o.jsxs)(`button`,{type:`button`,onClick:n,disabled:s,className:`flex-1 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-60`,children:[(0,o.jsx)(a,{size:16}),s?`Imprimiendo…`:`Imprimir`]}),(0,o.jsxs)(`button`,{type:`button`,onClick:i,className:`flex-1 py-2.5 bg-[#8CC63F] text-white rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform`,children:[(0,o.jsx)(r,{size:16}),`PDF`]})]})]})}):null}var l=`dynamic-ticket-print`;function u(e,t){let n=i(t);return document.getElementById(e)?new Promise((t,r)=>{document.getElementById(l)?.remove();let i=document.createElement(`style`);i.id=l,i.textContent=`
+      @media print {
+        @page { size: ${n}mm auto; margin: 0; }
+        html, body { background: #fff !important; }
+        body > *:not(#ticket-print-root) { display: none !important; }
+        #ticket-print-root {
+          position: static !important;
+          inset: auto !important;
+          width: auto !important;
+          height: auto !important;
+          max-height: none !important;
+          overflow: visible !important;
+          background: #fff !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          display: block !important;
+        }
+        #ticket-print-root > div {
+          background: #fff !important;
+          border: 0 !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
+        }
+        #ticket-print-root .ticket-modal-chrome { display: none !important; }
+        #${e} {
+          box-shadow: none !important;
+          border-radius: 0 !important;
+          width: ${n}mm !important;
+          max-width: ${n}mm !important;
+          margin: 0 !important;
+          padding: 2mm !important;
+          color: #000 !important;
+          background: #fff !important;
+        }
+        #${e}, #${e} * {
+          color: #000 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        #${e} .bg-gray-50 { background: #f9fafb !important; }
+      }
+    `,document.head.appendChild(i);let a=()=>{i.remove(),window.removeEventListener(`afterprint`,a),t()};try{window.addEventListener(`afterprint`,a),window.print(),setTimeout(a,5e3)}catch(e){i.remove(),r(e)}}):Promise.reject(Error(`No se encontro el ticket para imprimir`))}export{a as i,c as n,s as r,u as t};

@@ -1,19 +1,18 @@
 import type { jsPDF } from 'jspdf'
-import { buildEscPosTicket, type SaleTicketData } from '../utils/escposTicket'
 import type { PaperSize } from '../utils/printPaperSize'
 import {
   DEFAULT_THERMAL_PRINTER,
   getBrowserPrintHint,
-  printHtmlInBrowser,
+  printElementInPage,
   printPdfInBrowser,
 } from '../utils/browserTicketPrint'
-import { buildTestTicketHtml, buildThermalTicketHtml } from '../utils/thermalTicketHtml'
 
-export type { SaleTicketData }
-export { DEFAULT_THERMAL_PRINTER, getBrowserPrintHint }
+export type { SaleTicketData } from '../utils/escposTicket'
+export { buildEscPosTicket } from '../utils/escposTicket'
+export { DEFAULT_THERMAL_PRINTER, getBrowserPrintHint, printElementInPage, printPdfInBrowser }
 
 export type TicketPrintResult = {
-  method: 'html' | 'pdf'
+  method: 'element' | 'pdf'
   printer: string
 }
 
@@ -22,21 +21,15 @@ function resolvePrinterName(name?: string): string {
   return trimmed || DEFAULT_THERMAL_PRINTER
 }
 
-export async function printSaleTicket(
-  ticket: SaleTicketData,
-  options: {
-    paperSize: PaperSize
-    pdfFallback?: jsPDF | null
-    printerName?: string
-  }
+export async function printTicketFromPreview(
+  options: { paperSize: PaperSize; printerName?: string; pdfFallback?: jsPDF | null }
 ): Promise<TicketPrintResult> {
   const printer = resolvePrinterName(options.printerName)
-  const html = buildThermalTicketHtml(ticket, options.paperSize)
 
   try {
-    await printHtmlInBrowser(html, 'Ticket de venta', printer)
-    return { method: 'html', printer }
-  } catch (htmlError) {
+    await printElementInPage('print-area', options.paperSize)
+    return { method: 'element', printer }
+  } catch (elementError) {
     if (options.pdfFallback) {
       try {
         await printPdfInBrowser(options.pdfFallback)
@@ -45,28 +38,17 @@ export async function printSaleTicket(
         /* fall through */
       }
     }
-    throw htmlError instanceof Error
-      ? htmlError
-      : new Error(`No se pudo imprimir en ${printer}. Revisa la cola de impresion.`)
+    throw elementError instanceof Error
+      ? elementError
+      : new Error(`No se pudo imprimir en ${printer}.`)
   }
-}
-
-export async function printTestTicket(options: {
-  paperSize: PaperSize
-  printerName?: string
-}): Promise<TicketPrintResult> {
-  const printer = resolvePrinterName(options.printerName)
-  await printHtmlInBrowser(buildTestTicketHtml(options.paperSize), 'Prueba POS-58', printer)
-  return { method: 'html', printer }
 }
 
 export function getPrintInstructions(): string {
   return [
     'Ticketera POS-58 / PR-100 (58 mm).',
     '1. Deja POS-58 como impresora predeterminada en Windows.',
-    '2. Pulsa Imprimir ticket de prueba y confirma en el dialogo del navegador.',
-    '3. Papel 58 mm, sin margenes ni encabezados.',
+    '2. Al cobrar se muestra el ticket dentro del sistema.',
+    '3. Pulsa Imprimir o PDF en el modal del ticket.',
   ].join('\n')
 }
-
-export { buildEscPosTicket }

@@ -1,96 +1,84 @@
 import type { jsPDF } from 'jspdf'
-import type { PaperSize } from './printPaperSize'
+import { getPaperWidthMm, type PaperSize } from './printPaperSize'
 
 export const DEFAULT_THERMAL_PRINTER = 'POS-58'
 
-const PRINT_SHELL = (body: string, title: string, printerName: string) => `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>${title}</title>
-  <style>
-    html, body { margin: 0; background: #f3f4f6; font-family: Arial, sans-serif; }
-    .toolbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      padding: 12px 16px;
-      background: #111827;
-      color: #fff;
-    }
-    .toolbar button {
-      background: #06b6d4;
-      color: #fff;
-      border: 0;
-      border-radius: 10px;
-      padding: 10px 16px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .toolbar p { margin: 0; font-size: 12px; color: #d1d5db; max-width: 520px; }
-    .preview { display: flex; justify-content: center; padding: 16px; }
-    .sheet { background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
-    @media print {
-      html, body { background: #fff; }
-      .toolbar { display: none !important; }
-      .preview { padding: 0; }
-      .sheet { box-shadow: none; }
-    }
-  </style>
-</head>
-<body>
-  <div class="toolbar no-print">
-    <button type="button" onclick="window.print()">Imprimir en ${printerName}</button>
-    <p>Impresora: ${printerName} (predeterminada en Windows). Papel: 58 mm. Sin encabezado ni pie de pagina.</p>
-  </div>
-  <div class="preview">
-    <div class="sheet">${body}</div>
-  </div>
-  <script>
-    window.addEventListener('load', function () {
-      setTimeout(function () { window.print(); }, 400);
-    });
-  </script>
-</body>
-</html>`
+const PRINT_STYLE_ID = 'dynamic-ticket-print'
 
-function openPrintWindow(html: string): Promise<void> {
+export function printElementInPage(elementId: string, paperSize: PaperSize): Promise<void> {
+  const widthMm = getPaperWidthMm(paperSize)
+  const target = document.getElementById(elementId)
+  if (!target) {
+    return Promise.reject(new Error('No se encontro el ticket para imprimir'))
+  }
+
   return new Promise((resolve, reject) => {
-    const popup = window.open('', '_blank', 'width=420,height=720')
-    if (!popup) {
-      reject(new Error('Permite ventanas emergentes para imprimir el ticket.'))
-      return
+    const existing = document.getElementById(PRINT_STYLE_ID)
+    existing?.remove()
+
+    const style = document.createElement('style')
+    style.id = PRINT_STYLE_ID
+    style.textContent = `
+      @media print {
+        @page { size: ${widthMm}mm auto; margin: 0; }
+        html, body { background: #fff !important; }
+        body > *:not(#ticket-print-root) { display: none !important; }
+        #ticket-print-root {
+          position: static !important;
+          inset: auto !important;
+          width: auto !important;
+          height: auto !important;
+          max-height: none !important;
+          overflow: visible !important;
+          background: #fff !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          display: block !important;
+        }
+        #ticket-print-root > div {
+          background: #fff !important;
+          border: 0 !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
+        }
+        #ticket-print-root .ticket-modal-chrome { display: none !important; }
+        #${elementId} {
+          box-shadow: none !important;
+          border-radius: 0 !important;
+          width: ${widthMm}mm !important;
+          max-width: ${widthMm}mm !important;
+          margin: 0 !important;
+          padding: 2mm !important;
+          color: #000 !important;
+          background: #fff !important;
+        }
+        #${elementId}, #${elementId} * {
+          color: #000 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        #${elementId} .bg-gray-50 { background: #f9fafb !important; }
+      }
+    `
+    document.head.appendChild(style)
+
+    const cleanup = () => {
+      style.remove()
+      window.removeEventListener('afterprint', cleanup)
+      resolve()
     }
 
-    popup.document.open()
-    popup.document.write(html)
-    popup.document.close()
-
-    popup.addEventListener('afterprint', () => {
-      popup.close()
-      resolve()
-    })
-
-    setTimeout(resolve, 120000)
+    try {
+      window.addEventListener('afterprint', cleanup)
+      window.print()
+      setTimeout(cleanup, 5000)
+    } catch (error) {
+      style.remove()
+      reject(error)
+    }
   })
-}
-
-export function printHtmlInBrowser(
-  html: string,
-  title = 'Ticket',
-  printerName = DEFAULT_THERMAL_PRINTER
-): Promise<void> {
-  const match = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
-  const inner = match?.[1] ?? html
-  const headMatch = html.match(/<head[^>]*>([\s\S]*)<\/head>/i)
-  const headInner = headMatch?.[1] ?? ''
-  const wrapped = PRINT_SHELL(`${headInner}${inner}`, title, printerName)
-  return openPrintWindow(wrapped)
 }
 
 export function printPdfInBrowser(doc: jsPDF): Promise<void> {
