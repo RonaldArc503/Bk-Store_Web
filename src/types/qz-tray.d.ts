@@ -8,6 +8,7 @@ declare global {
       }
       security: {
         setCertificatePromise: (handler: (resolve: (value?: string) => void, reject: (reason?: unknown) => void) => void) => void
+        setSignatureAlgorithm: (algorithm: string) => void
         setSignaturePromise: (
           handler: (toSign: string) => (resolve: (value: string) => void, reject: (reason?: unknown) => void) => void
         ) => void

@@ -1,0 +1,15 @@
+INSTRUCCIONES QZ TRAY (impresion directa POS-58)
+================================================
+
+1. Abre QZ Tray > Advanced > Site Manager > boton "+"
+2. Crea certificado demo (Yes a todas las preguntas)
+3. Copia estos 2 archivos de la carpeta "QZ Tray Demo Cert" del escritorio
+   a esta misma carpeta (public/qz/):
+
+   - digital-certificate.txt
+   - private-key.pem
+
+4. Ejecuta: npm run build
+5. Despliega: firebase deploy --only hosting
+
+Con eso QZ Tray confia en shopbikinistore.web.app y deja de pedir permiso en cada cobro.

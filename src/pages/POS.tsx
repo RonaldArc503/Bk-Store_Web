@@ -26,6 +26,7 @@ import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
 import { printSaleTicket, warmUpQzConnection, type SaleTicketData } from '../services/TicketPrintService'
+import { isQzSigningReady } from '../services/qzSecurity'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
@@ -229,7 +230,8 @@ export default function POS() {
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const printAfterSaleRef = useRef<(orderInfo: any) => Promise<void>>(async () => {})
+  const runTicketPrintRef = useRef<(orderInfo: any, closeAfter: boolean) => Promise<void>>(async () => {})
+  const [pendingPrintOrder, setPendingPrintOrder] = useState<any>(null)
   const [empleadoInfo, setEmpleadoInfo] = useState<{ nombre: string; rol: string }>({ nombre: '', rol: '' })
 
   useEffect(() => {
@@ -302,6 +304,13 @@ export default function POS() {
   useEffect(() => {
     if (cajaOpen) void warmUpQzConnection()
   }, [cajaOpen])
+
+  useEffect(() => {
+    if (!pendingPrintOrder) return
+    void runTicketPrintRef.current(pendingPrintOrder, false).finally(() => {
+      setPendingPrintOrder(null)
+    })
+  }, [pendingPrintOrder])
 
   const displayPrice = (price: number) =>
     showPricesWithoutIva ? Math.round((price / 1.13) * 100) / 100 : price
@@ -574,7 +583,7 @@ export default function POS() {
       }
 
       if (settings.printing.autoPrint) {
-        void printAfterSaleRef.current(completedOrder)
+        setPendingPrintOrder(completedOrder)
       }
     } catch (err) {
       await Promise.allSettled(
@@ -594,28 +603,6 @@ export default function POS() {
       setIsProcessingPayment(false)
     }
   }
-
-  const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
-    try {
-      const ticketData = buildSaleTicketData(orderInfo)
-      const doc = buildTicketPdf(orderInfo)
-      const result = await printSaleTicket(ticketData, {
-        printerName: settings.printing.printerName || undefined,
-        paperSize: settings.printing.paperSize,
-        pdfFallback: doc,
-      })
-      if (result.printer && !settings.printing.printerName) {
-        updatePrinting({ printerName: result.printer })
-      }
-    } catch (error) {
-      console.error('Print failed', error)
-      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el ticket')
-    }
-
-    if (closeAfter) setIsTicketModalOpen(false)
-  }
-
-  printAfterSaleRef.current = (orderInfo) => runTicketPrint(orderInfo, false)
 
   const buildTicketPdf = (orderInfo: any) => {
     if (!orderInfo) return null
@@ -754,6 +741,40 @@ export default function POS() {
     doc.save(`ticket-${safeId || 'venta'}.pdf`)
     if (closeAfter) setIsTicketModalOpen(false)
   }
+
+  const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
+    const toastId = toast.loading('Enviando ticket a la impresora...')
+    try {
+      if (!isQzSigningReady()) {
+        toast.info('Si QZ Tray muestra una ventana, pulsa Permitir y marca Recordar', { autoClose: 6000 })
+      }
+      const ticketData = buildSaleTicketData(orderInfo)
+      const doc = buildTicketPdf(orderInfo)
+      const result = await printSaleTicket(ticketData, {
+        printerName: settings.printing.printerName || undefined,
+        paperSize: settings.printing.paperSize,
+        pdfFallback: doc,
+      })
+      if (result.printer && !settings.printing.printerName) {
+        updatePrinting({ printerName: result.printer })
+      }
+      toast.update(toastId, {
+        render: `Ticket impreso en ${result.printer}`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 3000,
+      })
+    } catch (error) {
+      console.error('Print failed', error)
+      const message = error instanceof Error ? error.message : 'No se pudo imprimir el ticket'
+      toast.update(toastId, { render: message, type: 'error', isLoading: false, autoClose: 8000 })
+      setIsTicketModalOpen(true)
+    }
+
+    if (closeAfter) setIsTicketModalOpen(false)
+  }
+
+  runTicketPrintRef.current = runTicketPrint
 
   const printTicketFromOrder = async (orderInfo: any, closeAfter: boolean) => {
     await runTicketPrint(orderInfo, closeAfter)
