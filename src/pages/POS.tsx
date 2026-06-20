@@ -741,9 +741,11 @@ export default function POS() {
         pdfFallback: doc,
       })
       const okMsg =
-        result.method === 'pdf'
-          ? 'Ticket enviado (PDF). Elige la LR2000 en el dialogo.'
-          : 'Ticket enviado. Elige la LR2000 en el dialogo e imprime.'
+        result.method === 'serial'
+          ? 'Ticket impreso en la PR-100'
+          : result.method === 'pdf'
+            ? 'Ticket PDF. Elige PR-100 en el dialogo.'
+            : 'Ventana de impresion abierta. Elige PR-100, papel 58 mm.'
       toast.update(toastId, {
         render: okMsg,
         type: 'success',

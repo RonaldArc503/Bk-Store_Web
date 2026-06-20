@@ -31,7 +31,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import { PAPER_SIZE_OPTIONS, type PaperSize } from '../utils/printPaperSize'
-import { getBrowserPrintHint, printTestTicket } from '../services/TicketPrintService'
+import { connectSerialPrinter, getBrowserPrintHint, isSerialPrintSupported, printTestTicket } from '../services/TicketPrintService'
 import type { Producto } from '../types/product'
 
 /* --- Toggle switch reutilizable --- */
@@ -659,18 +659,36 @@ function PrintingSection() {
   const { settings, updatePrinting } = useSettings()
   const { printing } = settings
   const [testingPrint, setTestingPrint] = useState(false)
+  const [pairing, setPairing] = useState(false)
+  const serialSupported = isSerialPrintSupported()
+
+  const handlePairPrinter = async () => {
+    setPairing(true)
+    try {
+      await connectSerialPrinter()
+      toast.success('PR-100 emparejada. Ahora prueba imprimir.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo emparejar la ticketera'
+      toast.error(message)
+    } finally {
+      setPairing(false)
+    }
+  }
 
   const handleTestPrint = async () => {
     setTestingPrint(true)
-    const toastId = toast.loading('Abriendo impresion de prueba...')
+    const toastId = toast.loading('Enviando prueba a la PR-100...')
     try {
-      toast.info(getBrowserPrintHint(printing.paperSize), { autoClose: 6000 })
-      await printTestTicket({ paperSize: printing.paperSize })
+      const result = await printTestTicket({ paperSize: printing.paperSize })
+      const okMsg =
+        result.method === 'serial'
+          ? 'Prueba enviada directo a la PR-100. Revisa si salio papel.'
+          : 'Se abrio la ventana de impresion. Elige PR-100, papel 58 mm e imprime.'
       toast.update(toastId, {
-        render: 'Prueba enviada. Elige la LR2000 en el dialogo e imprime.',
+        render: okMsg,
         type: 'success',
         isLoading: false,
-        autoClose: 5000,
+        autoClose: 6000,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo imprimir la prueba'
@@ -686,7 +704,7 @@ function PrintingSection() {
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Abre el dialogo de impresion al finalizar cada venta">
           <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="LR2000 usa 80 mm (rollo 79.5 mm). POS-58 usa 58 mm">
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="PR-100 usa rollo de 58 mm (como indica la etiqueta de la ticketera)">
           <Select
             value={printing.paperSize}
             onChange={(v) => updatePrinting({ paperSize: v as PaperSize })}
@@ -695,31 +713,49 @@ function PrintingSection() {
         </SettingRow>
         <SettingRow
           icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />}
-          title="Impresora LR2000"
-          description="Nombre de referencia (Windows elige la impresora en el dialogo del navegador)"
+          title="Impresora PR-100"
+          description="Nombre en Windows (referencia). La PR-100 suele aparecer como POS-58 o PR-100"
           border={false}
         >
           <input
             type="text"
             value={printing.printerName}
             onChange={(e) => updatePrinting({ printerName: e.target.value })}
-            placeholder="Ej: LR2000"
+            placeholder="Ej: PR-100 / POS-58"
             className="w-full sm:w-64 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
           />
         </SettingRow>
         <div className="mx-4 mb-4 rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/30 px-4 py-3 text-xs text-cyan-950 dark:text-cyan-100 space-y-2">
-          <p className="font-semibold">Impresion sin QZ Tray</p>
+          <p className="font-semibold">PR-100 (58 mm, ESC/POS) sin QZ Tray</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>Configura la <strong>LR2000</strong> como impresora predeterminada en Windows.</li>
-            <li>Al cobrar, el navegador abrira Imprimir: elige LR2000 y pulsa Imprimir.</li>
+            <li>Usa <strong>Chrome o Edge</strong> en la PC del punto de venta.</li>
             <li>
-              Si tienes documentos atascados (cola sin imprimir): Configuracion de Windows → Impresoras → LR2000 →
-              Abrir cola → <strong>Cancelar todo</strong>.
+              Pulsa <strong>Emparejar PR-100</strong> y selecciona el puerto USB/Serial de la ticketera (solo una vez).
             </li>
-            <li>Cierra <strong>QZ Tray</strong> si esta instalado; puede bloquear la ticketera.</li>
+            <li>Pulsa <strong>Imprimir ticket de prueba</strong>; debe salir &quot;PRUEBA PR-100&quot; al instante.</li>
+            <li>
+              Si no aparece puerto serial: instala el driver USB de la PR-100 o cancela trabajos atascados en Cola de
+              impresion de Windows.
+            </li>
+            <li>Cierra QZ Tray si lo tienes abierto.</li>
           </ol>
+          {!serialSupported ? (
+            <p className="text-amber-800 dark:text-amber-200">
+              Este navegador no soporta impresion directa. Abre el sitio en Chrome o Edge.
+            </p>
+          ) : null}
         </div>
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 flex flex-wrap gap-2">
+          {serialSupported ? (
+            <button
+              type="button"
+              onClick={() => void handlePairPrinter()}
+              disabled={pairing}
+              className="px-4 py-2 text-sm rounded-xl border border-cyan-600 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-950/40 disabled:opacity-60"
+            >
+              {pairing ? 'Emparejando…' : 'Emparejar PR-100'}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void handleTestPrint()}
@@ -728,8 +764,8 @@ function PrintingSection() {
           >
             {testingPrint ? 'Abriendo prueba…' : 'Imprimir ticket de prueba'}
           </button>
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            Debe salir &quot;PRUEBA LR2000&quot; en la ticketera. Usa Chrome o Edge.
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 w-full">
+            {getBrowserPrintHint(printing.paperSize)}
           </p>
         </div>
       </SettingCard>

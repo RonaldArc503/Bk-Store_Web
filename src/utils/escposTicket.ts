@@ -173,3 +173,16 @@ export function buildEscPosTicket(data: SaleTicketData, paperSize: PaperSize): s
 
   return chunks.join('')
 }
+
+export function buildTestEscPos(): string {
+  return [
+    '\x1B@',
+    '\x1Ba\x01',
+    'PRUEBA PR-100',
+    '\x0A',
+    '\x1Ba\x00',
+    'Si lees esto, la ticketera funciona.',
+    '\x0A\x0A\x0A',
+    '\x1DV\x41\x03',
+  ].join('')
+}

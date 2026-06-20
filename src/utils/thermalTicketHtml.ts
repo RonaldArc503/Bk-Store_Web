@@ -128,7 +128,7 @@ export function buildTestTicketHtml(paperSize: PaperSize): string {
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Prueba LR2000</title>
+  <title>Prueba PR-100</title>
   <style>
     @page { size: ${paperMm}mm auto; margin: 0; }
     body {
@@ -143,7 +143,7 @@ export function buildTestTicketHtml(paperSize: PaperSize): string {
   </style>
 </head>
 <body>
-  <h1>PRUEBA LR2000</h1>
+  <h1>PRUEBA PR-100</h1>
   <p>Si lees esto, la ticketera funciona.</p>
   <p>${new Date().toLocaleString('es-SV')}</p>
 </body>

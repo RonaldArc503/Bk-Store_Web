@@ -1,27 +1,52 @@
 import type { jsPDF } from 'jspdf'
-import { buildEscPosTicket, type SaleTicketData } from '../utils/escposTicket'
+import {
+  buildEscPosTicket,
+  buildTestEscPos,
+  type SaleTicketData,
+} from '../utils/escposTicket'
 import type { PaperSize } from '../utils/printPaperSize'
 import {
   getBrowserPrintHint,
   printHtmlInBrowser,
   printPdfInBrowser,
 } from '../utils/browserTicketPrint'
+import {
+  isSerialPrintSupported,
+  pairSerialPrinter,
+  printEscPosViaSerial,
+} from '../utils/serialThermalPrint'
 import { buildTestTicketHtml, buildThermalTicketHtml } from '../utils/thermalTicketHtml'
 
 export type { SaleTicketData }
 
 export type TicketPrintResult = {
-  method: 'html' | 'pdf'
+  method: 'serial' | 'html' | 'pdf'
+}
+
+async function trySerialPrint(payload: string): Promise<boolean> {
+  if (!isSerialPrintSupported()) return false
+  try {
+    await printEscPosViaSerial(payload)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function printSaleTicket(
   ticket: SaleTicketData,
-  options: { paperSize: PaperSize; pdfFallback?: jsPDF | null }
+  options: { paperSize: PaperSize; pdfFallback?: jsPDF | null; preferSerial?: boolean }
 ): Promise<TicketPrintResult> {
-  const html = buildThermalTicketHtml(ticket, options.paperSize)
+  const escpos = buildEscPosTicket(ticket, options.paperSize)
 
+  if (options.preferSerial !== false) {
+    const serialOk = await trySerialPrint(escpos)
+    if (serialOk) return { method: 'serial' }
+  }
+
+  const html = buildThermalTicketHtml(ticket, options.paperSize)
   try {
-    await printHtmlInBrowser(html)
+    await printHtmlInBrowser(html, 'Ticket de venta')
     return { method: 'html' }
   } catch (htmlError) {
     if (options.pdfFallback) {
@@ -34,25 +59,39 @@ export async function printSaleTicket(
     }
     throw htmlError instanceof Error
       ? htmlError
-      : new Error('No se pudo imprimir. Revisa que la LR2000 este encendida y seleccionada.')
+      : new Error('No se pudo imprimir. Empareja la PR-100 o revisa la cola de Windows.')
   }
 }
 
 export async function printTestTicket(options: {
   paperSize: PaperSize
-}): Promise<void> {
-  const html = buildTestTicketHtml(options.paperSize)
-  await printHtmlInBrowser(html)
+  preferSerial?: boolean
+}): Promise<TicketPrintResult> {
+  if (options.preferSerial !== false) {
+    const serialOk = await trySerialPrint(buildTestEscPos())
+    if (serialOk) return { method: 'serial' }
+  }
+
+  await printHtmlInBrowser(buildTestTicketHtml(options.paperSize), 'Prueba PR-100')
+  return { method: 'html' }
+}
+
+export async function connectSerialPrinter(): Promise<void> {
+  await pairSerialPrinter()
 }
 
 export function getPrintInstructions(): string {
   return [
-    'Impresion directa desde el navegador (sin QZ Tray).',
-    '1. En Windows, configura la LR2000 como impresora predeterminada.',
-    '2. Al cobrar se abrira el dialogo de impresion: elige LR2000.',
-    '3. Si hay documentos atascados: Configuracion > Impresoras > LR2000 > Ver cola > Cancelar todo.',
-    '4. Cierra QZ Tray si lo tienes instalado (puede bloquear la impresora).',
+    'Ticketera PR-100 (58 mm, ESC/POS).',
+    '1. Usa Chrome o Edge en la PC del POS.',
+    '2. Pulsa Emparejar PR-100 una sola vez y elige el puerto USB/Serial.',
+    '3. Pulsa Imprimir ticket de prueba; debe salir papel al instante.',
+    '4. Si usas dialogo del navegador: impresora PR-100, papel 58 mm, sin margenes.',
   ].join('\n')
 }
 
-export { getBrowserPrintHint, buildEscPosTicket }
+export {
+  getBrowserPrintHint,
+  buildEscPosTicket,
+  isSerialPrintSupported,
+}

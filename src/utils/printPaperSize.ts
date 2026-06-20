@@ -1,7 +1,7 @@
 export type PaperSize = '58mm' | '72mm' | '80mm' | 'letter'
 
 export const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
-  { value: '58mm', label: 'POS-58 / 58 mm (57.5 mm)' },
+  { value: '58mm', label: 'PR-100 / POS-58 / 58 mm' },
   { value: '72mm', label: 'Térmico 72 mm' },
   { value: '80mm', label: 'LR2000 / térmico 80 mm (79.5 mm)' },
   { value: 'letter', label: 'Carta' },
