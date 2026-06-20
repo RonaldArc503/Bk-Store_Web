@@ -3,80 +3,107 @@ import { getPaperWidthMm, type PaperSize } from './printPaperSize'
 
 export const DEFAULT_THERMAL_PRINTER = 'POS-58'
 
-const PRINT_STYLE_ID = 'dynamic-ticket-print'
+function collectDocumentStyles(): string {
+  return Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+    .map((node) => node.outerHTML)
+    .join('\n')
+}
 
 export function printElementInPage(elementId: string, paperSize: PaperSize): Promise<void> {
-  const widthMm = getPaperWidthMm(paperSize)
-  const target = document.getElementById(elementId)
-  if (!target) {
+  const source = document.getElementById(elementId)
+  if (!source) {
     return Promise.reject(new Error('No se encontro el ticket para imprimir'))
   }
 
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById(PRINT_STYLE_ID)
-    existing?.remove()
+  const widthMm = getPaperWidthMm(paperSize)
+  const styles = collectDocumentStyles()
 
-    const style = document.createElement('style')
-    style.id = PRINT_STYLE_ID
-    style.textContent = `
-      @media print {
-        @page { size: ${widthMm}mm auto; margin: 0; }
-        html, body { background: #fff !important; }
-        body > *:not(#ticket-print-root) { display: none !important; }
-        #ticket-print-root {
-          position: static !important;
-          inset: auto !important;
-          width: auto !important;
-          height: auto !important;
-          max-height: none !important;
-          overflow: visible !important;
-          background: #fff !important;
-          padding: 0 !important;
-          margin: 0 !important;
-          display: block !important;
-        }
-        #ticket-print-root > div {
-          background: #fff !important;
-          border: 0 !important;
-          box-shadow: none !important;
-          padding: 0 !important;
-          max-height: none !important;
-          overflow: visible !important;
-        }
-        #ticket-print-root .ticket-modal-chrome { display: none !important; }
-        #${elementId} {
-          box-shadow: none !important;
-          border-radius: 0 !important;
-          width: ${widthMm}mm !important;
-          max-width: ${widthMm}mm !important;
-          margin: 0 !important;
-          padding: 2mm !important;
-          color: #000 !important;
-          background: #fff !important;
-        }
-        #${elementId}, #${elementId} * {
-          color: #000 !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
-        #${elementId} .bg-gray-50 { background: #f9fafb !important; }
-      }
-    `
-    document.head.appendChild(style)
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.title = 'Impresion ticket'
+  iframe.style.cssText =
+    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none'
+
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument
+  if (!doc) {
+    iframe.remove()
+    return Promise.reject(new Error('No se pudo preparar la impresion'))
+  }
+
+  doc.open()
+  doc.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Ticket</title>
+  ${styles}
+  <style>
+    @page { size: ${widthMm}mm auto; margin: 0; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff !important;
+      color: #000 !important;
+    }
+    body {
+      width: ${widthMm}mm;
+      padding: 2mm;
+      box-sizing: border-box;
+    }
+    #print-area, #print-area * {
+      color: #000 !important;
+      background: transparent !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    #print-area .bg-gray-50 { background: #f3f4f6 !important; }
+    #print-area .text-\\[\\#8CC63F\\] { color: #166534 !important; }
+    #print-area .border-gray-200,
+    #print-area .border-gray-100,
+    #print-area .border-gray-900 {
+      border-color: #000 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="print-area">${source.innerHTML}</div>
+</body>
+</html>`)
+  doc.close()
+
+  return new Promise((resolve, reject) => {
+    const win = iframe.contentWindow
+    if (!win) {
+      iframe.remove()
+      reject(new Error('No se pudo abrir la impresion'))
+      return
+    }
 
     const cleanup = () => {
-      style.remove()
+      iframe.remove()
       window.removeEventListener('afterprint', cleanup)
       resolve()
     }
 
-    try {
-      window.addEventListener('afterprint', cleanup)
-      window.print()
-      setTimeout(cleanup, 5000)
-    } catch (error) {
-      style.remove()
-      reject(error)
+    const startPrint = () => {
+      try {
+        win.focus()
+        win.print()
+      } catch (error) {
+        iframe.remove()
+        reject(error instanceof Error ? error : new Error('No se pudo imprimir'))
+        return
+      }
+      win.addEventListener('afterprint', cleanup, { once: true })
+      setTimeout(cleanup, 8000)
+    }
+
+    if (doc.readyState === 'complete') {
+      setTimeout(startPrint, 250)
+    } else {
+      iframe.onload = () => setTimeout(startPrint, 250)
     }
   })
 }
@@ -86,28 +113,44 @@ export function printPdfInBrowser(doc: jsPDF): Promise<void> {
     try {
       const blob = doc.output('blob')
       const url = URL.createObjectURL(blob)
-      const popup = window.open(url, '_blank')
-      if (!popup) {
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText =
+        'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none'
+      iframe.src = url
+      document.body.appendChild(iframe)
+
+      const cleanup = () => {
         URL.revokeObjectURL(url)
-        reject(new Error('Permite ventanas emergentes para imprimir el ticket.'))
-        return
+        iframe.remove()
       }
 
-      popup.addEventListener('load', () => {
-        popup.focus()
-        popup.print()
-      })
+      iframe.onload = () => {
+        const win = iframe.contentWindow
+        if (!win) {
+          cleanup()
+          reject(new Error('No se pudo abrir el PDF'))
+          return
+        }
+        win.focus()
+        win.print()
+        win.addEventListener(
+          'afterprint',
+          () => {
+            cleanup()
+            resolve()
+          },
+          { once: true }
+        )
+        setTimeout(() => {
+          cleanup()
+          resolve()
+        }, 8000)
+      }
 
-      popup.addEventListener('afterprint', () => {
-        URL.revokeObjectURL(url)
-        popup.close()
-        resolve()
-      })
-
-      setTimeout(() => {
-        URL.revokeObjectURL(url)
-        resolve()
-      }, 120000)
+      iframe.onerror = () => {
+        cleanup()
+        reject(new Error('No se pudo abrir el dialogo de impresion'))
+      }
     } catch (error) {
       reject(error)
     }
