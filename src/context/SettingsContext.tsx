@@ -70,7 +70,7 @@ const defaultSettings: StoreSettings = {
   },
   printing: {
     autoPrint: false,
-    paperSize: '58mm',
+    paperSize: '80mm',
     printerName: '',
   },
   ui: {

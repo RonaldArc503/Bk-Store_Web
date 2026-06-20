@@ -31,7 +31,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MaintenanceService } from '../services/MaintenanceService'
 import { ProductService } from '../services/ProductService'
 import { PAPER_SIZE_OPTIONS, type PaperSize } from '../utils/printPaperSize'
-import { detectPrinters, getQzSetupStatus, printTestTicket } from '../services/TicketPrintService'
+import { getBrowserPrintHint, printTestTicket } from '../services/TicketPrintService'
 import type { Producto } from '../types/product'
 
 /* --- Toggle switch reutilizable --- */
@@ -658,65 +658,16 @@ function InventorySection() {
 function PrintingSection() {
   const { settings, updatePrinting } = useSettings()
   const { printing } = settings
-  const [detectedPrinters, setDetectedPrinters] = useState<string[]>([])
-  const [qzAvailable, setQzAvailable] = useState<boolean | null>(null)
-  const [detecting, setDetecting] = useState(false)
   const [testingPrint, setTestingPrint] = useState(false)
-  const [qzSetup, setQzSetup] = useState<Awaited<ReturnType<typeof getQzSetupStatus>> | null>(null)
-
-  useEffect(() => {
-    void getQzSetupStatus().then(setQzSetup).catch(() =>
-      setQzSetup({ certOnServer: false, keyOnServer: false, signed: false })
-    )
-  }, [])
-
-  const handleDetectPrinters = async () => {
-    setDetecting(true)
-    try {
-      const result = await detectPrinters()
-      setQzAvailable(result.available)
-      setDetectedPrinters(result.printers)
-      if (result.setup) setQzSetup(result.setup)
-      if (result.available && result.printers.length === 0) {
-        toast.info('QZ Tray conectado, pero no se encontraron impresoras')
-        return
-      }
-      if (!result.available) {
-        toast.warn(result.error || 'Instala QZ Tray en la PC y asegurate de que este abierto en la bandeja')
-        return
-      }
-      if (result.selected) {
-        updatePrinting({ printerName: result.selected })
-        toast.success(`Impresora detectada: ${result.selected}`)
-      } else {
-        toast.info('Impresoras encontradas. Selecciona una en la lista.')
-      }
-    } catch (error) {
-      console.error(error)
-      toast.error('No se pudieron detectar impresoras')
-    } finally {
-      setDetecting(false)
-    }
-  }
 
   const handleTestPrint = async () => {
     setTestingPrint(true)
-    const toastId = toast.loading('Enviando prueba a la ticketera...')
+    const toastId = toast.loading('Abriendo impresion de prueba...')
     try {
-      if (!qzSetup?.signed) {
-        toast.info(
-          'Si aparece "Action Required" de QZ Tray, pulsa Allow y marca Remember (puede estar detras del navegador).',
-          { autoClose: 8000 }
-        )
-      }
-      const result = await printTestTicket({
-        printerName: printing.printerName || undefined,
-      })
-      if (result.printer && !printing.printerName) {
-        updatePrinting({ printerName: result.printer })
-      }
+      toast.info(getBrowserPrintHint(printing.paperSize), { autoClose: 6000 })
+      await printTestTicket({ paperSize: printing.paperSize })
       toast.update(toastId, {
-        render: `Prueba enviada a: ${result.printer}. Revisa si salio papel.`,
+        render: 'Prueba enviada. Elige la LR2000 en el dialogo e imprime.',
         type: 'success',
         isLoading: false,
         autoClose: 5000,
@@ -729,16 +680,10 @@ function PrintingSection() {
     }
   }
 
-  const printerOptions = detectedPrinters.length
-    ? detectedPrinters.map((name) => ({ value: name, label: name }))
-    : printing.printerName
-      ? [{ value: printing.printerName, label: printing.printerName }]
-      : [{ value: '', label: 'Auto-detectar al imprimir' }]
-
   return (
     <SettingsSection icon={<Printer className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />} title="Impresión">
       <SettingCard>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Envia el ticket directo a la ticketera al finalizar cada venta">
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Abre el dialogo de impresion al finalizar cada venta">
           <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="LR2000 usa 80 mm (rollo 79.5 mm). POS-58 usa 58 mm">
@@ -750,67 +695,30 @@ function PrintingSection() {
         </SettingRow>
         <SettingRow
           icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />}
-          title="Impresora de tickets"
-          description="Detecta la ticketera conectada en esta PC (requiere QZ Tray)"
+          title="Impresora LR2000"
+          description="Nombre de referencia (Windows elige la impresora en el dialogo del navegador)"
           border={false}
         >
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:min-w-[260px]">
-            <Select
-              value={printing.printerName || ''}
-              onChange={(v) => updatePrinting({ printerName: v })}
-              options={printerOptions}
-            />
-            <button
-              type="button"
-              onClick={() => void handleDetectPrinters()}
-              disabled={detecting}
-              className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60"
-            >
-              {detecting ? 'Detectando…' : 'Detectar'}
-            </button>
-          </div>
+          <input
+            type="text"
+            value={printing.printerName}
+            onChange={(e) => updatePrinting({ printerName: e.target.value })}
+            placeholder="Ej: LR2000"
+            className="w-full sm:w-64 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+          />
         </SettingRow>
-        {qzSetup && !qzSetup.signed ? (
-          <div className="mx-4 mb-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-xs text-amber-900 dark:text-amber-100 space-y-2">
-            <p className="font-semibold">QZ Tray sigue pidiendo &quot;Action Required&quot;</p>
-            <p>
-              Los certificados de confianza no estan en el servidor (certificado:{' '}
-              {qzSetup.certOnServer ? 'OK' : 'falta'}, clave: {qzSetup.keyOnServer ? 'OK' : 'falta'}).
-              Site Manager solo en la PC no basta: hay que subirlos al sitio web.
-            </p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>QZ Tray → Advanced → Site Manager → crear certificado demo</li>
-              <li>
-                Copiar <span className="font-mono">digital-certificate.txt</span> y{' '}
-                <span className="font-mono">private-key.pem</span> del escritorio a{' '}
-                <span className="font-mono">public/qz/</span>
-              </li>
-              <li>Ejecutar build y deploy de hosting (quien administra el proyecto)</li>
-            </ol>
-            <p>
-              Mientras tanto: en cada venta pulsa <strong>Allow</strong> y marca <strong>Remember</strong> (conexion e
-              impresion). La ventana puede quedar detras del navegador.
-            </p>
-          </div>
-        ) : qzSetup?.signed ? (
-          <p className="px-4 pb-2 text-xs text-lime-700 dark:text-lime-300">
-            Certificados QZ detectados en el servidor. QZ Tray no deberia pedir permiso en cada cobro.
-          </p>
-        ) : null}
-        {qzAvailable === false ? (
-          <p className="px-4 pb-4 text-xs text-amber-700 dark:text-amber-300">
-            Para imprimir sin abrir el navegador, instala{' '}
-            <a href="https://qz.io/download/" target="_blank" rel="noreferrer" className="underline font-medium">
-              QZ Tray
-            </a>{' '}
-            en la computadora del punto de venta y vuelve a pulsar Detectar.
-          </p>
-        ) : null}
-        {printing.printerName ? (
-          <p className="px-4 pb-2 text-xs text-gray-500 dark:text-gray-400">
-            Impresora activa: <span className="font-medium text-gray-700 dark:text-gray-300">{printing.printerName}</span>
-          </p>
-        ) : null}
+        <div className="mx-4 mb-4 rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/30 px-4 py-3 text-xs text-cyan-950 dark:text-cyan-100 space-y-2">
+          <p className="font-semibold">Impresion sin QZ Tray</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li>Configura la <strong>LR2000</strong> como impresora predeterminada en Windows.</li>
+            <li>Al cobrar, el navegador abrira Imprimir: elige LR2000 y pulsa Imprimir.</li>
+            <li>
+              Si tienes documentos atascados (cola sin imprimir): Configuracion de Windows → Impresoras → LR2000 →
+              Abrir cola → <strong>Cancelar todo</strong>.
+            </li>
+            <li>Cierra <strong>QZ Tray</strong> si esta instalado; puede bloquear la ticketera.</li>
+          </ol>
+        </div>
         <div className="px-4 pb-4">
           <button
             type="button"
@@ -818,10 +726,10 @@ function PrintingSection() {
             disabled={testingPrint}
             className="px-4 py-2 text-sm rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60"
           >
-            {testingPrint ? 'Imprimiendo prueba…' : 'Imprimir ticket de prueba'}
+            {testingPrint ? 'Abriendo prueba…' : 'Imprimir ticket de prueba'}
           </button>
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            Usa este boton antes de cobrar en el POS. Debe salir una linea &quot;PRUEBA LR2000&quot; en la ticketera.
+            Debe salir &quot;PRUEBA LR2000&quot; en la ticketera. Usa Chrome o Edge.
           </p>
         </div>
       </SettingCard>

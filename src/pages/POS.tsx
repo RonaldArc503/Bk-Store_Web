@@ -25,8 +25,7 @@ import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
-import { printSaleTicket, type SaleTicketData } from '../services/TicketPrintService'
-import { isQzSigningReady } from '../services/qzSecurity'
+import { printSaleTicket, getBrowserPrintHint, type SaleTicketData } from '../services/TicketPrintService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
@@ -197,7 +196,7 @@ function estimateTicketPdfHeight(orderInfo: any, paperSize: PaperSize): number {
 
 export default function POS() {
   const { user, authReady } = useAuth()
-  const { settings, updatePrinting } = useSettings()
+  const { settings } = useSettings()
   const branding = getResolvedBranding(settings)
   const navigate = useNavigate()
   const paymentLabels: Record<string, string> = {
@@ -732,33 +731,24 @@ export default function POS() {
   }
 
   const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
-    const toastId = toast.loading('Enviando ticket a la ticketera...')
+    const toastId = toast.loading('Abriendo impresion del ticket...')
     try {
-      if (!isQzSigningReady()) {
-        toast.info(
-          'Si aparece "Action Required" de QZ Tray, pulsa Allow y marca Remember (puede estar detras del navegador).',
-          { autoClose: 8000 }
-        )
-      }
+      toast.info(getBrowserPrintHint(settings.printing.paperSize), { autoClose: 6000 })
       const ticketData = buildSaleTicketData(orderInfo)
       const doc = buildTicketPdf(orderInfo)
       const result = await printSaleTicket(ticketData, {
-        printerName: settings.printing.printerName || undefined,
         paperSize: settings.printing.paperSize,
         pdfFallback: doc,
       })
-      if (result.printer && !settings.printing.printerName) {
-        updatePrinting({ printerName: result.printer })
-      }
       const okMsg =
-        result.method === 'browser'
-          ? 'Ticket enviado al dialogo de impresion del navegador'
-          : `Ticket impreso en: ${result.printer}`
+        result.method === 'pdf'
+          ? 'Ticket enviado (PDF). Elige la LR2000 en el dialogo.'
+          : 'Ticket enviado. Elige la LR2000 en el dialogo e imprime.'
       toast.update(toastId, {
         render: okMsg,
         type: 'success',
         isLoading: false,
-        autoClose: 4000,
+        autoClose: 5000,
       })
     } catch (error) {
       console.error('Print failed', error)
