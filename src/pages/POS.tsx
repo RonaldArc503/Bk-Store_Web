@@ -25,7 +25,7 @@ import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
-import { printSaleTicket, type SaleTicketData } from '../services/TicketPrintService'
+import { printSaleTicket, warmUpQzConnection, type SaleTicketData } from '../services/TicketPrintService'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
 import { CajaService } from '../services/CajaService'
@@ -229,6 +229,7 @@ export default function POS() {
   const [cajaOpen, setCajaOpen] = useState<boolean | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const printAfterSaleRef = useRef<(orderInfo: any) => Promise<void>>(async () => {})
   const [empleadoInfo, setEmpleadoInfo] = useState<{ nombre: string; rol: string }>({ nombre: '', rol: '' })
 
   useEffect(() => {
@@ -297,6 +298,10 @@ export default function POS() {
     })()
     return () => { mounted = false }
   }, [authReady, user?.uid])
+
+  useEffect(() => {
+    if (cajaOpen) void warmUpQzConnection()
+  }, [cajaOpen])
 
   const displayPrice = (price: number) =>
     showPricesWithoutIva ? Math.round((price / 1.13) * 100) / 100 : price
@@ -569,7 +574,7 @@ export default function POS() {
       }
 
       if (settings.printing.autoPrint) {
-        void runAutoPrint(completedOrder)
+        void printAfterSaleRef.current(completedOrder)
       }
     } catch (err) {
       await Promise.allSettled(
@@ -590,7 +595,7 @@ export default function POS() {
     }
   }
 
-  const runAutoPrint = async (orderInfo: any) => {
+  const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
     try {
       const ticketData = buildSaleTicketData(orderInfo)
       const doc = buildTicketPdf(orderInfo)
@@ -603,10 +608,14 @@ export default function POS() {
         updatePrinting({ printerName: result.printer })
       }
     } catch (error) {
-      console.error('Auto print failed', error)
-      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el ticket automaticamente')
+      console.error('Print failed', error)
+      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el ticket')
     }
+
+    if (closeAfter) setIsTicketModalOpen(false)
   }
+
+  printAfterSaleRef.current = (orderInfo) => runTicketPrint(orderInfo, false)
 
   const buildTicketPdf = (orderInfo: any) => {
     if (!orderInfo) return null
@@ -650,12 +659,12 @@ export default function POS() {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(fs)
     const colQty = left
-    const colDesc = left + 12
-    const colPU = right - (isLetter ? 40 : 30)
+    const colDesc = left + (paperSize === '58mm' ? 8 : 12)
+    const colPU = right - (isLetter ? 40 : paperSize === '58mm' ? 22 : 30)
     const colTotal = right
 
-    doc.text('CANT.', colQty, y)
-    doc.text('DESCRIPCION', colDesc, y)
+    doc.text('CANT', colQty, y)
+    doc.text(paperSize === '58mm' ? 'ARTICULO' : 'DESCRIPCION', colDesc, y)
     doc.text('P.U', colPU, y, { align: 'right' })
     doc.text('TOTAL', colTotal, y, { align: 'right' })
     y += 2
@@ -747,23 +756,7 @@ export default function POS() {
   }
 
   const printTicketFromOrder = async (orderInfo: any, closeAfter: boolean) => {
-    try {
-      const ticketData = buildSaleTicketData(orderInfo)
-      const doc = buildTicketPdf(orderInfo)
-      const result = await printSaleTicket(ticketData, {
-        printerName: settings.printing.printerName || undefined,
-        paperSize: settings.printing.paperSize,
-        pdfFallback: doc,
-      })
-      if (result.printer && !settings.printing.printerName) {
-        updatePrinting({ printerName: result.printer })
-      }
-    } catch (error) {
-      console.error('Print failed', error)
-      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el ticket')
-    }
-
-    if (closeAfter) setIsTicketModalOpen(false)
+    await runTicketPrint(orderInfo, closeAfter)
   }
 
   if (cajaOpen === null) {

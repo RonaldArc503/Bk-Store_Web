@@ -5,15 +5,19 @@ import type { PaperSize } from '../utils/printPaperSize'
 export type { SaleTicketData }
 
 const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js'
-const QZ_CONNECT_TIMEOUT_MS = 10000
+const QZ_CONNECT_TIMEOUT_MS = 12000
 
 const THERMAL_PATTERNS = [
+  /pos-58/i,
+  /pos58/i,
+  /pos-58d/i,
+  /58mm/i,
   /thermal/i,
   /receipt/i,
   /recibo/i,
   /ticket/i,
   /ticketera/i,
-  /pos/i,
+  /\bpos\b/i,
   /epson/i,
   /tm-/i,
   /tm\d/i,
@@ -21,16 +25,17 @@ const THERMAL_PATTERNS = [
   /tsp/i,
   /citizen/i,
   /bixolon/i,
-  /58mm/i,
   /72mm/i,
   /80mm/i,
   /t[eé]rmic/i,
   /termic/i,
   /generic/i,
   /text only/i,
+  /usb/i,
 ]
 
 let qzLoadPromise: Promise<NonNullable<Window['qz']>> | null = null
+let qzConnectPromise: Promise<NonNullable<Window['qz']>> | null = null
 
 function loadQzTray(): Promise<NonNullable<Window['qz']>> {
   if (window.qz) return Promise.resolve(window.qz)
@@ -64,29 +69,59 @@ function loadQzTray(): Promise<NonNullable<Window['qz']>> {
   return qzLoadPromise
 }
 
-async function connectQz(): Promise<NonNullable<Window['qz']>> {
-  const qz = await loadQzTray()
-  if (!qz.websocket.isActive()) {
-    await Promise.race([
-      qz.websocket.connect(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('QZ Tray no responde. Abre QZ Tray en la bandeja del sistema.')), QZ_CONNECT_TIMEOUT_MS)
-      ),
-    ])
+async function connectQz(force = false): Promise<NonNullable<Window['qz']>> {
+  if (!force && qzConnectPromise) {
+    try {
+      return await qzConnectPromise
+    } catch {
+      qzConnectPromise = null
+    }
   }
-  return qz
+
+  qzConnectPromise = (async () => {
+    const qz = await loadQzTray()
+    if (!qz.websocket.isActive()) {
+      await Promise.race([
+        qz.websocket.connect(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('QZ Tray no responde. Abre QZ Tray en la bandeja del sistema.')),
+            QZ_CONNECT_TIMEOUT_MS
+          )
+        ),
+      ])
+    }
+    return qz
+  })()
+
+  try {
+    return await qzConnectPromise
+  } catch (error) {
+    qzConnectPromise = null
+    throw error
+  }
+}
+
+/** Conectar QZ al abrir el POS para que el permiso quede listo antes del cobro */
+export async function warmUpQzConnection(): Promise<boolean> {
+  try {
+    await connectQz()
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function pickBestPrinter(printers: string[], savedName?: string, defaultName?: string | null): string | null {
   if (!printers.length) return null
   if (savedName && printers.includes(savedName)) return savedName
-  if (defaultName && printers.includes(defaultName)) return defaultName
 
   for (const pattern of THERMAL_PATTERNS) {
     const match = printers.find((name) => pattern.test(name))
     if (match) return match
   }
 
+  if (defaultName && printers.includes(defaultName)) return defaultName
   return printers[0] ?? null
 }
 
@@ -97,7 +132,7 @@ export async function detectPrinters(): Promise<{
   error?: string
 }> {
   try {
-    const qz = await connectQz()
+    const qz = await connectQz(true)
     const printers = await qz.printers.find()
     let defaultName: string | null = null
     try {
@@ -140,18 +175,20 @@ async function resolvePrinter(qz: NonNullable<Window['qz']>, savedName?: string)
 async function printEscPosWithQz(
   qz: NonNullable<Window['qz']>,
   printerName: string,
-  commands: string[]
+  payload: string
 ): Promise<void> {
+  const printData = [{ type: 'raw', format: 'command', flavor: 'plain', data: payload }]
   const configs = [
-    qz.configs.create(printerName, { encoding: 'UTF-8' }),
-    qz.configs.create(printerName, { encoding: 'UTF-8', altPrinting: true }),
+    qz.configs.create(printerName, { encoding: 'ISO-8859-1' }),
     qz.configs.create(printerName, { encoding: 'ISO-8859-1', altPrinting: true }),
+    qz.configs.create(printerName, { encoding: 'UTF-8', altPrinting: true }),
+    qz.configs.create(printerName, { encoding: 'UTF-8' }),
   ]
 
   let lastError: unknown = null
   for (const config of configs) {
     try {
-      await qz.print(config, commands)
+      await qz.print(config, printData)
       return
     } catch (error) {
       lastError = error
@@ -191,7 +228,7 @@ function printPdfInBrowser(doc: jsPDF): void {
 }
 
 async function printPdfWithQz(qz: NonNullable<Window['qz']>, printerName: string, doc: jsPDF): Promise<void> {
-  const config = qz.configs.create(printerName, { altFontRendering: true })
+  const config = qz.configs.create(printerName, { altFontRendering: true, altPrinting: true })
   const base64 = pdfToBase64(doc)
   await qz.print(config, [
     {
@@ -214,33 +251,33 @@ export async function printSaleTicket(
   options: { printerName?: string; paperSize: PaperSize; pdfFallback?: jsPDF | null }
 ): Promise<TicketPrintResult> {
   const escpos = buildEscPosTicket(ticket, options.paperSize)
+  let lastError: Error | null = null
 
   try {
     const qz = await connectQz()
     const printer = await resolvePrinter(qz, options.printerName)
     await printEscPosWithQz(qz, printer, escpos)
     return { method: 'qz-escpos', printer }
-  } catch (escposError) {
-    console.warn('ESC/POS via QZ fallo, intentando PDF', escposError)
+  } catch (error) {
+    lastError = error instanceof Error ? error : new Error('Error ESC/POS')
+    console.warn('ESC/POS via QZ fallo', error)
   }
 
   if (options.pdfFallback) {
     try {
-      const qz = await connectQz()
+      const qz = await connectQz(true)
       const printer = await resolvePrinter(qz, options.printerName)
       await printPdfWithQz(qz, printer, options.pdfFallback)
       return { method: 'qz-pdf', printer }
-    } catch (pdfQzError) {
-      console.warn('PDF via QZ fallo, usando navegador', pdfQzError)
+    } catch (error) {
+      console.warn('PDF via QZ fallo, usando navegador', error)
     }
 
     printPdfInBrowser(options.pdfFallback)
     return { method: 'browser' }
   }
 
-  throw new Error(
-    'No se pudo imprimir. Verifica que QZ Tray este abierto y que la ticketera este encendida.'
-  )
+  throw lastError ?? new Error('No se pudo imprimir. Verifica QZ Tray y la ticketera POS-58.')
 }
 
 /** @deprecated Usar printSaleTicket */

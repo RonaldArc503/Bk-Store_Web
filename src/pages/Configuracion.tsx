@@ -702,7 +702,7 @@ function PrintingSection() {
         <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Imprimir ticket automático" description="Envia el ticket directo a la ticketera al finalizar cada venta">
           <Toggle checked={printing.autoPrint} onChange={(v) => updatePrinting({ autoPrint: v })} label="Imprimir ticket automático" />
         </SettingRow>
-        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="Ancho del rollo de la impresora térmica">
+        <SettingRow icon={<Printer className="w-5 h-5 shrink-0 text-cyan-500 dark:text-cyan-400" />} title="Tamaño de papel" description="POS-58 usa 58 mm (57.5 mm). Selecciona el ancho real del rollo">
           <Select
             value={printing.paperSize}
             onChange={(v) => updatePrinting({ paperSize: v as PaperSize })}

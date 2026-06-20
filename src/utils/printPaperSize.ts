@@ -1,7 +1,7 @@
 export type PaperSize = '58mm' | '72mm' | '80mm' | 'letter'
 
 export const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
-  { value: '58mm', label: 'Térmico 58 mm' },
+  { value: '58mm', label: 'POS-58 / 58 mm (57.5 mm)' },
   { value: '72mm', label: 'Térmico 72 mm' },
   { value: '80mm', label: 'Térmico 80 mm' },
   { value: 'letter', label: 'Carta' },
@@ -34,7 +34,7 @@ export function getThermalFontSize(paperSize: PaperSize): number {
 }
 
 export function getThermalTicketMaxNameLen(paperSize: PaperSize): number {
-  if (paperSize === '58mm') return 18
+  if (paperSize === '58mm') return 14
   if (paperSize === '72mm') return 28
   return 36
 }
