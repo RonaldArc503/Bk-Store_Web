@@ -25,7 +25,7 @@ import { toast } from 'react-toastify'
 import jsPDF from 'jspdf'
  
 import { OrderService } from '../services/OrderService'
-import { printSaleTicket, warmUpQzConnection, type SaleTicketData } from '../services/TicketPrintService'
+import { printSaleTicket, type SaleTicketData } from '../services/TicketPrintService'
 import { isQzSigningReady } from '../services/qzSecurity'
 import { useAuth } from '../hooks/useAuth'
 import { InventoryService } from '../services/InventoryService'
@@ -300,17 +300,6 @@ export default function POS() {
     })()
     return () => { mounted = false }
   }, [authReady, user?.uid])
-
-  useEffect(() => {
-    if (cajaOpen) void warmUpQzConnection()
-  }, [cajaOpen])
-
-  useEffect(() => {
-    if (!pendingPrintOrder) return
-    void runTicketPrintRef.current(pendingPrintOrder, false).finally(() => {
-      setPendingPrintOrder(null)
-    })
-  }, [pendingPrintOrder])
 
   const displayPrice = (price: number) =>
     showPricesWithoutIva ? Math.round((price / 1.13) * 100) / 100 : price
@@ -743,10 +732,13 @@ export default function POS() {
   }
 
   const runTicketPrint = async (orderInfo: any, closeAfter: boolean) => {
-    const toastId = toast.loading('Enviando ticket a la impresora...')
+    const toastId = toast.loading('Enviando ticket a la ticketera...')
     try {
       if (!isQzSigningReady()) {
-        toast.info('Si QZ Tray muestra una ventana, pulsa Permitir y marca Recordar', { autoClose: 6000 })
+        toast.info(
+          'Si aparece "Action Required" de QZ Tray, pulsa Allow y marca Remember (puede estar detras del navegador).',
+          { autoClose: 8000 }
+        )
       }
       const ticketData = buildSaleTicketData(orderInfo)
       const doc = buildTicketPdf(orderInfo)
@@ -758,16 +750,20 @@ export default function POS() {
       if (result.printer && !settings.printing.printerName) {
         updatePrinting({ printerName: result.printer })
       }
+      const okMsg =
+        result.method === 'browser'
+          ? 'Ticket enviado al dialogo de impresion del navegador'
+          : `Ticket impreso en: ${result.printer}`
       toast.update(toastId, {
-        render: `Ticket impreso en ${result.printer}`,
+        render: okMsg,
         type: 'success',
         isLoading: false,
-        autoClose: 3000,
+        autoClose: 4000,
       })
     } catch (error) {
       console.error('Print failed', error)
       const message = error instanceof Error ? error.message : 'No se pudo imprimir el ticket'
-      toast.update(toastId, { render: message, type: 'error', isLoading: false, autoClose: 8000 })
+      toast.update(toastId, { render: message, type: 'error', isLoading: false, autoClose: 10000 })
       setIsTicketModalOpen(true)
     }
 
@@ -776,9 +772,15 @@ export default function POS() {
 
   runTicketPrintRef.current = runTicketPrint
 
-  const printTicketFromOrder = async (orderInfo: any, closeAfter: boolean) => {
-    await runTicketPrint(orderInfo, closeAfter)
-  }
+  const printTicketFromOrder = (orderInfo: any, closeAfter: boolean) =>
+    void runTicketPrint(orderInfo, closeAfter)
+
+  useEffect(() => {
+    if (!pendingPrintOrder) return
+    void runTicketPrintRef.current(pendingPrintOrder, false).finally(() => {
+      setPendingPrintOrder(null)
+    })
+  }, [pendingPrintOrder])
 
   if (cajaOpen === null) {
     return (

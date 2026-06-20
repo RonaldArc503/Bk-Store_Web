@@ -1,8 +1,8 @@
 const CERT_URL = '/qz/digital-certificate.txt'
-const KEY_URL = '/qz/private-key.pem'
 
-let securityConfigured = false
+let securityInitialized = false
 let signingReady = false
+let cachedPrivateKey: string | null = null
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {
   const base64 = pem
@@ -32,50 +32,67 @@ async function signWithPrivateKey(message: string, privateKeyPem: string): Promi
   return btoa(binary)
 }
 
-export async function configureQzSecurity(qz: NonNullable<Window['qz']>): Promise<boolean> {
-  if (securityConfigured) return signingReady
-
+async function loadPrivateKey(): Promise<string | null> {
+  if (cachedPrivateKey) return cachedPrivateKey
   try {
-    const [certRes, keyRes] = await Promise.all([
-      fetch(CERT_URL, { cache: 'no-store' }),
-      fetch(KEY_URL, { cache: 'no-store' }),
-    ])
+    const res = await fetch('/qz/private-key.pem', { cache: 'no-store' })
+    if (!res.ok) return null
+    const text = await res.text()
+    if (!text.includes('PRIVATE KEY')) return null
+    cachedPrivateKey = text
+    return text
+  } catch {
+    return null
+  }
+}
 
-    if (!certRes.ok || !keyRes.ok) {
-      securityConfigured = true
-      signingReady = false
-      return false
-    }
+export async function configureQzSecurity(qz: NonNullable<Window['qz']>): Promise<boolean> {
+  if (securityInitialized) return signingReady
 
-    const certificate = await certRes.text()
-    const privateKey = await keyRes.text()
+  const privateKey = await loadPrivateKey()
+  const hasSigning = Boolean(privateKey)
 
-    if (!certificate.trim() || !privateKey.includes('PRIVATE KEY')) {
-      securityConfigured = true
-      signingReady = false
-      return false
-    }
+  qz.security.setCertificatePromise((resolve, reject) => {
+    fetch(CERT_URL, { cache: 'no-store', headers: { 'Content-Type': 'text/plain' } })
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error('Sin certificado'))))
+      .then((cert) => {
+        if (!cert.trim() || cert.trimStart().startsWith('<!')) {
+          reject(new Error('Certificado QZ invalido'))
+          return
+        }
+        resolve(cert)
+      })
+      .catch(() => reject(new Error('Certificado QZ no encontrado en el servidor')))
+  })
 
-    qz.security.setCertificatePromise((resolve, reject) => {
-      resolve(certificate)
-      reject(new Error('Certificado QZ no disponible'))
-    })
-
+  if (hasSigning && privateKey) {
     qz.security.setSignatureAlgorithm('SHA512')
     qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
       signWithPrivateKey(toSign, privateKey).then(resolve).catch(reject)
     })
-
-    securityConfigured = true
     signingReady = true
-    return true
-  } catch {
-    securityConfigured = true
+  } else {
     signingReady = false
-    return false
   }
+
+  securityInitialized = true
+  return signingReady
 }
 
 export function isQzSigningReady(): boolean {
   return signingReady
+}
+
+export async function getQzSetupStatus(): Promise<{
+  certOnServer: boolean
+  keyOnServer: boolean
+  signed: boolean
+}> {
+  const [certRes, keyRes] = await Promise.all([
+    fetch(CERT_URL, { cache: 'no-store' }).catch(() => null),
+    fetch('/qz/private-key.pem', { cache: 'no-store' }).catch(() => null),
+  ])
+  const certOnServer = Boolean(certRes?.ok)
+  const keyOnServer = Boolean(keyRes?.ok)
+  return { certOnServer, keyOnServer, signed: certOnServer && keyOnServer }
 }
