@@ -20,7 +20,7 @@ import {
   normalizePermissions,
   type UserPermissions,
 } from '../auth/permissions'
-import { ensureFirebaseAuthAccount } from '../utils/firebaseSecondaryAuth'
+import { ensureFirebaseAuthAccount, syncFirebaseAuthPassword } from '../utils/firebaseSecondaryAuth'
 
 const USERS_PATH = 'users'
 const AUTH_INDEX_PATH = 'userAuthIndex'
@@ -322,6 +322,43 @@ export const UserService = {
       console.error('Error updating user:', error)
       throw error instanceof Error ? error : new Error('Error al actualizar usuario')
     }
+  },
+
+  /**
+   * Cambiar contraseña de un usuario (solo admin).
+   * Devuelve si Firebase Auth quedó sincronizado o requiere borrar la cuenta en consola.
+   */
+  async changeUserPassword(
+    userId: string,
+    newPassword: string,
+  ): Promise<'synced' | 'needs-auth-delete'> {
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('La contraseña debe tener al menos 6 caracteres')
+    }
+
+    const userRef = ref(database, `${USERS_PATH}/${userId}`)
+    const snapshot = await get(userRef)
+    if (!snapshot.exists()) {
+      throw new Error('Usuario no encontrado')
+    }
+
+    const currentUser = snapshot.val() as SystemUser
+    const password = await hashPassword(newPassword)
+    const now = new Date().toISOString().split('T')[0]
+
+    await update(userRef, {
+      passwordHash: password.hash,
+      passwordSalt: password.salt,
+      passwordAlgo: password.algorithm,
+      passwordIterations: password.iterations,
+      fechaActualizacion: now,
+    })
+
+    const email = (currentUser.email || '').trim()
+    if (!email) return 'synced'
+
+    const authResult = await syncFirebaseAuthPassword(email, newPassword)
+    return authResult === 'auth-exists' ? 'needs-auth-delete' : 'synced'
   },
 
   /**

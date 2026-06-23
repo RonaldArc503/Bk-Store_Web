@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app'
-import { createUserWithEmailAndPassword, signOut, getAuth } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signOut, getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import { firebaseConfig } from '../app/firebase'
 
 const SECONDARY_APP_NAME = 'BkStoreSecondaryAuth'
@@ -30,6 +30,39 @@ export async function ensureFirebaseAuthAccount(email: string, password: string)
   } catch (error) {
     const code = getAuthErrorCode(error)
     if (code === 'auth/email-already-in-use') return
+    throw error
+  } finally {
+    await signOut(secondaryAuth).catch(() => {})
+  }
+}
+
+export type FirebaseAuthPasswordSyncResult = 'created' | 'already-synced' | 'auth-exists'
+
+/**
+ * Crea la cuenta Auth con la contraseña nueva o verifica que ya coincida.
+ * Si la cuenta existe con otra contraseña, hay que borrarla en Firebase Console.
+ */
+export async function syncFirebaseAuthPassword(
+  email: string,
+  password: string,
+): Promise<FirebaseAuthPasswordSyncResult> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail || !password) return 'auth-exists'
+
+  const secondaryAuth = getSecondaryAuth()
+  try {
+    await createUserWithEmailAndPassword(secondaryAuth, normalizedEmail, password)
+    return 'created'
+  } catch (error) {
+    const code = getAuthErrorCode(error)
+    if (code === 'auth/email-already-in-use') {
+      try {
+        await signInWithEmailAndPassword(secondaryAuth, normalizedEmail, password)
+        return 'already-synced'
+      } catch {
+        return 'auth-exists'
+      }
+    }
     throw error
   } finally {
     await signOut(secondaryAuth).catch(() => {})
