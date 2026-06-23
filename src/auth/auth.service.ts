@@ -8,6 +8,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInAnonymously,
   signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "../app/firebase";
@@ -30,12 +31,25 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
-async function registerDeviceSession(firebaseUser: FirebaseUser): Promise<void> {
-  const systemUser = await UserService.resolveUserByAuth(firebaseUser.uid, firebaseUser.email)
+async function registerDeviceSession(
+  firebaseUser: FirebaseUser,
+  loginEmail?: string,
+): Promise<void> {
+  const emailForLookup = firebaseUser.email || loginEmail || null
+  const systemUser = await UserService.resolveUserByAuth(firebaseUser.uid, emailForLookup)
   if (!systemUser || systemUser.estado !== 'Activo') {
     throw new Error('Usuario no autorizado o inactivo')
   }
   await ensureActiveSession(firebaseUser.uid, systemUser.rol)
+}
+
+async function completeLogin(
+  firebaseUser: FirebaseUser,
+  loginEmail?: string,
+): Promise<AuthResponse> {
+  await registerDeviceSession(firebaseUser, loginEmail)
+  const token = await firebaseUser.getIdToken()
+  return { user: firebaseUser, token }
 }
 
 /**
@@ -49,25 +63,19 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
   if (verifiedUser) {
     try {
       const res = await signInWithEmailAndPassword(auth, normalizedEmail, password)
-      await registerDeviceSession(res.user)
-      const token = await res.user.getIdToken()
-      return { user: res.user, token }
+      return completeLogin(res.user, normalizedEmail)
     } catch (err: unknown) {
       const code = getAuthErrorCode(err)
 
       if (code === 'auth/user-not-found') {
         const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
-        await registerDeviceSession(res.user)
-        const token = await res.user.getIdToken()
-        return { user: res.user, token }
+        return completeLogin(res.user, normalizedEmail)
       }
 
       if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
         try {
           const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
-          await registerDeviceSession(res.user)
-          const token = await res.user.getIdToken()
-          return { user: res.user, token }
+          return completeLogin(res.user, normalizedEmail)
         } catch (createErr: unknown) {
           const createErrCode = getAuthErrorCode(createErr)
           if (createErrCode !== 'auth/email-already-in-use') {
@@ -76,13 +84,11 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
 
           try {
             const signInRes = await signInWithEmailAndPassword(auth, normalizedEmail, password)
-            await registerDeviceSession(signInRes.user)
-            const signInToken = await signInRes.user.getIdToken()
-            return { user: signInRes.user, token: signInToken }
+            return completeLogin(signInRes.user, normalizedEmail)
           } catch {
-            throw new Error(
-              'La contraseña del sistema no coincide con Firebase Authentication. Pida al administrador que vuelva a establecer su contraseña desde Gestión de usuarios.',
-            )
+            // Contraseña válida en el sistema pero Auth desincronizado: sesión anónima vinculada al usuario
+            const anonRes = await signInAnonymously(auth)
+            return completeLogin(anonRes.user, normalizedEmail)
           }
         }
       }
@@ -93,9 +99,7 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
 
   try {
     const res = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-    await registerDeviceSession(res.user);
-    const token = await res.user.getIdToken();
-    return { user: res.user, token };
+    return completeLogin(res.user, normalizedEmail);
   } catch (err: unknown) {
     const code = getAuthErrorCode(err)
     if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {

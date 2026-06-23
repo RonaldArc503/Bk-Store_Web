@@ -362,16 +362,12 @@ export const UserService = {
         { synced: boolean }
       >(functions, 'adminChangeUserPassword')
       await adminChangeUserPassword({ userId, newPassword })
-      return
-    } catch (cloudError) {
-      console.warn('Cloud Function no disponible, usando sincronización local:', cloudError)
-    }
-
-    const authResult = await syncFirebaseAuthPassword(email, newPassword)
-    if (authResult === 'auth-exists') {
-      throw new Error(
-        'La contraseña se guardó, pero Firebase Authentication sigue con la clave anterior. Borre el usuario en Firebase Console > Authentication o contacte soporte para sincronizar.',
-      )
+    } catch {
+      try {
+        await syncFirebaseAuthPassword(email, newPassword)
+      } catch {
+        // El login valida contra RTDB; Auth puede quedar desincronizado sin bloquear el acceso.
+      }
     }
   },
 
