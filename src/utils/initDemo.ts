@@ -12,6 +12,12 @@ import { hashPassword } from './password'
 import { getDefaultPermissionsByRole, getFullPermissions } from '../auth/permissions'
 
 const DEMO_PASSWORD = 'demo123456'
+/** Solo se usa al crear la base de datos vacía por primera vez */
+const ADMIN_SEED_PASSWORD = import.meta.env.VITE_ADMIN_SEED_PASSWORD || 'BKStore2026$'
+
+function getSeedPassword(userId: string): string {
+  return userId === 'admin' ? ADMIN_SEED_PASSWORD : DEMO_PASSWORD
+}
 
 const DEMO_USERS: SystemUser[] = [
   {
@@ -80,7 +86,7 @@ export async function initializeDemoData() {
     // Crear usuarios de demo
     for (const user of DEMO_USERS) {
       const userRef = ref(database, `users/${user.id}`)
-      const password = await hashPassword(DEMO_PASSWORD)
+      const password = await hashPassword(getSeedPassword(user.id))
       await set(userRef, {
         ...user,
         passwordHash: password.hash,
@@ -107,7 +113,7 @@ export async function ensureDemoAuthAccounts() {
     const email = user.email?.trim()
     if (!email) continue
     try {
-      await createUserWithEmailAndPassword(auth, email, DEMO_PASSWORD)
+      await createUserWithEmailAndPassword(auth, email, getSeedPassword(user.id))
     } catch (e: unknown) {
       const code = e && typeof e === 'object' && 'code' in e ? String((e as { code: string }).code) : ''
       if (code === 'auth/email-already-in-use') continue
