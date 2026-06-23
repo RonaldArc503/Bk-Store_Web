@@ -33,7 +33,7 @@ function getLoginErrorMessage(err: unknown): string {
   if (err instanceof Error && err.message === 'Usuario no autorizado o inactivo') {
     return 'Tu cuenta no está activa o no está registrada en el sistema'
   }
-  if (err instanceof Error && err.message.includes('sesión')) {
+  if (err instanceof Error && err.message.includes('Firebase Authentication')) {
     return err.message
   }
   if (err instanceof Error && err.message) {

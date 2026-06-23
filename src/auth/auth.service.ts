@@ -44,6 +44,53 @@ async function registerDeviceSession(firebaseUser: FirebaseUser): Promise<void> 
 export const loginEmail = async (email: string, password: string): Promise<AuthResponse> => {
   const normalizedEmail = normalizeEmail(email)
 
+  const verifiedUser = await UserService.verifyUserCredentials(normalizedEmail, password)
+
+  if (verifiedUser) {
+    try {
+      const res = await signInWithEmailAndPassword(auth, normalizedEmail, password)
+      await registerDeviceSession(res.user)
+      const token = await res.user.getIdToken()
+      return { user: res.user, token }
+    } catch (err: unknown) {
+      const code = getAuthErrorCode(err)
+
+      if (code === 'auth/user-not-found') {
+        const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
+        await registerDeviceSession(res.user)
+        const token = await res.user.getIdToken()
+        return { user: res.user, token }
+      }
+
+      if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+        try {
+          const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
+          await registerDeviceSession(res.user)
+          const token = await res.user.getIdToken()
+          return { user: res.user, token }
+        } catch (createErr: unknown) {
+          const createErrCode = getAuthErrorCode(createErr)
+          if (createErrCode !== 'auth/email-already-in-use') {
+            throw createErr
+          }
+
+          try {
+            const signInRes = await signInWithEmailAndPassword(auth, normalizedEmail, password)
+            await registerDeviceSession(signInRes.user)
+            const signInToken = await signInRes.user.getIdToken()
+            return { user: signInRes.user, token: signInToken }
+          } catch {
+            throw new Error(
+              'La contraseña del sistema no coincide con Firebase Authentication. Pida al administrador que vuelva a establecer su contraseña desde Gestión de usuarios.',
+            )
+          }
+        }
+      }
+
+      throw err
+    }
+  }
+
   try {
     const res = await signInWithEmailAndPassword(auth, normalizedEmail, password);
     await registerDeviceSession(res.user);
@@ -51,35 +98,9 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
     return { user: res.user, token };
   } catch (err: unknown) {
     const code = getAuthErrorCode(err)
-    const canBootstrapAuthUser =
-      code === 'auth/user-not-found' ||
-      code === 'auth/invalid-credential' ||
-      code === 'auth/invalid-login-credentials'
-
-    if (canBootstrapAuthUser) {
-      const verified = await UserService.verifyUserCredentials(normalizedEmail, password)
-      if (!verified) {
-        throw new Error('Credenciales invalidas')
-      }
-
-      try {
-        const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
-        await registerDeviceSession(res.user)
-        const token = await res.user.getIdToken()
-        return { user: res.user, token }
-      } catch (createErr: unknown) {
-        const createErrCode = getAuthErrorCode(createErr)
-        if (createErrCode !== 'auth/email-already-in-use') {
-          throw createErr
-        }
-
-        const signInRes = await signInWithEmailAndPassword(auth, normalizedEmail, password)
-        await registerDeviceSession(signInRes.user)
-        const signInToken = await signInRes.user.getIdToken()
-        return { user: signInRes.user, token: signInToken }
-      }
+    if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+      throw new Error('Credenciales invalidas')
     }
-
     throw err
   }
 };

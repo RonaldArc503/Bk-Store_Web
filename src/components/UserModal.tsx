@@ -105,13 +105,7 @@ export function UserModal({ isOpen, onClose, onSuccess, editingUser }: UserModal
         })
 
         if (formData.contraseña.trim()) {
-          const authSync = await UserService.changeUserPassword(editingUser.id, formData.contraseña)
-          if (authSync === 'needs-auth-delete') {
-            setError(
-              'Contraseña guardada. En Firebase Console > Authentication borre el usuario con ese correo y vuelva a iniciar sesión con la contraseña nueva.',
-            )
-            return
-          }
+          await UserService.changeUserPassword(editingUser.id, formData.contraseña)
         }
       } else {
         user = await UserService.createUser(formData)

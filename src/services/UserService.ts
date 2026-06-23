@@ -11,7 +11,8 @@ import {
   remove,
   onValue,
 } from "firebase/database"
-import { database } from "../app/firebase"
+import { database, app } from "../app/firebase"
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import type { SystemUser, CreateUserInput, UpdateUserInput } from '../types/index'
 import { hashPassword, verifyPassword } from '../utils/password'
 import {
@@ -326,12 +327,9 @@ export const UserService = {
 
   /**
    * Cambiar contraseña de un usuario (solo admin).
-   * Devuelve si Firebase Auth quedó sincronizado o requiere borrar la cuenta en consola.
+   * Sincroniza RTDB y Firebase Authentication.
    */
-  async changeUserPassword(
-    userId: string,
-    newPassword: string,
-  ): Promise<'synced' | 'needs-auth-delete'> {
+  async changeUserPassword(userId: string, newPassword: string): Promise<void> {
     if (!newPassword || newPassword.length < 6) {
       throw new Error('La contraseña debe tener al menos 6 caracteres')
     }
@@ -354,11 +352,27 @@ export const UserService = {
       fechaActualizacion: now,
     })
 
-    const email = (currentUser.email || '').trim()
-    if (!email) return 'synced'
+    const email = (currentUser.email || '').trim().toLowerCase()
+    if (!email) return
+
+    try {
+      const functions = getFunctions(app)
+      const adminChangeUserPassword = httpsCallable<
+        { userId: string; newPassword: string },
+        { synced: boolean }
+      >(functions, 'adminChangeUserPassword')
+      await adminChangeUserPassword({ userId, newPassword })
+      return
+    } catch (cloudError) {
+      console.warn('Cloud Function no disponible, usando sincronización local:', cloudError)
+    }
 
     const authResult = await syncFirebaseAuthPassword(email, newPassword)
-    return authResult === 'auth-exists' ? 'needs-auth-delete' : 'synced'
+    if (authResult === 'auth-exists') {
+      throw new Error(
+        'La contraseña se guardó, pero Firebase Authentication sigue con la clave anterior. Borre el usuario en Firebase Console > Authentication o contacte soporte para sincronizar.',
+      )
+    }
   },
 
   /**
