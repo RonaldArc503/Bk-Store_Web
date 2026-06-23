@@ -8,7 +8,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  signInAnonymously,
   signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "../app/firebase";
@@ -86,9 +85,11 @@ export const loginEmail = async (email: string, password: string): Promise<AuthR
             const signInRes = await signInWithEmailAndPassword(auth, normalizedEmail, password)
             return completeLogin(signInRes.user, normalizedEmail)
           } catch {
-            // Contraseña válida en el sistema pero Auth desincronizado: sesión anónima vinculada al usuario
-            const anonRes = await signInAnonymously(auth)
-            return completeLogin(anonRes.user, normalizedEmail)
+            throw new Error(
+              'Su contraseña es correcta en el sistema, pero Firebase Authentication tiene una clave antigua. ' +
+              'El administrador debe eliminar este correo en Firebase Console > Authentication > Usuarios, ' +
+              'y luego el usuario podrá entrar con la contraseña nueva.',
+            )
           }
         }
       }

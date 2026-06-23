@@ -26,8 +26,11 @@ function getLoginErrorMessage(err: unknown): string {
   if (code === 'auth/too-many-requests') {
     return 'Demasiados intentos. Intenta de nuevo en unos minutos'
   }
+  if (code === 'auth/admin-restricted-operation') {
+    return 'Operación bloqueada por Firebase. Verifique que Correo/Contraseña esté activo en Authentication > Métodos de acceso.'
+  }
   if (code === 'auth/operation-not-allowed') {
-    return 'Inicio de sesión no disponible. Active "Anónimo" en Firebase Authentication > Métodos de acceso.'
+    return 'Inicio de sesión no disponible. Active Correo/Contraseña en Firebase Authentication > Métodos de acceso.'
   }
   if (code === 'auth/network-request-failed') {
     return 'Error de red. Revisa tu conexión a internet'
@@ -37,6 +40,9 @@ function getLoginErrorMessage(err: unknown): string {
     return 'Tu cuenta no está activa o no está registrada en el sistema'
   }
   if (err instanceof Error && err.message.includes('Firebase Authentication')) {
+    return err.message
+  }
+  if (err instanceof Error && err.message.includes('Firebase Console')) {
     return err.message
   }
   if (err instanceof Error && err.message) {

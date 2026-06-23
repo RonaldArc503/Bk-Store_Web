@@ -362,12 +362,17 @@ export const UserService = {
         { synced: boolean }
       >(functions, 'adminChangeUserPassword')
       await adminChangeUserPassword({ userId, newPassword })
+      return
     } catch {
-      try {
-        await syncFirebaseAuthPassword(email, newPassword)
-      } catch {
-        // El login valida contra RTDB; Auth puede quedar desincronizado sin bloquear el acceso.
-      }
+      /* Cloud Function no disponible en plan Spark */
+    }
+
+    const authResult = await syncFirebaseAuthPassword(email, newPassword)
+    if (authResult === 'auth-exists') {
+      throw new Error(
+        'Contraseña guardada en el sistema. Para que el usuario pueda entrar, elimine primero ' +
+        `"${email}" en Firebase Console > Authentication > Usuarios y guarde la contraseña otra vez aquí.`,
+      )
     }
   },
 
